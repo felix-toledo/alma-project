@@ -1,0 +1,92 @@
+import * as z from 'zod/v4'
+import type { HostRequest, PendingApproval, Routine, Settings } from '../../shared/types'
+import type { RecentMessage } from '../channels/whatsapp'
+import type { CompanyEngine } from '../company/engine'
+import type { Company } from '../../shared/types'
+import type { KnowledgeBase } from '../knowledge/base'
+import type { HomeService } from '../home'
+
+/**
+ * read: never needs approval. write/exec: go through the approval policy.
+ * memory: Alma's own notes in the vault (memories, knowledge); written without asking, blocked only in read-only mode.
+ * home: everyday control of the house (lights, plugs, scenes, the plan); like memory, never asks.
+ * publish: acts on the outside world in the user's name, so the user approves every single call.
+ */
+export type ToolRisk = 'read' | 'write' | 'exec' | 'memory' | 'publish' | 'home'
+
+/** Work only the main process can do (it owns windows and the browser session). */
+export interface Host {
+  request(request: HostRequest): Promise<{ ok: boolean; message: string }>
+}
+
+export interface ToolContext {
+  workspace: string
+  signal: AbortSignal
+  settings: Settings
+  host: Host
+  /** The active vault, if any. */
+  knowledge?: KnowledgeBase | null
+  threadId?: string
+  /** The agent running the tool. */
+  agentId?: string
+  /** Persists the routine list (main owns settings). */
+  saveRoutines?(routines: Routine[]): void
+  /** Sends a message to the user's own Telegram chat; false if Telegram isn't connected. */
+  sendTelegram?(text: string): Promise<boolean>
+  /** Set when the agent works in a company: its seat in the org chart. `noAsk`: it's answering a colleague. */
+  company?: { company: Company; memberId: string; engine: CompanyEngine; noAsk?: boolean }
+  /** The house, when domotica is turned on. */
+  home?: HomeService
+  /** Where pictures the user sent are saved (look_at_image may read them). */
+  inboxDir?: string
+  /** Sends a picture to the user's own Telegram chat; false if Telegram isn't connected. */
+  sendTelegramPhoto?(jpeg: Buffer, caption: string): Promise<boolean>
+  /** The user's linked WhatsApp, when it's turned on. */
+  whatsapp?: {
+    resolve(to: string): Promise<{ jid: string; label: string }>
+    send(jid: string, text: string): Promise<void>
+    recentMessages(from?: string, limit?: number): RecentMessage[]
+  }
+}
+
+export interface ToolDefinition<I = unknown> {
+  name: string
+  description: string
+  risk: ToolRisk
+  /** True for tools that don't touch the conversation's workspace folder (vault, routines), so none is needed. */
+  standalone?: boolean
+  schema: z.ZodType<I>
+  run(input: I, ctx: ToolContext): Promise<string>
+  /** What the user sees in the approval card besides the raw input. */
+  preview?(input: I, ctx: ToolContext): Promise<PendingApproval['preview']>
+}
+
+/** An error whose message goes back to the model as an `is_error` tool result. */
+export class ToolError extends Error {}
+
+export function defineTool<S extends z.ZodType>(tool: {
+  name: string
+  description: string
+  risk: ToolRisk
+  standalone?: boolean
+  schema: S
+  run(input: z.infer<S>, ctx: ToolContext): Promise<string>
+  preview?(input: z.infer<S>, ctx: ToolContext): Promise<PendingApproval['preview']>
+}): ToolDefinition {
+  return tool as unknown as ToolDefinition
+}
+
+/** JSON Schema for a tool's input, as both providers expect it. */
+export function jsonSchemaOf(schema: z.ZodType): Record<string, unknown> {
+  const { $schema: _ignored, ...rest } = z.toJSONSchema(schema) as Record<string, unknown>
+  return rest
+}
+
+const MAX_RESULT_CHARS = 60_000
+
+/** Keeps the start and end of long outputs, which is where errors and summaries usually are. */
+export function truncateMiddle(text: string, max = MAX_RESULT_CHARS): string {
+  if (text.length <= max) return text
+  const half = Math.floor(max / 2)
+  return `${text.slice(0, half)}\n\n… [${text.length - max} caracteres omitidos] …\n\n${text.slice(-half)}`
+}
