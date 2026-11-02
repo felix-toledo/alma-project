@@ -1,0 +1,637 @@
+/* Companies: board, meetings, org chart. Glass surfaces like the rest of the app; --company is each company's color. */
+
+.company-view {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  --company: var(--accent);
+}
+.company-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-glass);
+  backdrop-filter: blur(14px);
+}
+.company-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.company-title h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.company-title p {
+  margin: 2px 0 0;
+  max-width: 560px;
+}
+.company-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--company);
+  box-shadow: 0 0 12px var(--company);
+}
+.company-tabs {
+  padding: 8px 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+.company-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.company-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px 24px;
+  position: relative;
+}
+.company-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  overflow-y: auto;
+}
+.company-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+}
+.company-row.active {
+  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--company) 55%, transparent);
+}
+.company-row .grow {
+  min-width: 0;
+}
+
+/* Board */
+.board-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+.board-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(190px, 1fr));
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+}
+.board-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 160px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  backdrop-filter: blur(14px);
+  overflow-y: auto;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.board-column.drop {
+  border-color: var(--company);
+  box-shadow: 0 0 0 1px var(--company), 0 0 18px color-mix(in srgb, var(--company) 35%, transparent);
+}
+.board-column h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--company);
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  cursor: grab;
+}
+.task-card.status-blocked {
+  border-left-color: var(--danger);
+}
+.task-card.status-review {
+  border-left-color: var(--warn);
+}
+.task-card.status-done {
+  border-left-color: var(--ok);
+  opacity: 0.75;
+}
+.task-title {
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mini-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: color-mix(in srgb, var(--company) 70%, #000);
+}
+.mini-avatar.busy,
+.org-card.busy .org-avatar {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--company), 0 0 14px var(--company);
+  animation: company-pulse 1.6s ease-in-out infinite;
+}
+@keyframes company-pulse {
+  50% {
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--company), 0 0 4px var(--company);
+  }
+}
+:root[data-motion='off'] .mini-avatar.busy,
+:root[data-motion='off'] .org-card.busy .org-avatar {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mini-avatar.busy,
+  .org-card.busy .org-avatar {
+    animation: none;
+  }
+}
+
+.task-drawer {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: min(440px, 46%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  backdrop-filter: blur(22px);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.45);
+  z-index: 5;
+}
+.task-drawer h3 {
+  margin: 0;
+}
+.task-drawer h4,
+.meeting-room h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.task-drawer textarea {
+  width: 100%;
+}
+.task-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.task-comment {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-elev-2);
+  font-size: 13px;
+}
+.badge.status-review,
+.badge.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.badge.status-blocked {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.badge.status-done {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.danger-text {
+  color: var(--danger);
+}
+
+/* Meetings */
+.meetings {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+.meeting-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+.meeting-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+}
+.meeting-item.active {
+  border-color: var(--company);
+}
+.meeting-room {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  backdrop-filter: blur(14px);
+}
+.meeting-room h3 {
+  margin: 0;
+}
+.meeting-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  font-size: 12.5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.person.speaking {
+  border-color: var(--company);
+}
+.agenda {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-muted);
+}
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.turn {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.turn > div {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  min-width: 0;
+}
+.turn.chair > div {
+  border: 1px solid color-mix(in srgb, var(--company) 45%, transparent);
+}
+.turn.mine > div {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.turn .markdown p {
+  margin: 4px 0 0;
+}
+.typing {
+  font-style: italic;
+}
+
+/* Activity */
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 820px;
+}
+.activity-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  font-size: 13.5px;
+}
+
+/* Org chart: a top-down tree drawn with borders (no library). */
+.company-org {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.org-chart {
+  --org-line: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  overflow: auto;
+  padding: 8px 4px 16px;
+}
+.org-chart ul {
+  display: flex;
+  justify-content: center;
+  padding: 18px 0 0;
+  margin: 0;
+  position: relative;
+  list-style: none;
+}
+.org-chart > ul {
+  padding-top: 0;
+}
+.org-chart li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding: 18px 8px 0;
+}
+.org-chart > ul > li {
+  padding-top: 0;
+}
+/* Horizontal connector across siblings, and the drop from it to each card. */
+.org-chart li::before,
+.org-chart li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 18px;
+  border-top: 1.5px solid var(--org-line);
+}
+.org-chart li::before {
+  right: 50%;
+}
+.org-chart li::after {
+  left: 50%;
+  border-left: 1.5px solid var(--org-line);
+}
+.org-chart li:only-child::before,
+.org-chart li:only-child::after {
+  border-top: 0;
+}
+.org-chart li:first-child::before,
+.org-chart li:last-child::after {
+  border-top: 0;
+}
+.org-chart li:last-child::before {
+  border-right: 1.5px solid var(--org-line);
+}
+.org-chart li:last-child::after {
+  border-left: 0;
+}
+.org-chart > ul > li::before,
+.org-chart > ul > li::after {
+  display: none;
+}
+/* The line down from a boss to its team. */
+.org-chart li > ul::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 18px;
+  border-left: 1.5px solid var(--org-line);
+}
+.org-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 170px;
+  max-width: 220px;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--company);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  backdrop-filter: blur(14px);
+  cursor: pointer;
+  transition:
+    transform 0.22s var(--ease),
+    box-shadow 0.22s var(--ease),
+    border-color 0.22s var(--ease);
+  position: relative;
+}
+.org-card:hover,
+.org-card:focus-visible {
+  transform: translateY(-1px) scale(1.025);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--company) 40%, transparent);
+}
+.org-card.selected {
+  border-color: var(--company);
+  box-shadow: 0 0 0 1px var(--company), 0 0 22px color-mix(in srgb, var(--company) 45%, transparent);
+}
+.org-card.drop {
+  border-style: dashed;
+  border-color: var(--company);
+}
+.org-card.board {
+  border-top-color: var(--warn);
+  cursor: default;
+}
+.org-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: color-mix(in srgb, var(--company) 72%, #000);
+}
+.org-card.board .org-avatar {
+  background: color-mix(in srgb, var(--warn) 70%, #000);
+}
+.org-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.org-links {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.org-hint {
+  text-align: center;
+}
+
+/* Settings → Equipos */
+.teams {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.company-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+}
+.company-chip.active {
+  border-color: var(--company);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--company) 35%, transparent);
+}
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.template {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--company, var(--accent));
+  border-radius: var(--radius);
+  background: var(--bg-elev-2);
+}
+.template.active {
+  border-color: var(--company, var(--accent));
+  box-shadow: 0 0 16px color-mix(in srgb, var(--company, var(--accent)) 35%, transparent);
+}
+.swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+.swatch.active {
+  border-color: var(--text);
+}
+.member-editor textarea {
+  width: 100%;
+}
+.small-modal {
+  width: min(560px, 94vw);
+}
+.modal-pad {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+}
+.modal-pad textarea {
+  width: 100%;
+}
+.row.end {
+  justify-content: flex-end;
+}
+
+.teams h4 {
+  margin: 12px 0 6px;
+  font-size: 14px;
+}
+
+/* Horizontal tabs inside a company (the shared .tabs is the vertical settings nav). */
+.tabs.company-tabs {
+  flex-direction: row;
+  gap: 4px;
+  padding: 8px 20px 0;
+  border-right: 0;
+  border-bottom: 1px solid var(--border);
+}
+.tabs.company-tabs button {
+  border-radius: 8px 8px 0 0;
+  padding: 7px 12px;
+}
+/* Four views in the sidebar switch: Chat · Vault / Empresas · Casa, two by two. */
+.mode-switch.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+.mode-switch.tabs button {
+  justify-content: center;
+  padding-left: 4px;
+  padding-right: 4px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.board {
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+}
+
+/* Chats tab: conversation list + the open chat, filling the body. */
+.company-body:has(.company-chats) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.company-chats {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 12px;
+}
+.company-chats .thread-list {
+  min-height: 0;
+}
+.company-chat {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.company-chat > .chat {
+  flex: 1;
+}
