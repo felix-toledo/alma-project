@@ -1,0 +1,94 @@
+/* Office/PDF previews in the vault (DocumentPreview.tsx). */
+.doc-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.doc-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-glass);
+}
+.doc-preview-sheets {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  min-width: 0;
+}
+.doc-preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.doc-preview-pdf {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: var(--bg-elev);
+}
+/* docx-preview draws white pages on a grey wrapper: keep the pages, drop the grey. */
+.doc-preview-docx .docx-wrapper {
+  background: transparent;
+  padding: 24px;
+}
+.doc-preview-docx .docx-wrapper > section.docx {
+  border-radius: 4px;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.35);
+}
+.doc-preview-sheet {
+  padding: 16px;
+}
+.doc-preview table {
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.doc-preview td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  white-space: pre-wrap;
+  vertical-align: top;
+  max-width: 360px;
+}
+.doc-preview-sheet tr:first-child td {
+  font-weight: 600;
+  background: var(--bg-elev-2);
+}
+.doc-preview-slides {
+  list-style: none;
+  margin: 0 auto;
+  padding: 24px;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+.doc-preview-slide {
+  padding: 16px 20px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(14px);
+}
+.doc-preview-slide h3 {
+  margin: 0 0 8px;
+}
+.doc-preview-slide ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.doc-preview-notes {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
