@@ -1,0 +1,131 @@
+@import '@fontsource-variable/outfit';
+@import './tokens.css';
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-weight: var(--fw-regular);
+  font-size: var(--fs-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Foco: hover y focus se ven igual ---------- */
+[data-focusable] {
+  outline: none;
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+[data-focusable]:is(:hover, :focus):not([aria-disabled='true']):not(:disabled) {
+  transform: scale(var(--focus-scale));
+  box-shadow: var(--glow-focus);
+  background-color: var(--surface-glass-hover);
+}
+[data-solid]:is(:hover, :focus):not([aria-disabled='true']) {
+  background-color: #5584ff;
+}
+[data-focusable]:active:not([aria-disabled='true']):not(:disabled) {
+  transform: scale(0.97);
+  background-color: var(--surface-glass-active);
+}
+[data-focusable][aria-disabled='true'],
+[data-focusable]:disabled {
+  opacity: var(--op-disabled);
+  cursor: not-allowed;
+}
+/* los vecinos del elemento enfocado se atenúan */
+.dim-group:has([data-focusable]:focus) > [data-focusable]:not(:focus):not(:hover) {
+  opacity: var(--op-dim);
+}
+
+/* ---------- Reduce motion (preferencia SO o ajuste propio) ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  [data-focusable]:is(:hover, :focus) {
+    transform: none !important;
+  }
+}
+html[data-motion='reduced'] *,
+html[data-motion='reduced'] *::before,
+html[data-motion='reduced'] *::after {
+  animation-play-state: paused !important;
+  transition-duration: 0.01ms !important;
+}
+html[data-motion='reduced'] [data-focusable]:is(:hover, :focus) {
+  transform: none !important;
+}
+
+/* ---------- Fondo ---------- */
+.umbra-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 20% 0%, var(--bg-glow) 0%, transparent 60%),
+    linear-gradient(180deg, var(--bg-elevated), var(--bg-base) 70%);
+}
+.umbra-beam {
+  position: absolute;
+  top: -30%;
+  left: -20%;
+  width: 90vmax;
+  height: 70vmax;
+  background: conic-gradient(
+    from 118deg at 0% 0%,
+    transparent 0deg,
+    rgb(160 200 255 / 0.2) 14deg,
+    transparent 38deg
+  );
+  filter: blur(40px);
+  transform-origin: 0 0;
+  animation: umbra-beam 70s ease-in-out infinite alternate;
+}
+@keyframes umbra-beam {
+  from { transform: rotate(-6deg) scale(1); opacity: 0.8; }
+  to   { transform: rotate(7deg) scale(1.08); opacity: 1; }
+}
+.umbra-bokeh {
+  position: absolute;
+  bottom: -10%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 190 90 / 0.9), rgb(255 179 71 / 0) 70%);
+  animation: umbra-float linear infinite;
+}
+@keyframes umbra-float {
+  from { transform: translate3d(0, 0, 0); opacity: 0; }
+  15%  { opacity: var(--o, 0.5); }
+  85%  { opacity: var(--o, 0.5); }
+  to   { transform: translate3d(var(--dx, 30px), -115vh, 0); opacity: 0; }
+}
+
+/* ---------- Skeleton / spinner ---------- */
+@keyframes umbra-shimmer { to { background-position: -200% 0; } }
+.umbra-skeleton {
+  background: linear-gradient(90deg, var(--surface-glass) 25%, var(--surface-glass-hover) 50%, var(--surface-glass) 75%);
+  background-size: 200% 100%;
+  animation: umbra-shimmer 1.8s linear infinite;
+}
+
+.glass {
+  background: var(--surface-glass);
+  border: var(--bw) solid var(--border-glass);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+}

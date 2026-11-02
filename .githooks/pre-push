@@ -1,0 +1,3 @@
+#!/bin/sh
+# Same gates as CI. Skip once with: git push --no-verify (CI will still run them).
+exec pnpm run check

@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+*.log
+# Copied from node_modules at build time (electron.vite.config.ts)
+src/renderer/public/excalidraw/
+.vitest/
+coverage/
+.claude/.gate-cache.json

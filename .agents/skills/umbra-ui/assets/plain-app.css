@@ -1,0 +1,208 @@
+/* ============================================================
+   Adaptador para apps SIN Tailwind (CSS plano).
+   Importar después de tokens.css y base.css. Re-tematiza los elementos
+   nativos para que botones, inputs y listas ya existentes adopten el diseño
+   sin tocar el JSX. Ajustar los selectores de clase a la app (.thread-item, .modal…).
+   ============================================================ */
+
+:root {
+  /* Alias: si la app ya usa estas variables, pasan a los tokens de Umbra */
+  --bg: var(--bg-base);
+  --bg-elev: var(--surface-glass);
+  --bg-elev-2: var(--surface-glass);
+  --bg-hover: var(--surface-glass-hover);
+  --border: var(--border-glass);
+  --text: var(--text-primary);
+  --text-muted: var(--text-secondary);
+  --accent-strong: #5584ff;
+  --accent-text: var(--text-on-accent);
+  --ok: var(--success);
+  --warn: var(--warning);
+  --font: var(--font-sans);
+  --touch-min: 32px; /* app de escritorio: controles compactos */
+  /* Botón enfocado estilo consola: se "enciende" en blanco con texto oscuro */
+  --btn-lit-bg: #f2f5fb;
+  --btn-lit-fg: #05070d;
+  color-scheme: dark;
+}
+body { background: var(--bg-base); font-weight: var(--fw-regular); -webkit-font-smoothing: antialiased; }
+/* El fondo (z-index:-1) queda detrás: la raíz crea el contexto de apilamiento */
+.app { position: relative; z-index: 1; }
+.msg.user .bubble { background: var(--surface-glass-hover); border-color: var(--border-glass); }
+
+/* Superficies grandes: vidrio, nunca opacas */
+.sidebar, .chat-header, .composer, .modal, .card, .tool-card {
+  background: var(--surface-glass);
+  border-color: var(--border-glass);
+  backdrop-filter: blur(var(--blur-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+}
+.modal { background: color-mix(in srgb, var(--bg-elevated) 75%, transparent); backdrop-filter: blur(var(--blur-modal)); border-radius: 28px; }
+.modal-backdrop { background: rgb(0 0 0 / 0.55); backdrop-filter: blur(var(--blur-modal)); }
+
+/* ---------- Botones ----------
+   Reposo: píldora de vidrio. Hover = foco: se enciende (relleno claro, texto oscuro),
+   crece un poco y aparece el halo. Primario: vidrio con tinte azul. Peligro: tinte rojo. */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--touch-min);
+  padding: 4px 16px;
+  font-size: 13.5px;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+  background: var(--surface-glass);
+  border: var(--bw) solid var(--border-glass);
+  border-radius: var(--r-pill);
+  backdrop-filter: blur(12px);
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+button.primary {
+  background: linear-gradient(180deg, rgb(91 155 255 / 0.32), rgb(47 107 255 / 0.22));
+  border-color: rgb(140 185 255 / 0.45);
+  color: #fff;
+}
+button.ghost { background: transparent; border-color: var(--border-glass); color: var(--text-secondary); }
+button.danger { background: rgb(255 107 107 / 0.12); border-color: rgb(255 107 107 / 0.35); color: var(--danger); }
+button.small, .chip { min-height: 26px; padding: 2px 12px; font-size: 12.5px; }
+button.block { width: 100%; }
+
+.app button:is(:hover, :focus-visible):not(:disabled) {
+  background: var(--btn-lit-bg);
+  border-color: var(--btn-lit-bg);
+  color: var(--btn-lit-fg);
+  transform: scale(var(--focus-scale));
+  box-shadow: var(--glow-focus);
+  outline: none;
+}
+.app button.danger:is(:hover, :focus-visible):not(:disabled) { background: var(--danger); border-color: var(--danger); color: #fff; }
+button:active:not(:disabled) { transform: scale(0.97); }
+button:disabled { opacity: var(--op-disabled); cursor: not-allowed; }
+
+/* Botones de lista y de texto: no se encienden en blanco, solo vidrio + halo suave */
+:is(.tabs button, .split-list button, .tool-head, .thinking-toggle, .day-picker button) {
+  justify-content: flex-start;
+  border-radius: var(--r-sm);
+  backdrop-filter: none;
+}
+:is(.tabs button, .split-list button, .tool-head, .thinking-toggle):not(.active) { background: transparent; border-color: transparent; }
+.app :is(.tabs button, .split-list button, .tool-head, .thinking-toggle):is(:hover, :focus-visible):not(:disabled) {
+  background: var(--surface-glass-hover);
+  border-color: var(--border-glass);
+  color: var(--text-primary);
+  transform: none;
+  box-shadow: 0 0 0 1px var(--border-strong), var(--glow-soft);
+}
+.day-picker button { justify-content: center; }
+button.link, button.icon-button, .thread-delete {
+  min-height: 0;
+  padding: 2px 6px;
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+}
+button.link { color: var(--accent); }
+.app :is(button.link, button.icon-button, .thread-delete):is(:hover, :focus-visible):not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-primary);
+  transform: none;
+  box-shadow: none;
+}
+
+/* ---------- Lista de chats ---------- */
+.thread-list { padding: 6px 10px; }
+.thread-item {
+  padding: 12px 40px 12px 16px;
+  margin-bottom: 6px;
+  border-radius: var(--r-card);
+  border: var(--bw) solid transparent;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.thread-item .thread-meta { margin-top: 4px; }
+.thread-item.active { background: var(--surface-glass-active); border-color: var(--border-glass); box-shadow: none; }
+.thread-item:is(:hover, :focus-visible) {
+  background: var(--surface-glass-hover);
+  transform: scale(1.03);
+  box-shadow: var(--glow-focus);
+  outline: none;
+}
+.thread-delete { top: 50%; right: 10px; transform: translateY(-50%) !important; }
+.thread-list:has(.thread-item:focus-visible) .thread-item:not(:focus-visible):not(:hover):not(.active) { opacity: var(--op-dim); }
+
+/* ---------- Inputs y selectores ---------- */
+input, select, textarea {
+  background: var(--surface-glass);
+  color: var(--text-primary);
+  border: var(--bw) solid var(--border-glass);
+  border-radius: var(--r-sm);
+  min-height: var(--touch-min);
+}
+input::placeholder, textarea::placeholder { color: var(--text-disabled); }
+select { color-scheme: dark; cursor: pointer; }
+/* La lista desplegable nativa: fondo oscuro y texto claro (antes salía gris sobre blanco) */
+select option, select optgroup { background: var(--bg-elevated); color: var(--text-primary); }
+select option:checked { background: var(--accent-solid); color: #fff; }
+.control select { color: var(--text-primary); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--focus-ring); box-shadow: var(--glow-focus); outline: none; }
+
+/* Volumen general (música + sonidos) */
+.ambience-volume { display: flex; align-items: center; gap: 12px; width: 240px; color: var(--text-secondary); }
+.ambience-volume-value { width: 38px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ambience-volume input[type='range'] {
+  flex: 1;
+  min-height: 0;
+  height: 4px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-pill);
+  appearance: none;
+  background: linear-gradient(90deg, var(--accent) var(--pct), rgb(255 255 255 / 0.15) var(--pct));
+  cursor: pointer;
+}
+.ambience-volume input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--glow-soft);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.ambience-volume input[type='range']:is(:hover, :focus-visible)::-webkit-slider-thumb { transform: scale(1.25); box-shadow: var(--glow-focus); }
+.ambience-volume input[type='range']:focus-visible { box-shadow: none; outline: none; }
+
+/* Filas de ajustes con interruptor (pestaña Sonido y ambiente) */
+.setting-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: var(--bw) solid var(--border-glass); }
+.card h3 + .setting-row { border-top: none; }
+.setting-icon { color: var(--accent); flex-shrink: 0; }
+.app button.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 52px;
+  min-height: 30px;
+  height: 30px;
+  padding: 3px;
+  justify-content: flex-start;
+  background: rgb(255 255 255 / 0.12);
+  border-color: var(--border-glass);
+}
+.app button.switch[aria-checked='true'] { background: var(--accent-solid); border-color: rgb(140 185 255 / 0.5); }
+.app button.switch:is(:hover, :focus-visible):not(:disabled) { color: inherit; transform: scale(1.04); box-shadow: var(--glow-focus); }
+.app button.switch:is(:hover, :focus-visible):not([aria-checked='true']) { background: rgb(255 255 255 / 0.18); border-color: var(--border-strong); }
+.app button.switch[aria-checked='true']:is(:hover, :focus-visible) { background: #4a7dff; border-color: rgb(140 185 255 / 0.7); }
+.switch-knob {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+.switch[aria-checked='true'] .switch-knob { transform: translateX(22px); }

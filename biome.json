@@ -1,0 +1,33 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["src/**", "tests/**", "scripts/**", "!**/*.d.ts", "!src/renderer/public/**"]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "warn",
+        "useHookAtTopLevel": "warn",
+        "noVoidTypeReturn": "warn"
+      },
+      "suspicious": {
+        "noExplicitAny": "warn",
+        "noImportCycles": "error",
+        "noMisleadingCharacterClass": "warn",
+        "noAssignInExpressions": "warn",
+        "useIterableCallbackReturn": "warn",
+        "noArrayIndexKey": "warn"
+      },
+      "complexity": { "noCommaOperator": "warn" },
+      "style": { "noNonNullAssertion": "warn" },
+      "a11y": "warn",
+      "nursery": { "noFloatingPromises": "error" }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fast: lint what is staged. The slow gates (typecheck, tests, coverage) run on pre-push and in CI.
+[ -f node_modules/@biomejs/biome/bin/biome ] || exit 0
+exec node node_modules/@biomejs/biome/bin/biome lint --staged --no-errors-on-unmatched

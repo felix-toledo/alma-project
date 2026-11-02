@@ -1,0 +1,29 @@
+/* Tailwind v4: los tokens se mapean acá (equivale al tailwind.config) */
+@theme inline {
+  --color-base: var(--bg-base);
+  --color-elevated: var(--bg-elevated);
+  --color-glass: var(--surface-glass);
+  --color-glass-hover: var(--surface-glass-hover);
+  --color-glass-active: var(--surface-glass-active);
+  --color-line: var(--border-glass);
+  --color-fg: var(--text-primary);
+  --color-fg-2: var(--text-secondary);
+  --color-fg-off: var(--text-disabled);
+  --color-accent: var(--accent);
+  --color-accent-solid: var(--accent-solid);
+  --color-warm: var(--accent-warm);
+  --color-ok: var(--success);
+  --color-warn: var(--warning);
+  --color-bad: var(--danger);
+  --font-sans: var(--font-sans);
+  --radius-card: var(--r-card);
+  --radius-pill: var(--r-pill);
+  --text-display: var(--fs-display);
+  --text-title: var(--fs-title);
+  --text-heading: var(--fs-heading);
+  --text-body: var(--fs-body);
+  --text-caption: var(--fs-caption);
+  --shadow-glow: var(--glow-soft);
+  --shadow-focus: var(--glow-focus);
+  --ease-umbra: var(--ease-out);
+}
