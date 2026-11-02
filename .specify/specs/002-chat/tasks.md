@@ -1,0 +1,19 @@
+# 002 — Tasks
+
+- [x] **T1** (US-1..US-10) Define `Thread`, `ThreadSummary`, `ChatMessage`, `Block`, `ToolState`, `SubagentRun`, `LiveEvent` and the `threads.*` / `chat.*` / `files.*` requests in `src/shared/types.ts`; `privacy.threadRetentionDays` (default 0) in `src/shared/defaults.ts` — typecheck only
+- [x] **T2** (AC-1.1–1.6, BR-1, BR-2) Implement `ThreadStore` in `src/coordinator/store.ts`: one 0600 JSON file per thread, atomic debounced save, `flushAll`, tolerant load, newest-first `list`, `UNTITLED` — [gap]: no automated test yet
+- [x] **T3** (AC-1.7, BR-4) Test `tests/agent.test.ts` › `closes tool calls left without results` fails → implement `repairDanglingToolUses` in `src/coordinator/agent.ts`
+- [x] **T4** (AC-3.9) Test `tests/agent.test.ts` › `asks for approval, runs the tool and feeds the result back` fails → alternate user / assistant / tool-result messages and emit each as a `message` event in `src/coordinator/agent.ts`
+- [x] **T5** (AC-3.20) Test `tests/agent.test.ts` › `does not run tools from a turn cut off by max_tokens` fails → give each cut-off call an error result in `src/coordinator/agent.ts`
+- [x] **T6** (AC-3.10) Test `tests/agent.test.ts` › `denies pending approvals when the run is cancelled` fails → deny pending approvals on abort via the signal handed in by `startRun`
+- [x] **T7** (AC-4.10) Test `tests/agent.test.ts` › `runs delegated subagents in parallel and returns their results` fails → store `subagents[id]` and emit `subagent.started` / `subagent.finished`
+- [x] **T8** (AC-5.9, BR-8) Test `tests/tools.test.ts` › `rejects paths that escape the workspace` and `requires a workspace` fail → implement `resolveInWorkspace` in `src/coordinator/tools/paths.ts`
+- [x] **T9** (AC-5.10, BR-8) Implement the `files.image` request using `imageDataUrl` in `src/coordinator/tools/media.ts` (type and 12 MB checks) — [gap]: no automated test yet
+- [x] **T10** (AC-2.4–2.6, AC-3.2–3.5, AC-3.11, AC-3.12, AC-3.14, AC-3.15, BR-2, BR-3) Implement `threads.*`, `chat.send`, `chat.stop` and `startRun` (single run per thread, title from first line, budget check, final `thread.updated`) in `src/coordinator/index.ts` — [gap]: no automated test yet
+- [x] **T11** (AC-1.8, AC-1.9, BR-6) Implement `applyRetention` (start, settings change, every 12 h, never a running thread, audit `privacy.retention`) in `src/coordinator/index.ts` — [gap]: no automated test yet
+- [x] **T12** (AC-7.1–7.5, BR-5) Create or reuse threads for Telegram, WhatsApp, voice (`VOICE_SESSION_MS`), routines, house rules and companies, broadcasting `thread.updated` — [gap]: no automated test yet
+- [x] **T13** (AC-5.7) Implement `saveInboxImage` (sanitised name, `<userData>/inbox/`) behind `files.saveImage` in `src/coordinator/index.ts` — [gap]: no automated test yet
+- [x] **T14** (AC-3.6, AC-3.16, AC-3.19, AC-6.6, AC-4.12) Implement the event reducer in `src/renderer/src/lib/state.ts` (per-scope drafts, background-thread tracking, reconnect reload) and `threadTitle` in `src/renderer/src/lib/format.ts` — [gap]: no automated test yet
+- [x] **T15** (AC-5.1–5.3, AC-4.11, BR-7) Implement `composeMessage`, `splitMessage` and the attachment builders in `src/renderer/src/lib/attachments.ts` — [gap]: no automated test yet
+- [x] **T16** (AC-2.8, AC-2.9, BR-9, BR-10) Wire `dialog:pickFolder`, notification click → `app:openThread`, link policy in `src/main/index.ts` and the image CSP in `src/renderer/index.html` — [manual]: click a notification while the app is in the tray; paste a reply with a remote image
+- [x] **T17** (AC-2.1–2.3, 2.7, 2.10, 2.11, AC-3.1, 3.7, 3.8, 3.13, 3.17, 3.18, AC-4.1–4.9, 4.13, AC-5.4–5.6, 5.8, AC-6.1–6.5, BR-11–BR-14) Build `App.tsx` and `components/{ChatView,MessageList,ToolCard,Sidebar,Markdown,WorkspaceImage}.tsx` — [manual]: run the app with 0 and several threads, stream a run with tools and a sub-agent, scroll up during output
