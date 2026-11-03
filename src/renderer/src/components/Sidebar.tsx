@@ -1,8 +1,9 @@
 import type { AgentProfile, McpServerStatus, PendingApproval, ThreadSummary, VoiceState } from '../../../shared/types'
 import { request } from '../lib/coordinator'
 import { agentName, relativeTime, threadTitle } from '../lib/format'
-import { BookOpen, Briefcase, Building2, Diamond, Home, MessageCircle, MessageSquare, Mic, Plus, Repeat, Send, Settings, X } from 'lucide-react'
+import { BookOpen, Briefcase, Building2, Home, MessageCircle, MessageSquare, Mic, Plus, Repeat, Send, Settings, X } from 'lucide-react'
 import { Icon } from '../umbra/Icon'
+import { Logo } from './Logo'
 
 export type AppMode = 'chat' | 'vault' | 'companies' | 'home'
 
@@ -39,7 +40,7 @@ export function Sidebar(props: Props): React.JSX.Element {
     <aside className="sidebar">
       <div className="sidebar-top">
         <div className="brand">
-          <span className="brand-mark" aria-hidden><Icon icon={Diamond} size="sm" /></span> Alma
+          <Logo size={24} /> Alma
         </div>
         <div className="mode-switch tabs" role="tablist" aria-label="Vista">
           <button role="tab" aria-selected={props.mode === 'chat'} className={props.mode === 'chat' ? 'active' : ''} onClick={() => props.onMode('chat')}>

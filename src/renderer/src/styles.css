@@ -240,14 +240,41 @@ button.link {
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 650;
   font-size: 15px;
   letter-spacing: 0.2px;
   padding: 0 4px;
 }
 
-.brand-mark {
-  color: var(--accent);
+/* Logo mark (components/Logo.tsx): blue tile, white A, amber dot */
+.mark {
+  flex: none;
+}
+
+.mark .m-tile {
+  fill: var(--accent-solid);
+}
+
+.mark .m-a {
+  fill: none;
+  stroke: var(--text-on-accent);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mark .m-dot {
+  fill: var(--accent-warm);
+}
+
+.mark .m-ring {
+  fill: none;
+  stroke: var(--accent-warm);
+  stroke-width: 1.5;
+  opacity: 0.5;
 }
 
 .thread-list {
