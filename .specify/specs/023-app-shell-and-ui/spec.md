@@ -47,7 +47,7 @@ and every screen shares the same look, sounds and focus behavior with options to
 - **AC-1.1** (US-1) Given Alma is starting, when it holds the single-instance lock, then it opens one window 1280×820 (minimum 860×560), title «Alma», dark background `#05070d`, menu bar auto-hidden, shown when ready. [manual] Launch Alma and check size and that the window appears only when painted.
 - **AC-1.2** (US-1) Given Alma is already running, when a second copy is launched, then the second process exits and the running window is shown, restored if minimized, and focused. [manual] Launch the exe twice.
 - **AC-1.3** (US-1) Given Alma was started with `--hidden` (the login item), when the window is ready, then it is not shown; the tray icon and the coordinator still start. [manual] Start with `--hidden` and look for the tray icon.
-- **AC-1.4** (US-2) Given `background.runInTray` is true, when the window is closed, then it is hidden, not destroyed, and Alma keeps running; the tray icon (tooltip «Alma») has a menu «Abrir Alma» / «Salir» and a click on the icon shows the window. [manual] Close the window, click the tray icon, then use «Salir».
+- **AC-1.4** (US-2) Given `background.runInTray` is true, when the window is closed, then it is hidden, not destroyed, and Alma keeps running; the tray icon (tooltip «Alma») has a menu «Abrir Alma» / «Salir» (the `es` values; the menu and tooltip follow `language`, so changing it relabels the tray at once) and a click on the icon shows the window. [manual] Close the window, click the tray icon, then use «Salir».
 - **AC-1.5** (US-2) Given `runInTray` is false, when the last window closes, then the app quits and the tray icon is removed; changing the setting at runtime creates or destroys the tray immediately. [manual] Toggle the setting and close the window.
 - **AC-1.6** (US-2) «Salir» in the tray menu, or any quit, kills the coordinator process and unregisters global shortcuts. [manual] Quit from the tray and check that no Alma process remains.
 - **AC-1.7** (US-2) Given `background.launchAtLogin` changes, when settings are pushed, then Windows' login item is set to the app path with `--hidden` (packaged) or the app folder plus `--hidden` (unpackaged). [manual] Toggle it and look in Windows «Aplicaciones de inicio».
@@ -125,7 +125,7 @@ and every screen shares the same look, sounds and focus behavior with options to
 ## 6. Business rules
 - **BR-1** Only one Alma instance runs; a second launch exits and shows the first window. (src/main/index.ts)
 - **BR-2** With `background.runInTray` true, closing the window hides it; the app quits only through «Salir» or an explicit quit; with it false, closing the last window quits (not on macOS). (src/main/index.ts)
-- **BR-3** The tray exists exactly while `runInTray` is true. Tray menu: «Abrir Alma», «Salir». (src/main/index.ts)
+- **BR-3** The tray exists exactly while `runInTray` is true. Tray menu: «Abrir Alma», «Salir» in `es`, the dictionary's English values in `en`. (src/main/index.ts)
 - **BR-4** Window: 1280×820, minimum 860×560, `#05070d`, `contextIsolation` true, `nodeIntegration` false, `sandbox` true, `backgroundThrottling` false (voice keeps working hidden). (src/main/index.ts)
 - **BR-5** AppUserModelId is `com.alma.app` (Windows only shows notifications for apps with identity). (src/main/index.ts)
 - **BR-6** Non-`always` notifications are skipped when the window is visible and focused; `always` ones also go in-app and flash the taskbar. (src/main/index.ts)
@@ -139,7 +139,7 @@ and every screen shares the same look, sounds and focus behavior with options to
 - **BR-14** The focus scale is 1.06 and pressed scale 0.97; durations 120/200/320/500 ms. (src/renderer/src/umbra/tokens.css, base.css)
 - **BR-15** Sections are `chat`, `vault`, `companies`, `home`; local keys `alma.mode`, `alma.company`, `alma.vault.chat`, `umbra.prefs`. (src/renderer/src/App.tsx, umbra/useUISound.ts)
 - **BR-16** The hidden render window uses partition `alma-render` and cancels every request that is not `data:` or `about:`. (src/main/render.ts)
-- **BR-17** The app is styled with the `console-ui` and `umbra-ui` conventions: interface text in Spanish (rioplatense). (docs/architecture.md)
+- **BR-17** The app is styled with the `console-ui` and `umbra-ui` conventions. Interface text comes from the `es`/`en` dictionaries and follows the `language` setting live (`../025-i18n-es-en/spec.md`); the Spanish is rioplatense as before and the English is US English. Spanish text quoted in this spec is the `es` value of a dictionary key. (docs/architecture.md)
 
 ## 7. Constraints and risks
 - Layers: `main` (`src/main/index.ts`, `render.ts`, `guard.ts`, `instagram.ts`), `preload` (`src/preload/index.ts`, `api.d.ts`), `shared` (`desktop-api.ts`, `types.ts`), `renderer` (`App.tsx`, `main.tsx`, `components/Sidebar.tsx`, `umbra/*`, `styles.css`, `lib/*`). The renderer has no component tests; its logic is covered only by typecheck, lint and manual runs.

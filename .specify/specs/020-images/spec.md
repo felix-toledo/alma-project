@@ -1,0 +1,140 @@
+---
+status: implemented
+---
+
+# 020 — Imágenes
+
+## 1. Summary
+Agents can make pictures in two ways: `generate_image` asks an image model (xAI by default, or OpenAI, or Meta) and saves the result; `compose_image` draws an original image from Alma's own library (templates, palettes, fonts, backgrounds, shapes, plus the person's brand pieces in `biblioteca/`) with no image model at all, as an editable SVG and a PNG. The person can also hand pictures to Alma (paste or drop in the chat, or send a photo by Telegram) and an agent can look at them with `look_at_image`, which asks a vision-capable model a one-shot question. Generated and composed images show up inside the tool card in the chat.
+
+## 2. Problem and goal
+Some providers (Claude, DeepSeek) cannot draw, and a person may have no image key. Goal: an agent can still deliver a usable, on-brand picture (for example for an Instagram post), and any agent can understand a picture the person sends, without pictures ever travelling inside the agent's conversation.
+
+## 3. Scope
+**In:**
+- `generate_image`: inputs, providers, model resolution, saving in `imagenes/`, failures.
+- `compose_image` and the composition library (`src/coordinator/compose/*`): templates, palettes, fonts, backgrounds, shapes, the user's `biblioteca/`, recipes, text fitting, SVG sanitizing, rendering to PNG by the main process.
+- Image helpers (`src/coordinator/images.ts`): MIME sniffing, model listing/picking.
+- Vision (`src/coordinator/vision.ts`): `look_at_image`, picture loading and limits, which model looks, image size from headers.
+- Pictures arriving from the chat and from Telegram, and the inbox folder where they are stored.
+- Showing images in the UI (`WorkspaceImage`, tool cards).
+- The Settings → Imágenes tab.
+
+**Out (and why):**
+- Publishing a picture to Instagram: `../012-instagram/spec.md`.
+- Home cameras (`camera_look`, `camera_photo`) and floor plans read from images (`home_plan_from_image`), which reuse `look`: `../014-house-plan-cameras-and-rules/spec.md`.
+- Provider internals (keys, `streamTurn`, which models accept images): `../005-providers/spec.md`.
+- Telegram channel in general and `send_telegram`: `../010-telegram/spec.md`.
+- Office documents and drawings: `../021-office-documents-and-drawings/spec.md`.
+- Erasing personal data (includes the inbox): `../022-security-and-privacy/spec.md`.
+- Video generation, image editing, upscaling: not implemented.
+
+## 4. Users and stories
+- **US-1** As an agent, I want `generate_image` to make an image from a description and save it in the working folder, so that I can use or publish it.
+- **US-2** As a person using Alma, I want to choose the image service and (optionally) a model, and have the newest one used when I do not choose, so that I get good results without maintenance.
+- **US-3** As an agent without an image model, I want `compose_image` to draw an original, on-brand image (quote, announcement, promo, list, tip…) from the library, so that I can still deliver a post.
+- **US-4** As a person with a brand, I want to drop my logo, pieces, fonts, palettes and recipes in `biblioteca/`, so that composed images follow my brand.
+- **US-5** As a person using Alma, I want to paste, drop or send by Telegram a picture and have an agent look at it, so that I can ask about it.
+- **US-6** As a person using Alma, I want to see generated and composed images in the chat, so that I can judge them.
+- **US-7** As an agent, I want a clear error when something is wrong with an image request, so that I can correct it or fall back to `compose_image`.
+
+## 5. Acceptance criteria
+
+### generate_image (US-1, US-2, US-7)
+- **AC-1.1** (US-1) Given an xAI key and no model chosen, when `generate_image` runs with a prompt, ratio `4:5` and a filename, then the model list is read, the newest image model is picked, a request is made to `images/generations` with `n: 1` and `response_format: 'b64_json'`, and the image is saved as `imagenes/<slug>-<YYYYMMDD>-<HHMMSS>.png` in the working folder. Test: tests/media.test.ts › "picks the newest image model and saves the image in the workspace"
+- **AC-1.2** (US-1) Given the xAI service, when the request is built, then the aspect ratio is appended to the prompt as a composition hint (e.g. "vertical 4:5 portrait composition"). Test: tests/media.test.ts › "picks the newest image model and saves the image in the workspace"
+- **AC-1.3** (US-1) Given the filename "Café de mañana", when the file is named, then accents and punctuation are removed and the slug is lower case with dashes (`cafe-de-manana`), cut to 40 characters; with no filename the prompt is used; if nothing is left, `imagen`. Test: tests/media.test.ts › "picks the newest image model and saves the image in the workspace" (the "café" case); the 40-character cut and the `imagen` fallback are [gap].
+- **AC-1.4** (US-1) Given a successful generation, when the tool returns, then its text starts with "Imagen guardada: <relative path>" followed by "Modelo: <id> · <KB> KB · formato pedido <ratio>". Test: tests/media.test.ts › "picks the newest image model and saves the image in the workspace"
+- **AC-1.5** (US-1) Given the file type is decided by the bytes, when the service returns PNG, JPEG or WebP, then the file gets `.png`, `.jpg` or `.webp`; when it returns anything else, then the tool fails with "El servicio devolvió un archivo que no es una imagen." and nothing is saved. [gap]
+- **AC-1.6** (US-1) Given the service answers with a URL instead of base64, when generating, then the image is downloaded from that URL; a non-OK download fails with "No se pudo descargar la imagen generada (HTTP n)." [gap]
+- **AC-1.7** (US-7) Given no image returned at all, when generating, then it fails with "El servicio de imágenes no devolvió ninguna imagen." [gap]
+- **AC-1.8** (US-7) Given no API key in settings or in the service's environment variable, when `generate_image` runs, then it fails with a message containing "API key de xAI" (or OpenAI / Meta) pointing to Configuración → Proveedores, and adds the hint to use `compose_image`. Test: tests/media.test.ts › "explains a missing key"
+- **AC-1.9** (US-7) Given any other generation error (network, HTTP error, abort), when generating, then it is reported as a tool error whose text ends with the `compose_image` hint. [gap]
+- **AC-1.10** (US-1) Given a prompt shorter than 10 characters or an aspect ratio other than 1:1, 4:5, 16:9, 9:16, when the call is validated, then it is rejected as invalid input. [gap]
+- **AC-1.11** (US-1) Given the person aborts the run, when the request is in flight, then the abort signal is passed to the service call. [gap]
+
+### Providers and model resolution (US-2)
+- **AC-2.1** (US-2) Given a provider and a list of model ids, when the newest image model is picked, then xAI → ids matching `image|imagine` and not `video|edit` (so `grok-imagine-image`), OpenAI → `gpt-image*`/`dall-e*` (so `gpt-image-1.5`), Meta → `muse-image*`; ordering is numeric-aware descending. Test: tests/media.test.ts › "chooses image models per provider"
+- **AC-2.2** (US-2) Given a model chosen in settings, when generating, then that model is used with no listing call. [gap]
+- **AC-2.3** (US-2) Given no model chosen and the listing fails or finds no image model, when generating, then the fallback is used: `grok-2-image` (xAI), `gpt-image-1` (OpenAI), `muse-image-1.0` (Meta). [gap]
+- **AC-2.4** (US-2) Given OpenAI or Meta is selected, when generating, then the request uses `size` `1024x1024` (1:1), `1024x1536` (4:5 and 9:16) or `1536x1024` (16:9) and no `response_format`. [gap]
+- **AC-2.5** (US-2) Given the images tab, when the person opens the model list (refresh button), then `images.models` returns the ids of the selected service that match its image-model pattern, sorted alphabetically. [gap]
+- **AC-2.6** (US-2) Given the images tab, when the person changes the service, then the model field is cleared and saved empty ("vacío = el más nuevo disponible"); the service dropdown marks a service "· falta la key" when it has neither a stored key nor an environment key. [manual] Open Configuración → Imágenes with and without keys.
+- **AC-2.7** (US-2) Given the model field holds something that looks like an API key, when the person types it, then the Save button is disabled with the message "Eso es una API key, no un modelo…"; and a key found there on load is wiped by the settings store. [manual] Paste a key-like string; the load-time wipe is [gap].
+
+### compose_image (US-3, US-7)
+- **AC-3.1** (US-3) Given every template in every aspect ratio and the same seed, when composing, then each produces a well-formed `<svg … viewBox="0 0 W H">` and the same input gives the same SVG byte for byte. Test: tests/compose.test.ts › "draws every template in every format, deterministically per seed"
+- **AC-3.2** (US-3) Given text with markup characters, when composing, then it is escaped and only the fonts actually used are embedded. Test: tests/compose.test.ts › "escapes text and embeds only the fonts it uses"
+- **AC-3.3** (US-7) Given an unknown palette, element or font name, when composing, then it fails listing the valid options ("Paleta desconocida…", "Elemento desconocido…", "Fuente desconocida…"). Test: tests/compose.test.ts › "rejects unknown names with the valid options"
+- **AC-3.4** (US-3) Given brand colors that would hide the text (low contrast), when composing, then the text color is replaced by a readable one (`#111111` or `#ffffff`). Test: tests/compose.test.ts › "keeps text readable when brand colors would hide it"
+- **AC-3.5** (US-3) Given an SVG overlay with scripts, event handlers or remote links, when composing, then scripts, `foreignObject`, `on…=` attributes and any `href` not pointing to `#…` or `data:image/…` are removed. Test: tests/compose.test.ts › "strips scripts, handlers and remote links from overlays"
+- **AC-3.6** (US-3) Given a long title, when sizing the text, then the font is smaller than for a short title and a word never exceeds the box width. Test: tests/compose.test.ts › "fits long titles smaller than short ones"
+- **AC-3.7** (US-3) Given the tool runs, when it finishes, then it writes `imagenes/<slug>-<timestamp>.svg`, asks the main process to rasterize it (`image.render` with the SVG, exact width and height, and the `.png` path) and returns "Imagen guardada: <png>", "SVG editable: <svg>" and a one-line summary (template, palette, background, font, seed, size). The default is 4:5 (1080×1350). Test: tests/compose.test.ts › "writes the SVG and asks the main process for the PNG"
+- **AC-3.8** (US-7) Given the PNG rendering fails, when the tool runs, then it fails with "No se pudo pasar la imagen a PNG: <reason>. El SVG quedó en <path>." and keeps the SVG. [gap]
+- **AC-3.9** (US-3) Given no template and some text, when composing, then a template is picked from the seed among all but `abstracto` (restricted to the style if given); with no text at all the `abstracto` template is used. [gap]
+- **AC-3.10** (US-3) Given no palette, no colors and no user palettes, when composing, then a built-in palette of the chosen style is picked from the seed; with user palettes in `biblioteca/paletas.json` and none named, one of those is picked. [gap]
+- **AC-3.11** (US-3) Given an aspect ratio, when composing, then the canvas is 1:1 1080×1080, 4:5 1080×1350, 16:9 1920×1080, 9:16 1080×1920. Test: tests/compose.test.ts › "writes the SVG and asks the main process for the PNG" (4:5 only); the other ratios are [gap].
+- **AC-3.12** (US-3) Given a color name in an element that is not a hex or one of `acento`, `acento2`, `texto`, `fondo`, `fondo2`, when composing, then it fails with "Color desconocido…". [gap]
+- **AC-3.13** (US-3) Given a `photo` that is not in `biblioteca/`, when composing, then it fails with "No hay una imagen … en biblioteca/."; with a photo found, it is drawn as a cover background under a half-transparent color layer. [gap]
+- **AC-3.14** (US-3) Given the `lista` template, when `text` has several lines, then each line (with a leading `-`, `*` or `•` removed) becomes one bullet; for the `promo` template the badge becomes a round sticker; for `consejo` a large number; for `evento` a date chip. [gap]
+- **AC-3.15** (US-3) Given the PNG must come out as drawn, when the main process rasterizes, then it draws the SVG onto a canvas of the exact size in a hidden window whose network is blocked (only `data:` and `about:` URLs), so the SVG's content cannot run code or fetch anything; an invalid SVG answers "el SVG no es válido (si usaste svg_overlay, revisá que esté bien formado)". [gap]
+
+### The user's library (US-4)
+- **AC-4.1** (US-4) Given `biblioteca/` with `paletas.json`, `logo.svg`, a piece `Flor.svg` and a font `MiFuente.ttf`, when composing, then the palette is usable by name, the font by file name without extension (family `u-mifuente`), the logo is placed as an image, and the piece is drawn inline when named in `elements`. Test: tests/compose.test.ts › "uses palettes, pieces, fonts and the logo from biblioteca/"
+- **AC-4.2** (US-4) Given a `paletas.json` with an invalid entry, when the library loads, then it fails naming `paletas.json`. Test: tests/compose.test.ts › "uses palettes, pieces, fonts and the logo from biblioteca/"
+- **AC-4.3** (US-4) Given `recetas.json` with a recipe, when composing with `recipe` (case-insensitive), then the recipe's template, palette and pieces apply, what the caller passes wins, and the caller's `elements` add to the recipe's; `decorations: false` drops the template's own shapes; the summary starts with "Receta: <name>". Test: tests/compose.test.ts › "applies recipes, recolors SVG pieces inline and can drop template decorations"
+- **AC-4.4** (US-4) Given SVG pieces, when drawn inline, then `currentColor` takes the element's color, `var(--acento)` its second color, and `onload`-style handlers are stripped. Test: tests/compose.test.ts › "applies recipes, recolors SVG pieces inline and can drop template decorations"
+- **AC-4.5** (US-4) Given an unknown recipe, when composing, then it fails with "Receta desconocida…" listing the available ones; a recipe with an invalid field makes the library fail to load naming the recipe. Test: tests/compose.test.ts › "applies recipes, recolors SVG pieces inline and can drop template decorations"
+- **AC-4.6** (US-4) Given no `biblioteca/` folder, when composing, then an empty library is used and the built-in pieces work. [gap]
+- **AC-4.7** (US-4) Given symlinks, directories, unsupported extensions or files larger than 8 MB in `biblioteca/`, when the library loads, then they are skipped silently. [gap]
+- **AC-4.8** (US-4) Given a `logo` piece and logo not disabled (`logo: false`), when composing, then the logo is placed in the template's corner at 10% of the short side, and text is moved clear of a logo at the top. [gap]
+- **AC-4.9** (US-4) Given a piece with the same name as a built-in shape, when it is named in `elements`, then the user's piece wins. [gap]
+
+### look_at_image and vision (US-5, US-7)
+- **AC-5.1** (US-5) Given a picture in the inbox, the vault or the working folder, when `look_at_image` runs with a question, then the picture is sent with the question to the vision model and the answer is returned as plain text; the tool is read-only (no approval). [gap]
+- **AC-5.2** (US-7) Given a path outside the inbox, the active vault and the working folder, when loading, then it fails "Esa imagen está fuera de las carpetas que Alma puede leer…". [gap]
+- **AC-5.3** (US-7) Given an extension other than jpg/jpeg/png/webp/gif, when loading, then it fails "Solo se pueden mirar imágenes JPG, PNG, WebP o GIF."; a missing file fails "No existe la imagen: <path>"; a file over 8 MB fails "La imagen pesa más de 8 MB." [gap]
+- **AC-5.4** (US-5) Given PNG, GIF, WebP (VP8, VP8L, VP8X) or JPEG bytes, when the size is read, then width and height come from the header; for other bytes the result is null. Test: tests/home.test.ts › "lee el tamaño de PNG, GIF y JPEG por la cabecera" (PNG, GIF, JPEG, not-an-image); WebP is [gap].
+- **AC-5.5** (US-5) Given the vision model choice, when a model must look, then it is: the vision provider and model set in Casa settings if both are set; else the model of the agent that runs the house; else the default agent's; else any agent whose provider has a key; else the first agent. [gap]
+- **AC-5.6** (US-5) Given a look, when the request is sent, then it has effort `low`, no tools, an English system prompt (spec 025 BR-17; formerly "Sos los ojos de Alma…"), and one user message with the images (media type + base64) followed by the question; the answer is the final text blocks (or the streamed text if there are none), trimmed. [gap]
+- **AC-5.7** (US-5) Given a relative path, when loading, then it is resolved against the first root (the inbox) before checking roots. [gap]
+- **AC-5.8** (US-5) Given the vision model's provider has no key or fails, when `look_at_image` runs, then the provider's error is returned as the tool error. [gap]
+
+### Pictures sent by the person (US-5)
+- **AC-6.1** (US-5) Given an image pasted into the chat box or dropped on the chat, when it is added, then it is sent to the coordinator (`files.saveImage` with a name and base64), saved in the inbox, and shown as an attachment chip; the next message carries "Imagen adjunta (mirala con look_at_image): <path>". Pasted images with no name are named `imagen-<ms>.png`. [manual] Paste a screenshot and send; the agent calls `look_at_image`.
+- **AC-6.2** (US-5) Given an allowed Telegram user sends a photo, when it arrives, then the largest size is downloaded, saved in the inbox as `telegram-<id>.jpg` (see BR-9), and the agent receives "[El usuario te mandó una imagen: <path>. Mirala con look_at_image.]" plus the caption on a new line if any. [gap]
+- **AC-6.3** (US-5) Given an unauthorized Telegram user, when they send a photo, then it is refused like any message and nothing is saved. [gap]
+- **AC-6.4** (US-7) Given the download of a Telegram photo fails, when handled, then the bot replies "No pude bajar la foto: <reason>". [gap]
+- **AC-6.5** (US-5) Given a picture sent or saved in the inbox, when the person uses the privacy erase action, then the whole inbox folder is removed and recreated empty. [gap]
+
+### Showing images (US-6)
+- **AC-7.1** (US-6) Given a successful `generate_image` or `compose_image`, when the tool card renders, then the image named by the line "Imagen guardada: <path>" in the result is shown under the card head through `WorkspaceImage`. [manual] Generate an image and see it in the card.
+- **AC-7.2** (US-6) Given `WorkspaceImage` loads, when the coordinator answers `files.image`, then the file is read from the thread's workspace (path confined to it) and shown as a data URL; while loading a placeholder shows; on failure "No se pudo mostrar <path>: <reason>". [manual] Point a card at a deleted file.
+- **AC-7.3** (US-6) Given the file is larger than 12 MB or is not PNG, JPEG or WebP (for example a GIF or an SVG), when `files.image` is requested, then it fails with "La imagen es demasiado grande para la vista previa." / "El archivo no es una imagen PNG, JPEG o WebP." [gap]
+- **AC-7.4** (US-6) Given `files.image` is asked for a path outside the thread's workspace, when handled, then it is refused with "La ruta … está fuera de la carpeta de trabajo." [gap]
+
+## 6. Business rules
+- **BR-1** `generate_image` and `compose_image` have `ToolRisk` `write` (they create files in the working folder) and need a working folder. `look_at_image` is `read` and standalone. (src/coordinator/tools/media.ts, src/coordinator/tools/home.ts)
+- **BR-2** Generated and composed files go to `imagenes/` in the working folder, named `<slug>-<YYYYMMDD>-<HHMMSS>` (local time) plus extension. Existing files are never overwritten except within the same second with the same slug. (src/coordinator/tools/media.ts)
+- **BR-3** `generate_image`: prompt at least 10 characters; aspect ratio one of 1:1 (default), 4:5, 16:9, 9:16. (src/coordinator/tools/media.ts)
+- **BR-4** Image services: Meta (Muse Image, default since [024](../024-voice-control-models-and-meta/spec.md): `settings.images.provider = 'meta'`, `size` as `WxH` per aspect ratio), xAI (base URL from the xAI provider setting), OpenAI. The key comes from the provider settings or the environment (`XAI_API_KEY`, `OPENAI_API_KEY`, `META_API_KEY`). (src/coordinator/images.ts, src/shared/defaults.ts)
+- **BR-5** Model: `settings.images.model` if set; otherwise the newest matching model of the service, cached per service+URL+key for the life of the coordinator process; fallbacks `grok-2-image`, `gpt-image-1`, `muse-image-1.0`. (src/coordinator/images.ts)
+- **BR-6** `compose_image` limits: title 140, subtitle 200, text 600, badge 32, footer 80 characters; at most 30 extra elements; SVG overlay at most 20 000 characters; element x/y between -0.5 and 1.5, size 0.01–1.5 (of the short side, 0.25 default). Default aspect 4:5. (src/coordinator/compose/index.ts)
+- **BR-7** Library: 12 templates (`titular`, `cita`, `anuncio`, `promo`, `evento`, `lista`, `consejo`, `tarjeta`, `dividida`, `marco`, `abstracto`, `minimal`), 16 palettes in four styles (minimalista, vibrante, elegante, organico), 7 fonts (`moderna`, `geometrica`, `impacto`, `pop`, `elegante`, `organica`, `manuscrita`, embedded in the app), 10 backgrounds, 23 shapes (circles, rings, waves, blobs, stars, icons such as `corazon`, `rayo`, `check`, `flecha`, `burbuja`…). The tool description lists every name so the model can choose. (src/coordinator/compose/index.ts, library.ts)
+- **BR-8** Same seed and same input give the same image; with no seed a random one is used and reported in the summary so a variant can be re-requested. (src/coordinator/compose/index.ts)
+- **BR-9** `biblioteca/`, `paletas.json` and `recetas.json` are the `es` names: the library is read from whichever language's folder and file names exist in the working folder, and a name is only created under the current `language` when none exists (spec 025 BR-23). `biblioteca/` (in the working folder) holds: pieces (`.svg`, `.png`, `.jpg`, `.jpeg`, `.webp`), fonts (`.ttf`, `.otf`, `.woff`, `.woff2`), `paletas.json`, `recetas.json`; names are lower-cased file names without extension; files over 8 MB, directories and symlinks are skipped. A malformed JSON or invalid palette/recipe fails the whole compose call with a message naming the file. (src/coordinator/compose/index.ts)
+- **BR-10** Text colour is always forced readable: if the palette's ink has contrast under 3 against the background it is replaced; a badge or button text gets a readable colour on the accent. (src/coordinator/compose/index.ts)
+- **BR-11** Text size is estimated from average glyph width per font, between a minimum of about 28 px (scaled) and a cap per template; the estimate guards overflow, the final wrapping is done by the renderer. (src/coordinator/compose/index.ts)
+- **BR-12** Rasterizing happens in the main process (`image.render`), in a hidden sandboxed window with network blocked, after a fixed 300 ms wait so embedded fonts apply. (src/main/render.ts)
+- **BR-13** Pictures sent by the person are stored in `<userData>/inbox/` as `<time-base36>-<name>`; pictures read by vision may come only from the inbox, the active vault and the working folder, at most 8 MB, in jpg/jpeg/png/webp/gif. (src/coordinator/index.ts, src/coordinator/vision.ts)
+- **BR-14** Agents never hold images in their conversation: they get a path and, to see it, call `look_at_image`, which returns text. (src/coordinator/vision.ts)
+- **BR-15** The vision model is chosen as in AC-5.5; the look runs at effort `low` with no tools. (src/coordinator/vision.ts)
+- **BR-16** The preview in the UI is limited to 12 MB and to PNG, JPEG and WebP. (src/coordinator/tools/media.ts)
+
+## 7. Constraints and risks
+- **Layers touched:** `coordinator` (`images.ts`, `vision.ts`, `tools/media.ts`, `tools/home.ts` for `look_at_image`, `compose/*`, `index.ts` for the inbox and `files.*` / `images.models` requests, `channels/telegram.ts` for photos); `main` (`render.ts` handles `image.render`); `shared` (`Settings.images`, `ImageProviderId`, `HostRequest`, `RequestEnvelope`: `images.models`, `files.image`, `files.saveImage`); `renderer` (`ChatView.tsx`, `ToolCard.tsx`, `WorkspaceImage.tsx`, `SettingsDialog.tsx` ImagesTab).
+- **Tools:** `generate_image` (`write`), `compose_image` (`write`), `look_at_image` (`read`, standalone). The default agents Multimedia and Community Manager list the first two in their auto-approved tools (preparing a post does not wait; only publishing does).
+- **Messages between layers:** `host.request` `image.render { svg, width, height, outPath }` → `host.result { ok, message }`; renderer requests `files.saveImage { name, base64 }` (returns the path), `files.image { threadId, path }` (returns a data URL), `images.models { provider? }`.
+- **Persistence:** `imagenes/` and `biblioteca/` in the working folder; `<userData>/inbox/` for pictures received; `settings.json` holds `images: { provider, model }`. Inbox files are never deleted automatically; only "Borrar mis datos" clears them.
+- **Security/privacy:** the prompt leaves the machine to the image service; a picture sent to `look_at_image` leaves the machine to the vision model's provider. Model-written SVG is sanitized and rendered with network blocked. Model-supplied paths are confined (workspace for generation and preview; the three roots for vision). Fonts are bundled, no network at compose time.
+- **Platform:** the PNG step needs the Electron main process; it is not available outside the app. Paths with Windows separators are compared case-insensitively for the vision roots.

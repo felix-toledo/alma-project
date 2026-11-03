@@ -83,11 +83,11 @@ show up without restarting, and everything Alma "knows" can be inspected, edited
 - **AC-2.1** (US-2) Given the vault tree request, when the vault has files and folders, then every non-hidden entry comes back with a
   vault-relative forward-slash path, kind, size and mtime, and any path with a segment starting with `.` (e.g. `.git`) or a
   folder named `node_modules` is left out. [gap]
-- **AC-2.2** (US-2) [manual] Given the tree, then folders are listed before files and both alphabetically (Spanish collation,
+- **AC-2.2** (US-2) [manual] Given the tree, then folders are listed before files and both alphabetically (collation of the locale of `language`, `es-AR` or `en-US`,
   numeric-aware); folders expand/collapse by click or Enter; the expanded set is remembered per vault and the folders of the open
   note are revealed automatically.
 - **AC-2.3** (US-2) Given the entries list, when the tree is built, then folders sort before files and names sort alphabetically
-  with `localeCompare('es', numeric)`. [gap]
+  with `localeCompare` in the locale of `language` (`es-AR` or `en-US`, numeric). [gap]
 - **AC-2.4** (US-2) [manual] Given the toolbar "Nueva nota" or a folder's "Nueva nota" button, when clicked, then an inline input
   appears (preselected text "Sin título") and, on Enter or blur, `<name>.md` is created in that folder (an existing `.md` suffix is
   not doubled) and opened in a tab; Escape cancels. "Nueva carpeta" does the same with the placeholder "Nueva carpeta" and
@@ -266,13 +266,13 @@ show up without restarting, and everything Alma "knows" can be inspected, edited
 - **BR-8** Trash, not delete: removal goes through the system trash via the main process; the vault root can never be trashed. (base.ts, main/index.ts)
 - **BR-9** Tab and UI state lives in the browser storage of the window, per vault where it makes sense: `alma.vault.tabs:<vault>`,
   `alma.vault.expanded:<vault>`, and globally `alma.vault.reading`, `alma.vault.chat`, `alma.mode`. Losing it is harmless. (useVault.ts, VaultSidebar.tsx, VaultView.tsx, App.tsx)
-- **BR-10** New-note naming: `Sin título.md`, then `Sin título 2.md`, `Sin título 3.md`…, compared case-insensitively. Drawings: `Dibujo.excalidraw`, `Dibujo 2.excalidraw`… (useVault.ts)
+- **BR-10** New-note naming (the `es` names; new notes, drawings and the welcome note take the name of the current `language` from the dictionary, spec 025 BR-23): `Sin título.md`, then `Sin título 2.md`, `Sin título 3.md`…, compared case-insensitively. Drawings: `Dibujo.excalidraw`, `Dibujo 2.excalidraw`… (useVault.ts)
 - **BR-11** Tree names: `\ / : * ? " < > |` become `-`; trimmed; new notes get `.md` appended unless the name already ends in it. (VaultSidebar.tsx)
 - **BR-12** Quick switcher: shows up to 50 results; empty query = most recently modified first. Search panel: query of 2+ characters, 250 ms debounce,
   limit 30, "Por nombre" up to 5 with fuzzy score above 8. (panels.tsx)
 - **BR-13** Attachments to the chat are clipped to 15 000 characters. (src/renderer/src/lib/attachments.ts)
 - **BR-14** The default location for a new vault is `<Documents>\Alma\Vault`. The welcome note `Bienvenida.md` is written only into a folder with no visible entries. (main/index.ts, coordinator/index.ts)
-- **BR-15** Alma's own files inside a vault: `Alma/Recuerdos.md` (memories) and `Alma/Conocimientos/` (AI-written notes); the UI treats them as
+- **BR-15** Alma's own files inside a vault: `Alma/Recuerdos.md` (memories) and `Alma/Conocimientos/` (AI-written notes) under their `es` names (a new file takes the current language's name; if one exists under either language's name that one is used, never renamed or duplicated: spec 025 BR-23); the UI treats them as
   ordinary files that are also summarized in "Lo que sabe Alma". (base.ts; semantics in 009)
 - **BR-16** Unsaved edits win over a reload from disk (see AC-8.3). (useVault.ts)
 - **BR-17** Files are read and written as UTF-8 text. (base.ts)

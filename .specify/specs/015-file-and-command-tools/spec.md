@@ -26,15 +26,15 @@ An agent that only talks is not useful on a computer; one that can touch any fil
 - **US-3** As a person, I want agents to run builds, tests and git, so that they can verify their own work, with a time limit and a way to cancel.
 - **US-4** As a person, I want no agent action to reach outside the working folder, even if the model is tricked or mistaken.
 - **US-5** As a person, I want my provider keys kept out of the commands the model runs.
-- **US-6** As an agent, I want clear, short Spanish error messages from tools, so that I can retry with a better input instead of getting stuck.
+- **US-6** As an agent, I want clear, short English error messages from tools, so that I can retry with a better input instead of getting stuck.
 - **US-7** As the maintainer, I want one tool contract (name, risk, schema, run, optional preview), so that adding a tool is mechanical and the approval policy applies to it automatically.
 
 ## 5. Acceptance criteria
 
 ### Path confinement (US-4)
 - **AC-4.1** (US-4) Given a workspace, when a relative path inside it is resolved, then the absolute path under the workspace is returned. Test: tests/tools.test.ts › "resolves relative paths inside the workspace"
-- **AC-4.2** (US-4) Given a path with `..` that leaves the workspace, or an absolute path elsewhere, when it is resolved, then a `ToolError` "La ruta … está fuera de la carpeta de trabajo." is thrown. Test: tests/tools.test.ts › "rejects paths that escape the workspace"
-- **AC-4.3** (US-4) Given no workspace string, when a path is resolved, then `ToolError` "No hay carpeta de trabajo seleccionada para esta conversación." Test: tests/tools.test.ts › "requires a workspace"
+- **AC-4.2** (US-4) Given a path with `..` that leaves the workspace, or an absolute path elsewhere, when it is resolved, then a `ToolError` "The path … is outside the working folder." is thrown. Test: tests/tools.test.ts › "rejects paths that escape the workspace"
+- **AC-4.3** (US-4) Given no workspace string, when a path is resolved, then `ToolError` "No working folder is selected for this conversation." Test: tests/tools.test.ts › "requires a workspace"
 - **AC-4.4** (US-4) Given a workspace path that no longer exists on disk, when a path is resolved, then `ToolError` "La carpeta de trabajo no existe: <path>". [gap]
 - **AC-4.5** (US-4) Given an absolute path that points inside the workspace, when resolved, then it is accepted. [gap]
 - **AC-4.6** (US-4) Given a directory symlink/junction inside the workspace that points outside it, when a path through it (existing or not yet created) is resolved, then it is rejected, because the closest existing ancestor is canonicalized before the check. [gap]
@@ -46,7 +46,7 @@ An agent that only talks is not useful on a computer; one that can touch any fil
 - **AC-1.1** (US-1) Given a text file, when `read_file` runs with `offset` and `limit`, then it returns only those lines, each as `<line number><TAB><text>` (numbers right-aligned to a common width), followed by `… (N líneas en total)` when more lines remain. Test: tests/tools.test.ts › "writes nested files and reads them back numbered"
 - **AC-1.2** (US-1) Given no `offset`/`limit`, when `read_file` runs, then it starts at line 1 and returns at most 2000 lines. [gap]
 - **AC-1.3** (US-1) Given a path that does not exist, when `read_file` runs, then `ToolError` "No existe: <path>". [gap]
-- **AC-1.4** (US-1) Given a path that is a folder, when `read_file` runs, then `ToolError` "<path> es una carpeta; usá list_dir." [gap]
+- **AC-1.4** (US-1) Given a path that is a folder, when `read_file` runs, then `ToolError` "<path> is a folder; use list_dir." [gap]
 - **AC-1.5** (US-1) Given a file larger than 2 MiB (2 097 152 bytes), when `read_file` runs, then `ToolError` "<path> pesa N bytes; es demasiado grande para leerlo entero." [gap]
 - **AC-1.6** (US-1) Given a file whose first 8000 bytes contain a NUL byte, when `read_file` runs, then `ToolError` "<path> parece un archivo binario." [gap]
 - **AC-1.7** (US-1) Given an input with `offset` < 1, `limit` < 1 or `limit` > 5000, or non-integers, when the call is validated, then it is rejected before running (see AC-7.3). [gap]
@@ -55,7 +55,7 @@ An agent that only talks is not useful on a computer; one that can touch any fil
 ### list_dir (US-1)
 - **AC-1.9** (US-1) Given a folder with sub-folders and files, when `list_dir` runs without arguments, then entries are listed folders first (names end in `/`), then files, each group in `localeCompare` order. Test: tests/tools.test.ts › "lists directories with folders first"
 - **AC-1.10** (US-1) Given `depth` 2–4, when `list_dir` runs, then sub-folders are expanded to that depth with two spaces of indent per level, except `node_modules`, `.git`, `out`, `dist`, `build`, `.next`, `__pycache__`, `.venv`, which are listed but never entered. [gap]
-- **AC-1.11** (US-1) Given an empty folder, when `list_dir` runs, then it returns "(carpeta vacía)". [gap]
+- **AC-1.11** (US-1) Given an empty folder, when `list_dir` runs, then it returns "(empty folder)". [gap]
 - **AC-1.12** (US-1) Given a listing that reaches 1000 lines, when `list_dir` runs, then output stops at 1000 lines and ends with "… (listado truncado)". [gap]
 - **AC-1.13** (US-1) Given a path that is a file or does not exist, when `list_dir` runs, then `ToolError` "No se puede listar <path>". [gap]
 - **AC-1.14** (US-1) Given `depth` outside 1–4, when the call is validated, then it is rejected. [gap]
@@ -65,9 +65,9 @@ An agent that only talks is not useful on a computer; one that can touch any fil
 - **AC-1.16** (US-1) Given a simple glob (`*.ts`) or a recursive glob (`src/**/*.tsx`), when converted, then `*` does not cross `/`, `**` does (and `src/**/x` also matches `src/x`), `?` is one non-`/` character, and matching is case-insensitive. Test: tests/tools.test.ts › "matches simple and recursive globs"
 - **AC-1.17** (US-1) Given a glob without a slash, when `search_files` filters, then it matches either the workspace-relative path or the file's base name. [gap]
 - **AC-1.18** (US-1) Given no `case_sensitive`, when `search_files` runs, then the regex is case-insensitive; with `case_sensitive: true` it is not. [gap]
-- **AC-1.19** (US-1) Given an invalid regular expression, when `search_files` runs, then `ToolError` "Expresión regular inválida: …". [gap]
+- **AC-1.19** (US-1) Given an invalid regular expression, when `search_files` runs, then `ToolError` "Invalid regular expression: …". [gap]
 - **AC-1.20** (US-1) Given no match, when `search_files` runs, then it returns "Sin coincidencias.". [gap]
-- **AC-1.21** (US-1) Given more than 300 matching lines, when `search_files` runs, then it returns the first 300 followed by "… (más de 300 coincidencias; afiná la búsqueda)"; each line's text is trimmed and cut at 300 characters. [gap]
+- **AC-1.21** (US-1) Given more than 300 matching lines, when `search_files` runs, then it returns the first 300 followed by "… (more than 300 matches; narrow the search)"; each line's text is trimmed and cut at 300 characters. [gap]
 - **AC-1.22** (US-1) Given files larger than 1 MiB or binary files, when `search_files` walks, then they are skipped silently. [gap]
 - **AC-1.23** (US-1) Given the run is aborted while walking, when `search_files` is running, then it stops walking and returns what it had found so far (no error). [gap]
 
@@ -83,7 +83,7 @@ An agent that only talks is not useful on a computer; one that can touch any fil
 - **AC-2.9** (US-2) Given `write_file` targets an existing folder path, when it runs, then the raw filesystem error is returned as "Error: …" (not a `ToolError` message). [gap]
 
 ### run_command (US-3, US-5)
-- **AC-3.1** (US-3) Given a command, when `run_command` runs, then it executes with the workspace as working directory and returns "Código de salida: N" followed by the combined stdout/stderr. Test: tests/tools.test.ts › "runs in the workspace and reports the exit code"
+- **AC-3.1** (US-3) Given a command, when `run_command` runs, then it executes with the workspace as working directory and returns "Exit code: N" followed by the combined stdout/stderr. Test: tests/tools.test.ts › "runs in the workspace and reports the exit code"
 - **AC-3.2** (US-3) Given a command that outlives `timeout_seconds`, when the time passes, then the process tree is killed and the result starts "Proceso detenido: tiempo agotado tras Ns.". Test: tests/tools.test.ts › "stops commands that exceed the timeout"
 - **AC-3.3** (US-3) Given no `timeout_seconds`, when `run_command` runs, then the limit is 120 s; values outside 1–600 or non-integers are rejected at validation. [gap]
 - **AC-3.4** (US-3) Given the run is cancelled (abort signal) while the command is running, when the signal fires, then the process tree is killed and the result starts "Proceso detenido: cancelado por el usuario.". [gap]
@@ -97,19 +97,19 @@ An agent that only talks is not useful on a computer; one that can touch any fil
 
 ### Contract: validation, approval, errors, display (US-2, US-6, US-7)
 - **AC-7.1** (US-2) Given a `write`/`exec` tool call and the default approval mode, when the agent calls it, then an approval request is shown first, the tool runs only after "allow", and the tool state ends `done` with note "Aprobado por vos". Test: tests/agent.test.ts › "asks for approval, runs the tool and feeds the result back"
-- **AC-7.2** (US-2) Given the person denies, when the agent called `run_command`, then the command does not run, the model receives an error result starting "No se ejecutó: Rechazado por vos…", and the state is `denied`. Test: tests/agent.test.ts › "returns an error result when the user denies"
+- **AC-7.2** (US-2) Given the person denies, when the agent called `run_command`, then the command does not run, the model receives an error result starting "Not executed: rejected by the user…", and the state is `denied`. Test: tests/agent.test.ts › "returns an error result when the user denies"
 - **AC-7.3** (US-6) Given tool input that fails the Zod schema (e.g. `write_file` without `content`), when the agent calls it, then nothing runs, no approval is asked, and the model receives an `is_error` result whose content is JSON with `INVALID_JSON` and `issues`. Test: tests/agent.test.ts › "rejects invalid tool input without running it"
-- **AC-7.4** (US-4) Given approval mode "blocked" (shown as read-only), when an agent calls `list_dir` and `write_file`, then the read runs without asking and the write is denied with note "Bloqueado por el modo de aprobación". Test: tests/agent.test.ts › "never asks for read-only tools and blocks writes in read-only mode"
-- **AC-7.5** (US-6) Given a conversation without a working folder, when the agent calls a non-`standalone` tool such as `write_file`, then no approval is asked and the model receives the error "No hay carpeta de trabajo seleccionada. Pedile al usuario que elija una con el botón de carpeta." Test: tests/agent.test.ts › "does not ask for approval when there is no workspace"
+- **AC-7.4** (US-4) Given approval mode "blocked" (shown as read-only), when an agent calls `list_dir` and `write_file`, then the read runs without asking and the write is denied with note "Blocked by the approval mode". Test: tests/agent.test.ts › "never asks for read-only tools and blocks writes in read-only mode"
+- **AC-7.5** (US-6) Given a conversation without a working folder, when the agent calls a non-`standalone` tool such as `write_file`, then no approval is asked and the model receives the error "No working folder is selected. Ask the user to choose one with the folder button." Test: tests/agent.test.ts › "does not ask for approval when there is no workspace"
 - **AC-7.6** (US-7) Given a tool whose risk is `read`, when the agent calls it, then it never needs approval, whatever the mode (except that validation and workspace checks still apply). Test: tests/agent.test.ts › "never asks for read-only tools and blocks writes in read-only mode"
 - **AC-7.7** (US-6) Given a tool throws a `ToolError`, when the agent catches it, then the model receives its message verbatim as an `is_error` result; any other thrown error is reported as "Error: <message>". [gap]
 - **AC-7.8** (US-6) Given a tool result longer than 60 000 characters, when the agent builds the tool result, then it is cut in the middle with the omitted-characters marker. Test: tests/tools.test.ts › "keeps the start and the end"
-- **AC-7.9** (US-7) Given a tool name not in the agent's profile tools nor in the always-offered app tools, when the model calls it, then the result is "La herramienta X no está disponible para este agente." [gap]
+- **AC-7.9** (US-7) Given a tool name not in the agent's profile tools nor in the always-offered app tools, when the model calls it, then the result is "Tool X is not available to this agent." [gap]
 - **AC-7.10** (US-7) Given a tool declares a `preview`, when approval is requested, then the preview is attached to the request; if `preview` throws, the approval is asked without it. [gap]
 - **AC-7.11** (US-7) Given a tool whose risk is not `read` ran, was denied or failed, when the call finishes, then an audit event (`tool.authorize` or `tool.run`, actor `agent`) is written with the risk, thread, agent, decision and argument names; for `run_command` the command text is included. Read tools are not audited. [gap]
 - **AC-7.12** (US-7) Given the settings change while a call waits for approval, when the tool finally runs, then it receives the fresh settings. [gap]
 - **AC-7.13** (US-6) Given several tool calls in one model turn, when they run, then they execute concurrently and their results come back in call order in one message. [gap]
-- **AC-7.14** (US-6) [manual] In the chat, a file/command call shows a card with a Spanish label (e.g. "Leer archivo", "Ejecutar comando"), a one-line summary of the input (path, pattern and glob, or the command), and, when expanded, the result in a monospace block labelled "Resultado" or "Error". Checked by running an agent against a folder and opening the card.
+- **AC-7.14** (US-6) [manual] In the chat, a file/command call shows a card with a label in the app language (e.g. "Leer archivo", "Ejecutar comando" in `es`), a one-line summary of the input (path, pattern and glob, or the command), and, when expanded, the result in a monospace block labelled "Resultado" or "Error". Checked by running an agent against a folder and opening the card.
 
 ## 6. Business rules
 - **BR-1** The six workspace tools are registered in `builtinTools` and are only offered to an agent whose profile lists them (`profile.tools`). Default profiles: General and Programador have all six; Investigador and Revisor only `read_file`, `list_dir`, `search_files`. (src/coordinator/tools/index.ts, src/shared/defaults.ts)
@@ -120,11 +120,11 @@ An agent that only talks is not useful on a computer; one that can touch any fil
 - **BR-6** Folders never searched or descended: `node_modules`, `.git`, `out`, `dist`, `build`, `.next`, `__pycache__`, `.venv`. (src/coordinator/tools/fs.ts)
 - **BR-7** `run_command`: default timeout 120 s, range 1–600 s; command runs with `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command` on Windows, `$SHELL` (or `/bin/bash`) with `-lc` elsewhere; stdin closed; kill is `taskkill /T /F` on Windows or the process group on POSIX; stdout and stderr are merged in arrival order. (src/coordinator/tools/shell.ts)
 - **BR-8** The command environment is the app's own `process.env` minus Alma's provider keys, plus `CI=1` and `NO_COLOR=1`. The mailbox password and other secrets in settings are not in the environment. (src/coordinator/tools/shell.ts)
-- **BR-9** A tool's failure is a thrown `ToolError` (message returned to the model) or any other error (returned as "Error: …"); either way the result is flagged `is_error` and the tool state is `error`. Tool messages are in Spanish rioplatense. (src/coordinator/tools/types.ts, src/coordinator/agent.ts)
+- **BR-9** A tool's failure is a thrown `ToolError` (message returned to the model) or any other error (returned as "Error: …"); either way the result is flagged `is_error` and the tool state is `error`. Tool messages and results are English whatever `language` is (spec 025 BR-17); the person sees them translated for display (spec 025 BR-18). Quoted texts in this spec are the English wording; the dictionary is authoritative. (src/coordinator/tools/types.ts, src/coordinator/agent.ts)
 - **BR-10** Inputs are validated with the tool's Zod schema before anything else, including before the approval request. (src/coordinator/agent.ts)
 - **BR-11** A tool without `standalone: true` needs the conversation's workspace; without one it fails before asking for approval. `standalone: true` tools (web, mail, vault, routines, house, office, Telegram, WhatsApp, company) do not. (src/coordinator/tools/types.ts, src/coordinator/agent.ts)
 - **BR-12** App tools (vault, routines, web, Telegram, `look_at_image`, house when enabled and not in a company, mail when configured, WhatsApp when linked, company tools in a company) are offered to every agent regardless of `profile.tools`. A tool call whose name is neither a builtin, an app tool nor an MCP tool is refused; MCP tools are treated as risk `exec`. (src/coordinator/agent.ts)
-- **BR-13** `ToolDefinition` = `name`, `description` (Spanish, read by the model), `risk`, optional `standalone`, Zod `schema` (also converted to JSON Schema for the provider), `run(input, ctx): Promise<string>`, optional `preview(input, ctx)` for the approval card. A tool returns a string. (src/coordinator/tools/types.ts)
+- **BR-13** `ToolDefinition` = `name`, `description` (English, read by the model; never changed by `language`), `risk`, optional `standalone`, Zod `schema` (also converted to JSON Schema for the provider), `run(input, ctx): Promise<string>`, optional `preview(input, ctx)` for the approval card. A tool returns a string. (src/coordinator/tools/types.ts)
 - **BR-14** `ToolContext` carries: `workspace`, `signal`, current `settings`, `host`, and optional `knowledge`, `threadId`, `agentId`, `saveRoutines`, `sendTelegram`, `sendTelegramPhoto`, `company`, `home`, `inboxDir`, `whatsapp`. Tools take what they need from it instead of globals. (src/coordinator/tools/types.ts)
 - **BR-15** A run stops after 80 model turns. (src/coordinator/agent.ts `MAX_ITERATIONS`)
 - **BR-16** Chat labels for the tools: read_file "Leer archivo", list_dir "Listar carpeta", search_files "Buscar", write_file "Escribir archivo", edit_file "Editar archivo", run_command "Ejecutar comando". (src/renderer/src/lib/format.ts)

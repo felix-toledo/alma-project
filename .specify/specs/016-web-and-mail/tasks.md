@@ -1,0 +1,17 @@
+# 016 — Tasks
+
+- [x] **T1** (AC-1.1) Test `tests/web.test.ts` › `reads DuckDuckGo results, skipping ads and unwrapping redirects` fails → implement `parseDuckDuckGo` in `src/coordinator/tools/web.ts`
+- [x] **T2** (AC-2.1) Test `tests/web.test.ts` › `turns a page into readable lines` fails → implement `htmlToText` in `src/coordinator/tools/web.ts`
+- [x] **T3** (AC-3.1, BR-5) Test `tests/web.test.ts` › `keeps fetches off this machine and the local network` fails → implement `isPrivateHost` in `src/coordinator/tools/web.ts`
+- [x] **T4** (AC-3.2, AC-3.3, AC-2.2, AC-2.7, BR-5) Test `tests/web.test.ts` › `does not send the request when a public name resolves inside the network`, `checks every redirect before following it` and `reads a page after a public redirect` fail → implement `fetch_url` with DNS check and manual redirect following in `src/coordinator/tools/web.ts`
+- [x] **T5** (AC-2.3–2.6, AC-2.8, AC-3.4, AC-3.5, BR-4) `fetch_url` limits, empty page text, non-2xx and non-text responses, invalid or non-http URLs, redirect cap, private host as written — [gap]: no automated test yet
+- [x] **T6** (AC-1.2–1.8, AC-3.6, BR-3, BR-4, BR-6) `web_search` request to the fixed DuckDuckGo endpoint, result count, empty result, anti-bot page, non-2xx, connection errors, "datos externos" prefix — [gap]: no automated test yet
+- [x] **T7** (AC-6.1, AC-6.2) Test `tests/integrations.test.ts` › `guesses the mail servers from the address` fails → implement `emailServersFor` in `src/shared/defaults.ts`; the Yahoo and iCloud cases are [gap]: no automated test yet
+- [x] **T8** (AC-6.3, AC-6.4, AC-6.9, AC-6.10, BR-2, BR-10) `emailConfigured`, offering the mail tools only when configured, and the company mailbox in `companySettings`, in `src/coordinator/tools/email.ts`, `src/coordinator/agent.ts`, `src/coordinator/index.ts` — [gap]: no automated test yet
+- [x] **T9** (AC-6.11–6.14, AC-4.1–4.10, BR-7, BR-8) `email_search` and `email_read` over IMAP (TLS rules, Gmail special case, filters, limits, body conversion, error explanation, connection always released) in `src/coordinator/tools/email.ts` — [gap]: no automated test yet
+- [x] **T10** (AC-5.3–5.10, BR-1, BR-11) `email_send` over SMTP with preview, reply headers, explained errors and audit line in `src/coordinator/tools/email.ts` — [gap]: no automated test yet
+- [x] **T11** (AC-5.1, AC-5.2) Test `tests/agent.test.ts` › `always asks before publishing, even when everything else is allowed` and `blocks publishing in read-only mode` fail → give `email_send` risk `publish` and apply the policy in `src/coordinator/approval.ts` (the tests drive `instagram_publish`, the same class)
+- [x] **T12** (AC-6.5, AC-6.8, BR-9, BR-12) `testEmail` and the `email.test` request in `src/coordinator/tools/email.ts` and `src/coordinator/index.ts`; sealing of the password in `src/main/settings.ts` and `settings:setApiKey` in `src/main/index.ts` — [gap]: no automated test yet
+- [x] **T13** (AC-6.6, AC-6.7, BR-13) Mail tab, company mailbox fields and chat labels in `src/renderer/src/components/SettingsDialog.tsx`, `src/renderer/src/companies/TeamsSettings.tsx`, `src/renderer/src/lib/format.ts` — [manual]: type an address, check the servers fill in, save and delete the password, press "Probar conexión"
+- [x] **T14** (BR-1) Register `webTools` and `emailTools` as `standalone` app tools in `src/coordinator/agent.ts`; typecheck and lint
+- [x] **T15** Update `docs/security/CONTROLES.md`, `docs/security/RIESGOS.md` and `docs/security/PRIVACIDAD.md` for the SSRF check, DuckDuckGo and the mailbox

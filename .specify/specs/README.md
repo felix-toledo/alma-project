@@ -11,6 +11,7 @@ Templates: [`../templates/`](../templates). Pipeline: [`docs/pipeline.md`](../..
   `[gap]` (testable, no test yet) or `[manual]` (UI/hardware, checked by hand).
 - **The `[gap]` list is the test backlog.** `grep -rc "\[gap\]" .specify/specs` counts it per spec. It only shrinks:
   when you add a test, replace the tag with the citation.
+- Spanish text quoted in specs written before [025](./025-i18n-es-en/spec.md) is the `es` value of a dictionary key (rioplatense, unchanged); the English value lives in the dictionary. From 025 on, specs cite UI text by dictionary key.
 
 | # | Spec | Area |
 |---|---|---|
@@ -36,6 +37,8 @@ Templates: [`../templates/`](../templates). Pipeline: [`docs/pipeline.md`](../..
 | 021 | [office-documents-and-drawings](./021-office-documents-and-drawings/spec.md) | Word/Excel/PowerPoint/PDF, drawings |
 | 022 | [security-and-privacy](./022-security-and-privacy/spec.md) | secrets, guard, audit, privacy |
 | 023 | [app-shell-and-ui](./023-app-shell-and-ui/spec.md) | windows, tray, IPC, console-style UI |
+| 024 | [voice-control-models-and-meta](./024-voice-control-models-and-meta/spec.md) | voice cancel/end, model per chat, Meta default, fewer tokens, pop-up CSS |
+| 025 | [i18n-es-en](./025-i18n-es-en/spec.md) | `language` setting, es/en dictionaries, agent and voice language, docs in English (ready) |
 
 ## In progress
 
