@@ -1,0 +1,74 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to the same PR cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast, cheap, and the first thing a reviewer needs: style/bug lint and "logic changed => tests changed".
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec biome lint --diagnostic-level=error --reporter=github .
+      - name: Logic changes come with tests
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node scripts/require-tests.mts origin/${{ github.base_ref }}
+
+  # Windows: the app and its tests (PowerShell, DPAPI paths) target it.
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      # Includes tests/architecture.test.ts and tests/specs.test.ts, plus the coverage ratchet in vitest.config.mts.
+      - run: pnpm run test:coverage
+      - run: pnpm run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Reports without blocking while R-01 (docs/security/RIESGOS.md) is open; remove continue-on-error once it is closed.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - run: pnpm audit --audit-level=high

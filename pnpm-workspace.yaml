@@ -1,0 +1,5 @@
+allowBuilds:
+  baileys: false
+  electron: true
+  onnxruntime-node: false
+  protobufjs: false
