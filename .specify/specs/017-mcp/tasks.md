@@ -1,0 +1,17 @@
+# 017 — Tasks
+
+- [x] **T1** (AC-5.1, BR-14) Test `tests/providers.test.ts` › `reads Claude Desktop / Cursor style configs` fails → implement `importMcpJson` in `src/shared/mcp-import.ts`
+- [x] **T2** (AC-5.2–5.4, BR-14) Bare map, `tools`/`cwd` kept, entries with neither `url` nor `command` skipped, `url` wins, in `src/shared/mcp-import.ts` — [gap]: no automated test yet
+- [x] **T3** (BR-1, BR-2) Add `McpServerConfig`, `McpServerStatus`, the `mcp.*` messages and the `mcpServers: {}` default in `src/shared/types.ts` and `src/shared/defaults.ts`
+- [x] **T4** (AC-6.1, AC-6.2, BR-15) Test `tests/guard.test.ts` › `flags new, changed and re-enabled commands only` fails → implement `newCommands` in `src/main/guard.ts`
+- [x] **T5** (AC-1.1, AC-1.2, AC-1.5, BR-3, BR-6) Test `tests/mcp.test.ts` › `connects to a stdio server, lists and calls its tools` fails → implement connect, `toolSpecs` and `call` in `src/coordinator/mcp.ts` (fixture `tests/fixtures/echo-mcp-server.mjs`)
+- [x] **T6** (AC-2.1, AC-3.1, BR-8) Test `tests/mcp.test.ts` › `reports disabled and broken servers without throwing` fails → handle disabled and failing servers in `src/coordinator/mcp.ts`
+- [x] **T7** (AC-2.2) Test `tests/mcp.test.ts` › `exposes only allowlisted tools` fails → filter by the `tools` list in `src/coordinator/mcp.ts`
+- [x] **T8** (AC-2.3, AC-2.4, AC-2.5, BR-9, BR-10) Test `tests/mcp.test.ts` › `disconnects servers removed from the configuration` fails → reconcile by serialized entry in `sync` (`src/coordinator/mcp.ts`); the changed-entry and no-retry rules are [gap]: no automated test yet
+- [x] **T9** (AC-1.3, AC-1.4, AC-1.6–1.11, AC-3.2, AC-3.6, BR-3, BR-4, BR-5, BR-7) Name cut to 64, description cut to 1024, non-text results, abort and 300 s timeout, http transport with headers, minimal stdio environment, 30 s handshake, drop to `error`, stale attempts discarded, in `src/coordinator/mcp.ts` — [gap]: no automated test yet
+- [x] **T10** (AC-1.7, AC-3.7, AC-7.1–7.4, BR-11, BR-12, BR-13) Offer MCP tools only when `allowMcp`, refuse unknown names, authorize as `exec`, audit, return `Error: <message>` on failure, in `src/coordinator/agent.ts` — [gap]: no automated test yet
+- [x] **T11** (AC-3.3–3.5) Wire the coordinator: `mcp.status` and `mcp.reconnect` requests, status event, background sync on settings, `closeAll` on quit, in `src/coordinator/index.ts` — [gap]: no automated test yet
+- [x] **T12** (AC-6.3–6.6, BR-15) Wire main: native "Confirmar cambio de seguridad" dialog and the `denied` audit entry in `settings:update` (`src/main/index.ts`) — [manual] for AC-6.3: add a stdio server from the settings tab and read the dialog; AC-6.4–6.6 are [gap]: no automated test yet
+- [x] **T13** (AC-2.6, AC-2.7, AC-4.1–4.5, AC-5.5–5.7, BR-16) Settings tab "Conectores MCP" (form, import box, Chrome DevTools card, Activo, Quitar, Reconectar) in `src/renderer/src/components/SettingsDialog.tsx` — [manual]: Ajustes › Conectores MCP with a working and a broken server
+- [x] **T14** (AC-4.6, AC-4.7, AC-7.5) Sidebar counter, card label `<servidor> · <herramienta>` and the new-agent default in `src/renderer/src/components/Sidebar.tsx`, `src/renderer/src/lib/format.ts`, `src/renderer/src/lib/state.ts` — [manual]: trigger an MCP tool from chat and read the counter
+- [x] **T15** (BR-7, BR-15) Update `docs/security/RIESGOS.md` and `docs/security/CONTROLES.md` with the stdio-code risk, the confirmation and the minimal environment
