@@ -8,7 +8,7 @@ export function parseXml(text: string, label: string): Document {
   const parser = new DOMParser({
     locator: false,
     onError(level, message) {
-      if (level !== 'warning') throw new ToolError(`XML dañado en ${label}: ${message}`)
+      if (level !== 'warning') throw new ToolError('tool.office.xmlBroken', { label, error: message })
     }
   })
   return parser.parseFromString(text, 'text/xml')
@@ -39,13 +39,13 @@ export async function openZip(buffer: Buffer | Uint8Array, label: string): Promi
   try {
     return await JSZip.loadAsync(buffer)
   } catch {
-    throw new ToolError(`${label} no es un documento de Office válido (el archivo está dañado o no es lo que dice su extensión).`)
+    throw new ToolError('tool.office.badZip', { label })
   }
 }
 
 export async function zipXml(zip: JSZip, name: string, label: string): Promise<Document> {
   const file = zip.file(name)
-  if (!file) throw new ToolError(`${label} no es un documento válido: falta ${name}.`)
+  if (!file) throw new ToolError('tool.office.missingPart', { label, name })
   return parseXml(await file.async('string'), name)
 }
 

@@ -2,6 +2,9 @@
 // scan); this turns each step into the neutral FlowStep the window draws, so any brand works without code of its own.
 import QRCode from 'qrcode'
 import type { FlowField, FlowStep, HomeIntegration } from '../../shared/home'
+import { compareText } from '../../shared/i18n/format'
+import type { Language } from '../../shared/i18n/language'
+import { translate } from '../../shared/i18n/messages'
 import type { HaClient } from './ha'
 
 interface RawField {
@@ -37,14 +40,15 @@ interface RawFlow {
 type Translations = Record<string, string>
 
 const translationCache = new Map<string, Translations>()
-let integrationsCache: HomeIntegration[] | null = null
+const integrationsCache = new Map<Language, HomeIntegration[]>()
 
-async function translationsFor(ha: HaClient, handler: string): Promise<Translations> {
-  let cached = translationCache.get(handler)
+async function translationsFor(ha: HaClient, handler: string, language: Language): Promise<Translations> {
+  const key = `${language}:${handler}`
+  let cached = translationCache.get(key)
   if (!cached) {
-    const response = await ha.call<{ resources: Translations }>({ type: 'frontend/get_translations', language: 'es', category: 'config', integration: [handler] }).catch(() => ({ resources: {} }))
+    const response = await ha.call<{ resources: Translations }>({ type: 'frontend/get_translations', language, category: 'config', integration: [handler] }).catch(() => ({ resources: {} }))
     cached = response.resources
-    translationCache.set(handler, cached)
+    translationCache.set(key, cached)
   }
   return cached
 }
@@ -117,8 +121,8 @@ export function nestData(data: Record<string, unknown>): Record<string, unknown>
   return out
 }
 
-async function toStep(ha: HaClient, raw: RawFlow): Promise<FlowStep> {
-  const tr = await translationsFor(ha, raw.handler)
+async function toStep(ha: HaClient, raw: RawFlow, language: Language): Promise<FlowStep> {
+  const tr = await translationsFor(ha, raw.handler, language)
   const base = `component.${raw.handler}.config`
   const step = raw.step_id ?? ''
   const text = (key: string): string | undefined => tr[`${base}.${key}`]
@@ -147,13 +151,13 @@ async function toStep(ha: HaClient, raw: RawFlow): Promise<FlowStep> {
     case 'progress':
       out.kind = 'progress'
       out.title = describe(`step.${step}.title`) || prettify(raw.handler)
-      out.description = fillPlaceholders(text(`progress.${raw.progress_action ?? ''}`) ?? 'Trabajando…', placeholders)
+      out.description = fillPlaceholders(text(`progress.${raw.progress_action ?? ''}`) ?? translate(language, 'flow.working'), placeholders)
       return out
     case 'external':
       out.kind = 'external'
       out.url = raw.url
       out.title = describe(`step.${step}.title`) || prettify(raw.handler)
-      out.description = describe(`step.${step}.description`) || 'Abrí el enlace, completá el paso y volvé acá.'
+      out.description = describe(`step.${step}.description`) || translate(language, 'flow.openLink')
       return out
     case 'create_entry':
       out.kind = 'done'
@@ -162,52 +166,55 @@ async function toStep(ha: HaClient, raw: RawFlow): Promise<FlowStep> {
       return out
     case 'abort':
       out.kind = 'abort'
-      out.reason = fillPlaceholders(text(`abort.${raw.reason ?? ''}`) ?? raw.reason ?? 'Se canceló.', placeholders)
+      out.reason = fillPlaceholders(text(`abort.${raw.reason ?? ''}`) ?? raw.reason ?? translate(language, 'flow.cancelled'), placeholders)
       out.title = prettify(raw.handler)
       return out
     default:
       out.kind = 'abort'
-      out.reason = `Home Assistant pidió un paso que Alma todavía no sabe mostrar (${raw.type}). Usá el botón avanzado para completarlo.`
+      out.reason = translate(language, 'flow.unsupported', { type: String(raw.type) })
       return out
   }
 }
 
-/** Every integration that can be added from the UI, with its Spanish name. */
-export async function listIntegrations(ha: HaClient): Promise<HomeIntegration[]> {
-  if (integrationsCache) return integrationsCache
+/** Every integration that can be added from the UI, named in the app language. */
+export async function listIntegrations(ha: HaClient, language: Language = 'es'): Promise<HomeIntegration[]> {
+  const known = integrationsCache.get(language)
+  if (known) return known
+  const compare = compareText(language)
   const domains = await ha.rest<string[]>('GET', '/api/config/config_entries/flow_handlers?type=integration')
   const titles = await ha
-    .call<{ resources: Translations }>({ type: 'frontend/get_translations', language: 'es', category: 'title', integration: domains })
+    .call<{ resources: Translations }>({ type: 'frontend/get_translations', language, category: 'title', integration: domains })
     .catch(() => ({ resources: {} as Translations }))
   // Custom integrations (eWeLink's SonoffLAN) aren't in that list: the descriptions have them.
   const custom = await ha
     .call<{ custom?: { integration?: Record<string, { config_flow?: boolean; name?: string }> } }>({ type: 'integration/descriptions' })
     .then((d) => Object.entries(d.custom?.integration ?? {}).filter(([, info]) => info.config_flow).map(([domain, info]) => ({ domain, name: info.name ?? prettify(domain) })))
     .catch(() => [] as HomeIntegration[])
-  integrationsCache = [...domains.filter((d) => !custom.some((c) => c.domain === d)).map((domain) => ({ domain, name: titles.resources[`component.${domain}.title`] ?? prettify(domain) })), ...custom].sort((a, b) => a.name.localeCompare(b.name, 'es'))
-  return integrationsCache
+  const list = [...domains.filter((d) => !custom.some((c) => c.domain === d)).map((domain) => ({ domain, name: titles.resources[`component.${domain}.title`] ?? prettify(domain) })), ...custom].sort((a, b) => compare(a.name, b.name))
+  integrationsCache.set(language, list)
+  return list
 }
 
 /** Forgets what was cached (after installing a custom component, the list changes). */
 export function resetFlowCache(): void {
-  integrationsCache = null
+  integrationsCache.clear()
   translationCache.clear()
 }
 
-export async function startFlow(ha: HaClient, handler: string): Promise<FlowStep> {
+export async function startFlow(ha: HaClient, handler: string, language: Language = 'es'): Promise<FlowStep> {
   const raw = await ha.rest<RawFlow>('POST', '/api/config/config_entries/flow', { handler, show_advanced_options: false })
-  return settle(ha, raw)
+  return settle(ha, raw, language)
 }
 
 /** Sends a step's data (or, with none, asks where the flow stands: external steps and progress). */
-export async function stepFlow(ha: HaClient, flowId: string, data?: Record<string, unknown>, menu?: string): Promise<FlowStep> {
+export async function stepFlow(ha: HaClient, flowId: string, data?: Record<string, unknown>, menu?: string, language: Language = 'es'): Promise<FlowStep> {
   const raw =
     menu !== undefined
       ? await ha.rest<RawFlow>('POST', `/api/config/config_entries/flow/${flowId}`, { next_step_id: menu })
       : data !== undefined
         ? await ha.rest<RawFlow>('POST', `/api/config/config_entries/flow/${flowId}`, nestData(data))
         : await ha.rest<RawFlow>('GET', `/api/config/config_entries/flow/${flowId}`)
-  return settle(ha, raw)
+  return settle(ha, raw, language)
 }
 
 export async function abortFlow(ha: HaClient, flowId: string): Promise<void> {
@@ -215,11 +222,11 @@ export async function abortFlow(ha: HaClient, flowId: string): Promise<void> {
 }
 
 /** A "progress" step means HA is working (pairing, logging in): wait for it instead of making the window poll. */
-async function settle(ha: HaClient, first: RawFlow): Promise<FlowStep> {
+async function settle(ha: HaClient, first: RawFlow, language: Language): Promise<FlowStep> {
   let raw = first
   for (let i = 0; i < 40 && raw.type === 'progress'; i++) {
     await new Promise((resolve) => setTimeout(resolve, 1500))
     raw = await ha.rest<RawFlow>('GET', `/api/config/config_entries/flow/${raw.flow_id}`)
   }
-  return toStep(ha, raw)
+  return toStep(ha, raw, language)
 }

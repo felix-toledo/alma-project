@@ -2,7 +2,7 @@
 import OpenAI from 'openai'
 import { META_BASE_URL, OPENAI_BASE_URL } from '../shared/defaults'
 import type { ImageProviderId, Settings } from '../shared/types'
-import { ProviderConfigError } from './providers/types'
+import { ToolError } from './tools/types'
 import { readableErrorsFetch } from './providers/xai'
 
 export type AspectRatio = '1:1' | '4:5' | '16:9' | '9:16'
@@ -59,7 +59,7 @@ function clientFor(
 ): { client: OpenAI; provider: ImageProviderId; cacheKey: string } {
   const { name, envVar } = SERVICES[provider]
   const apiKey = settings.providers[provider].apiKey || process.env[envVar]
-  if (!apiKey) throw new ProviderConfigError(`Para generar imágenes falta la API key de ${name} (Configuración → Proveedores).`)
+  if (!apiKey) throw new ToolError('tool.image.missingKey', { name })
   const baseURL = provider === 'xai' ? settings.providers.xai.baseUrl : provider === 'meta' ? META_BASE_URL : OPENAI_BASE_URL
   return {
     client: new OpenAI({ apiKey, baseURL, ...(provider === 'openai' ? {} : { fetch: readableErrorsFetch }) }),
@@ -108,8 +108,8 @@ export async function generateImage(
   if (image?.b64_json) return { bytes: Buffer.from(image.b64_json, 'base64'), model }
   if (image?.url) {
     const download = await fetch(image.url, { signal })
-    if (!download.ok) throw new Error(`No se pudo descargar la imagen generada (HTTP ${download.status}).`)
+    if (!download.ok) throw new ToolError('tool.image.downloadFailed', { status: download.status })
     return { bytes: Buffer.from(await download.arrayBuffer()), model }
   }
-  throw new Error('El servicio de imágenes no devolvió ninguna imagen.')
+  throw new ToolError('tool.image.noImage')
 }

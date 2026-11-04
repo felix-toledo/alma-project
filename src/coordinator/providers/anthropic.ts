@@ -4,13 +4,14 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import * as z from 'zod/v4'
+import type { Language } from '../../shared/i18n/language'
+import { translate } from '../../shared/i18n/messages'
 import type { Block, ChatMessage } from '../../shared/types'
 import { ProviderConfigError, type Provider, type ReviewVerdict, type StopReason, type TurnRequest, type TurnResult } from './types'
 
 /** Models that accept the server-side refusal fallback in its `"default"` form. */
 const FALLBACK_MODELS = new Set(['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5'])
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01'
-const MISSING_KEY = 'Falta la API key de Anthropic. Cargala en Configuración → Proveedores o definí ANTHROPIC_API_KEY.'
 
 const ReviewSchema = z.object({
   verdict: z.enum(['allow', 'flag']),
@@ -82,17 +83,21 @@ export class AnthropicProvider implements Provider {
   readonly id = 'anthropic' as const
   private client: Anthropic
 
-  constructor(apiKey: string) {
+  constructor(
+    apiKey: string,
+    private readonly language: Language = 'es'
+  ) {
+    const missingKey = (): ProviderConfigError => new ProviderConfigError(translate(language, 'provider.missingKey', { name: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' }))
     // Without a stored key the SDK resolves ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or an `ant auth login` profile.
     const env = process.env
     const hasProfile = !!env.ANTHROPIC_PROFILE || existsSync(join(homedir(), '.config', 'anthropic'))
     if (!apiKey && !env.ANTHROPIC_API_KEY && !env.ANTHROPIC_AUTH_TOKEN && !hasProfile) {
-      throw new ProviderConfigError(MISSING_KEY)
+      throw missingKey()
     }
     try {
       this.client = apiKey ? new Anthropic({ apiKey }) : new Anthropic()
     } catch {
-      throw new ProviderConfigError(MISSING_KEY)
+      throw missingKey()
     }
   }
 
@@ -150,7 +155,7 @@ export class AnthropicProvider implements Provider {
         }
       } catch (error) {
         if (error instanceof Anthropic.AuthenticationError) {
-          throw new ProviderConfigError('Anthropic rechazó la API key. Revisala en Configuración → Proveedores.')
+          throw new ProviderConfigError(translate(this.language, 'provider.rejected', { name: 'Anthropic' }))
         }
         if (error instanceof Anthropic.APIError || request.signal.aborted || attempt >= 2) throw error
       }
@@ -172,7 +177,7 @@ export class AnthropicProvider implements Provider {
       { signal: request.signal }
     )
     if (response.stop_reason === 'refusal' || !response.parsed_output) {
-      return { verdict: 'flag', reason: 'El revisor no pudo evaluar esta acción.' }
+      return { verdict: 'flag', reason: 'The reviewer could not evaluate this action.' }
     }
     return response.parsed_output
   }

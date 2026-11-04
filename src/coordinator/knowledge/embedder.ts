@@ -1,6 +1,8 @@
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
+import type { Language } from '../../shared/i18n/language'
 import type { EmbedderState } from '../../shared/types'
+import { shownError, ToolError } from '../tools/types'
 import type { WorkerReply } from './embed-worker'
 
 export const EMBEDDING_MODEL = 'Xenova/bge-m3'
@@ -21,7 +23,8 @@ export class WorkerEmbedder implements Embedder {
 
   constructor(
     private cacheDir: string,
-    private onState: (state: ReturnType<Embedder['state']>) => void
+    private onState: (state: ReturnType<Embedder['state']>) => void,
+    private language: () => Language = () => 'es'
   ) {}
 
   state(): ReturnType<Embedder['state']> {
@@ -56,7 +59,7 @@ export class WorkerEmbedder implements Embedder {
       else waiter?.reject(new Error(reply.error))
     })
     worker.on('error', (error) => this.fail(error instanceof Error ? error : new Error(String(error))))
-    worker.on('exit', (code) => this.fail(new Error(`El proceso de embeddings terminó (código ${code}).`)))
+    worker.on('exit', (code) => this.fail(new ToolError('error.embedderExit', { code: String(code) })))
     this.worker = worker
     return worker
   }
@@ -65,7 +68,7 @@ export class WorkerEmbedder implements Embedder {
     this.worker = null
     for (const waiter of this.waiters.values()) waiter.reject(error)
     this.waiters.clear()
-    this.current = { state: 'error', error: error.message }
+    this.current = { state: 'error', error: shownError(error, this.language()) }
     this.onState(this.current)
   }
 

@@ -26,7 +26,7 @@ describe('drawings', () => {
       { id: 'a1', type: 'arrow', x: 100, y: 25, width: 50, height: 0, startBinding: { elementId: 'r1' }, endBinding: { elementId: 'r2' } },
       { id: 'gone', type: 'ellipse', x: 0, y: 0, width: 1, height: 1, isDeleted: true }
     ]
-    expect(describeDrawing(elements)).toBe('- r1 rectangle «Lanzamiento» (0,0 100×50)\n- a1 arrow (100,25 50×0) desde r1 hasta r2')
-    expect(describeDrawing(elements, new Set(['a1']))).toBe('- a1 arrow (100,25 50×0) desde r1 hasta r2')
+    expect(describeDrawing(elements)).toBe('- r1 rectangle «Lanzamiento» (0,0 100×50)\n- a1 arrow (100,25 50×0) from r1 to r2')
+    expect(describeDrawing(elements, new Set(['a1']))).toBe('- a1 arrow (100,25 50×0) from r1 to r2')
   })
 })

@@ -41,7 +41,7 @@ interface Box {
 function parseBox(range: string | undefined): Box | null {
   if (!range) return null
   const match = /^\s*\$?([A-Z]{1,3})\$?(\d+)(?:\s*:\s*\$?([A-Z]{1,3})\$?(\d+))?\s*$/i.exec(range)
-  if (!match) throw new ToolError(`Rango inválido: «${range}». Usá por ejemplo "A1:F100" o "C7".`)
+  if (!match) throw new ToolError('tool.office.xlsxRange', { range })
   const [, c1, r1, c2 = c1, r2 = r1] = match
   return { top: Math.min(+r1, +r2), bottom: Math.max(+r1, +r2), left: Math.min(columnNumber(c1), columnNumber(c2)), right: Math.max(columnNumber(c1), columnNumber(c2)) }
 }
@@ -67,7 +67,7 @@ function show(value: unknown): string {
 function describeCell(cell: Cell): string | null {
   if (cell.formula) {
     const result = cell.result
-    return `=${cell.formula} (${result === undefined || result === null ? 'sin calcular' : `valor guardado: ${show(result)}`})`
+    return `=${cell.formula} (${result === undefined || result === null ? 'not calculated' : `stored value: ${show(result)}`})`
   }
   const text = show(cell.value)
   return text === '' ? null : text
@@ -76,14 +76,14 @@ function describeCell(cell: Cell): string | null {
 function sheetLines(header: string, cells: [string, string][], box: Box | null, budget: { left: number }): string {
   const shown = cells.slice(0, Math.max(0, budget.left))
   budget.left -= shown.length
-  const more = cells.length > shown.length ? `\n… ${cells.length - shown.length} celdas más: pedí un rango (range: "A1:Z200") u otra hoja.` : ''
-  return `${header}${box ? ' — filtrado' : ''}\n${shown.map(([ref, text]) => `${ref}: ${text}`).join('\n') || '(sin datos en ese rango)'}${more}`
+  const more = cells.length > shown.length ? `\n… ${cells.length - shown.length} more cells: ask for a range (range: "A1:Z200") or another sheet.` : ''
+  return `${header}${box ? ' — filtered' : ''}\n${shown.map(([ref, text]) => `${ref}: ${text}`).join('\n') || '(no data in that range)'}${more}`
 }
 
 export async function readXlsx(buffer: Buffer, label: string, range?: string, sheet?: string): Promise<string> {
   const wb = await loadWorkbook(buffer, label)
   const sheets = sheet ? wb.worksheets.filter((ws) => ws.name.toLowerCase() === sheet.toLowerCase()) : wb.worksheets
-  if (!sheets.length) throw new ToolError(`No existe la hoja «${sheet}». Hojas: ${wb.worksheets.map((ws) => ws.name).join(', ')}.`)
+  if (!sheets.length) throw new ToolError('tool.office.noSheet', { name: String(sheet), sheets: wb.worksheets.map((ws) => ws.name).join(', ') })
   const box = parseBox(range)
   const budget = { left: MAX_CELLS }
   const parts = sheets.map((ws) => {
@@ -95,11 +95,11 @@ export async function readXlsx(buffer: Buffer, label: string, range?: string, sh
         if (text !== null) cells.push([cell.address, text])
       })
     })
-    const used = ws.actualRowCount ? ws.dimensions.range : 'vacía'
-    const state = ws.state !== 'visible' ? ' (oculta)' : ''
-    return sheetLines(`## Hoja «${ws.name}»${state} — rango usado ${used}`, cells, box, budget)
+    const used = ws.actualRowCount ? ws.dimensions.range : 'empty'
+    const state = ws.state !== 'visible' ? ' (hidden)' : ''
+    return sheetLines(`## Sheet “${ws.name}”${state} — used range ${used}`, cells, box, budget)
   })
-  return `Libro de Excel con ${wb.worksheets.length} hoja(s): ${wb.worksheets.map((ws) => ws.name).join(', ')}. Formato: celda: valor | =FÓRMULA (valor guardado).\n\n${parts.join('\n\n')}`
+  return `Excel workbook with ${wb.worksheets.length} sheet(s): ${wb.worksheets.map((ws) => ws.name).join(', ')}. Format: cell: value | =FORMULA (stored value).\n\n${parts.join('\n\n')}`
 }
 
 const csvRows = (buffer: Buffer): string[][] =>
@@ -121,7 +121,7 @@ async function loadWorkbook(buffer: Buffer, label: string): Promise<Workbook> {
   try {
     await wb.xlsx.load(buffer as unknown as ArrayBuffer)
   } catch (error) {
-    throw new ToolError(`No se pudo abrir ${label} como libro de Excel: ${(error as Error).message}`)
+    throw new ToolError('tool.office.xlsxOpen', { label, error: (error as Error).message })
   }
   return wb
 }
@@ -133,11 +133,11 @@ function setCell(cell: Cell, value: string | number | boolean | null | undefined
 }
 
 function addSheet(wb: Workbook, name: string): Worksheet {
-  if (wb.worksheets.some((ws) => ws.name.toLowerCase() === name.toLowerCase())) throw new ToolError(`Ya existe una hoja «${name}».`)
+  if (wb.worksheets.some((ws) => ws.name.toLowerCase() === name.toLowerCase())) throw new ToolError('tool.office.sheetExists', { name })
   try {
     return wb.addWorksheet(name)
   } catch (error) {
-    throw new ToolError(`Nombre de hoja inválido «${name}»: ${(error as Error).message} (máximo 31 caracteres, sin : \\ / ? * [ ]).`)
+    throw new ToolError('tool.office.sheetBadName', { name, error: (error as Error).message })
   }
 }
 
@@ -218,28 +218,28 @@ export async function editXlsx(buffer: Buffer, label: string, ops: XlsxOp[], for
   const zip = await openZip(buffer, label)
   const lossy = [
     ['xl/vbaProject.bin', 'macros'],
-    ['xl/charts/', 'gráficos'],
-    ['xl/pivotTables/', 'tablas dinámicas'],
-    ['xl/slicers/', 'segmentaciones']
+    ['xl/charts/', 'charts'],
+    ['xl/pivotTables/', 'pivot tables'],
+    ['xl/slicers/', 'slicers']
   ].filter(([prefix]) => Object.keys(zip.files).some((name) => name.startsWith(prefix)))
   if (lossy.length && !force) {
-    throw new ToolError(`${label} tiene ${lossy.map(([, what]) => what).join(', ')}, que se perderían al guardarlo desde acá. Pedile al usuario que lo edite en Excel, o repetí con force: true y out: otro archivo .xlsx para guardar una copia sin eso.`)
+    throw new ToolError('tool.office.xlsxLossy', { label, what: lossy.map(([, what]) => what).join(', ') })
   }
   const wb = await loadWorkbook(buffer, label)
   const sheetOf = (name?: string): Worksheet => {
     const ws = name ? wb.worksheets.find((s) => s.name.toLowerCase() === name.toLowerCase()) : wb.worksheets[0]
-    if (!ws) throw new ToolError(`No existe la hoja «${name}». Hojas: ${wb.worksheets.map((s) => s.name).join(', ')}.`)
+    if (!ws) throw new ToolError('tool.office.noSheet', { name: String(name), sheets: wb.worksheets.map((s) => s.name).join(', ') })
     return ws
   }
   const changes: string[] = []
   for (const op of ops) {
     if (op.op === 'set') {
       const ws = sheetOf(op.sheet)
-      if (!parseBox(op.ref) || op.ref.includes(':')) throw new ToolError(`set necesita una sola celda (p. ej. "B7"), no «${op.ref}».`)
+      if (!parseBox(op.ref) || op.ref.includes(':')) throw new ToolError('tool.office.xlsxSingleCell', { ref: op.ref })
       const cell = ws.getCell(op.ref.replace(/\$/g, '').toUpperCase())
       const newFormula = op.formula ?? (typeof op.value === 'string' && op.value.startsWith('=') ? op.value : undefined)
       if (cell.formula && newFormula === undefined && !force) {
-        throw new ToolError(`${ws.name}!${cell.address} tiene la fórmula =${cell.formula}; no se pisa con un valor fijo. Si el usuario lo pidió, pasá formula o force: true.`)
+        throw new ToolError('tool.office.xlsxFormula', { cell: `${ws.name}!${cell.address}`, formula: String(cell.formula) })
       }
       setCell(cell, op.value, op.formula)
       changes.push(`${ws.name}!${cell.address} = ${newFormula ? `=${newFormula.replace(/^=/, '')}` : show(op.value)}`)
@@ -249,13 +249,13 @@ export async function editXlsx(buffer: Buffer, label: string, ops: XlsxOp[], for
       ws.spliceRows(op.at, 0, ...op.rows.map(() => []))
       shiftRows(wb, ws, op.at, op.rows.length)
       op.rows.forEach((row, r) => row.forEach((value, c) => value !== null && value !== '' && setCell(ws.getCell(op.at + r, c + 1), value)))
-      changes.push(`${op.rows.length} fila(s) insertadas en ${ws.name} desde la fila ${op.at} (fórmulas ajustadas)`)
+      changes.push(`${op.rows.length} row(s) inserted in ${ws.name} from row ${op.at} (formulas adjusted)`)
     } else if (op.op === 'add_sheet') {
       addSheet(wb, op.name)
-      changes.push(`hoja «${op.name}» agregada`)
+      changes.push(`sheet “${op.name}” added`)
     } else {
       const ws = sheetOf(op.from)
-      if (wb.worksheets.some((s) => s !== ws && s.name.toLowerCase() === op.to.toLowerCase())) throw new ToolError(`Ya existe una hoja «${op.to}».`)
+      if (wb.worksheets.some((s) => s !== ws && s.name.toLowerCase() === op.to.toLowerCase())) throw new ToolError('tool.office.sheetExists', { name: op.to })
       const old = ws.name
       ws.name = op.to
       for (const other of wb.worksheets) {

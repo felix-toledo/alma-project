@@ -18,15 +18,18 @@ import { readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parentPort, workerData } from 'node:worker_threads'
 import * as ort from 'onnxruntime-node'
+import type { Language } from '../../shared/i18n/language'
+import { phonemizerVoice, sttLanguage } from './languages'
 import { splitSentences } from './speech'
+import { workerText } from './worker-text'
 
 export type VoiceWorkerRequest =
-  | { type: 'config'; wakeWord: string; sttModel: string; warmKokoro: boolean }
+  | { type: 'config'; wakeWord: string; sttModel: string; warmKokoro: boolean; language: Language }
   | { type: 'listen'; on: boolean }
   | { type: 'audio'; pcm: ArrayBuffer }
-  | { type: 'transcribe'; id: number; samples: Float32Array }
+  | { type: 'transcribe'; id: number; samples: Float32Array; language: Language }
   | { type: 'embed'; id: number; samples: Float32Array }
-  | { type: 'tts'; id: number; text: string; voice: string }
+  | { type: 'tts'; id: number; text: string; voice: string; language: Language }
 
 export type VoiceWorkerReply =
   | { type: 'wake'; score: number }
@@ -48,21 +51,24 @@ const BUNDLED_WAKEWORDS = join(__dirname, '../../resources/wakewords')
 const send = (reply: VoiceWorkerReply, transfer: ArrayBuffer[] = []): void => port.postMessage(reply, transfer)
 const progress = (detail: string): void => send({ type: 'progress', detail })
 
+/** The language of the latest request: the words the overlay reads about downloads and failures follow it. */
+let language: Language = 'es'
+
 /** Downloads a file once into the models folder (atomic, so an interrupted download isn't reused). */
 async function cached(url: string, ...path: string[]): Promise<string> {
   const target = join(modelsDir, ...path)
   if (existsSync(target)) return target
   mkdirSync(join(target, '..'), { recursive: true })
-  progress(`Descargando ${path[path.length - 1]}…`)
+  progress(workerText(language, 'download', { name: path[path.length - 1] }))
   const response = await fetch(url)
-  if (!response.ok) throw new Error(`No se pudo descargar ${url} (${response.status})`)
+  if (!response.ok) throw new Error(workerText(language, 'downloadFailed', { url, status: response.status }))
   await writeFile(`${target}.part`, Buffer.from(await response.arrayBuffer()))
   await rename(`${target}.part`, target)
   return target
 }
 
-const hfProgress = (label: string) => (info: { status: string; file?: string; progress?: number }) => {
-  if (info.status === 'progress' && info.file?.endsWith('.onnx') && info.progress !== undefined) progress(`Descargando ${label}… ${Math.floor(info.progress)}%`)
+const hfProgress = (label: () => string) => (info: { status: string; file?: string; progress?: number }) => {
+  if (info.status === 'progress' && info.file?.endsWith('.onnx') && info.progress !== undefined) progress(workerText(language, 'downloadPercent', { name: label(), percent: Math.floor(info.progress) }))
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +92,7 @@ class WakeWord {
     const [mel, emb, kw] = await Promise.all([
       cached(`${OWW_RELEASE}/melspectrogram.onnx`, 'openwakeword', 'melspectrogram.onnx'),
       cached(`${OWW_RELEASE}/embedding_model.onnx`, 'openwakeword', 'embedding_model.onnx'),
-      // The keyword model is our own («Hola Alma», trained in Colab) and ships in the repo.
+      // The keyword model is our own (“Ey Alma”, trained in Colab; its id and file keep the name they were trained under, hola_alma) and ships in the repo.
       join(BUNDLED_WAKEWORDS, `${word}_v0.1.onnx`)
     ])
     return new WakeWord(
@@ -148,7 +154,7 @@ async function feedWake(chunk: Float32Array): Promise<void> {
       pending = null
     }
   } catch (error) {
-    progress(`Palabra de activación no disponible: ${(error as Error).message}`)
+    progress(workerText(language, 'wakeUnavailable', { error: (error as Error).message }))
   } finally {
     busy = false
   }
@@ -167,7 +173,7 @@ function speechToText(model: string): Promise<AutomaticSpeechRecognitionPipeline
       pipe: pipeline('automatic-speech-recognition', repo, {
         dtype: { encoder_model: 'q8', decoder_model_merged: 'q8' },
         device: 'cpu',
-        progress_callback: hfProgress('Whisper')
+        progress_callback: hfProgress(() => 'Whisper')
       }) as Promise<AutomaticSpeechRecognitionPipeline>
     }
   }
@@ -179,7 +185,7 @@ let speaker: Promise<{ processor: Processor; model: PreTrainedModel }> | null = 
 function speakerModel(): Promise<{ processor: Processor; model: PreTrainedModel }> {
   speaker ??= Promise.all([
     AutoProcessor.from_pretrained('Xenova/wavlm-base-plus-sv'),
-    AutoModel.from_pretrained('Xenova/wavlm-base-plus-sv', { dtype: 'q8', device: 'cpu', progress_callback: hfProgress('el modelo de tu voz') })
+    AutoModel.from_pretrained('Xenova/wavlm-base-plus-sv', { dtype: 'q8', device: 'cpu', progress_callback: hfProgress(() => workerText(language, 'speakerModel')) })
   ]).then(([processor, model]) => ({ processor, model }))
   return speaker
 }
@@ -189,7 +195,7 @@ const voices = new Map<string, Float32Array>()
 
 function kokoroModel(): Promise<{ model: PreTrainedModel; tokenizer: PreTrainedTokenizer }> {
   kokoro ??= Promise.all([
-    StyleTextToSpeech2Model.from_pretrained(KOKORO_REPO, { dtype: 'q8', device: 'cpu', progress_callback: hfProgress('Kokoro') }),
+    StyleTextToSpeech2Model.from_pretrained(KOKORO_REPO, { dtype: 'q8', device: 'cpu', progress_callback: hfProgress(() => 'Kokoro') }),
     AutoTokenizer.from_pretrained(KOKORO_REPO)
   ]).then(([model, tokenizer]) => ({ model, tokenizer }))
   return kokoro
@@ -204,23 +210,23 @@ async function voiceStyle(voice: string): Promise<Float32Array> {
   return voices.get(voice)!
 }
 
-/** Spanish IPA from espeak-ng (WASM). It reads its input as Latin-1, which covers every Spanish letter. */
-async function phonemizeSpanish(sentences: string[]): Promise<string[]> {
+/** IPA from espeak-ng (WASM) in the voice of the language. It reads its input as Latin-1, which covers every Spanish and English letter. */
+async function phonemize(sentences: string[], voice: string): Promise<string[]> {
   const { default: ESpeakNg } = await import('espeak-ng')
   const text = sentences.map((s) => s.replace(/[^\x20-\xff]/g, ' ')).join('\n')
   const espeak = await ESpeakNg({
-    arguments: ['--phonout', 'out', '--sep=""', '-q', '-b=1', '--ipa=3', '-v', 'es-419', '-f', 'in.txt'],
+    arguments: ['--phonout', 'out', '--sep=""', '-q', '-b=1', '--ipa=3', '-v', voice, '-f', 'in.txt'],
     preRun: [(m) => m.FS.writeFile('in.txt', Uint8Array.from(Buffer.from(text, 'latin1')))]
   })
   return espeak.FS.readFile('out', { encoding: 'utf8' }).split(/\n/)
 }
 
-async function synthesize(id: number, text: string, voice: string): Promise<void> {
+async function synthesize(id: number, text: string, voice: string, spoken: Language): Promise<void> {
   const [{ model, tokenizer }, style] = await Promise.all([kokoroModel(), voiceStyle(voice)])
   // espeak spells "Mmm" out ("eme eme"): a leading hum goes in as IPA, the rest through espeak.
   const hum = /^\s*m{2,}[\s.…,!]*/i.exec(text)
   const rest = hum ? text.slice(hum[0].length) : text
-  const phonemes = [...(hum ? ['mːː'] : []), ...(rest.trim() ? await phonemizeSpanish(splitSentences(rest)) : [])]
+  const phonemes = [...(hum ? ['mːː'] : []), ...(rest.trim() ? await phonemize(splitSentences(rest), phonemizerVoice(spoken)) : [])]
   for (const line of phonemes) {
     if (!line.trim()) continue
     const { input_ids } = tokenizer(line, { truncation: true })
@@ -238,9 +244,10 @@ async function synthesize(id: number, text: string, voice: string): Promise<void
 port.on('message', async (message: VoiceWorkerRequest) => {
   switch (message.type) {
     case 'config':
+      language = message.language
       if (message.wakeWord !== wake?.word) {
         wake = message.wakeWord === 'off' ? null : { word: message.wakeWord, detector: WakeWord.load(message.wakeWord) }
-        wake?.detector.catch((error: Error) => progress(`Palabra de activación no disponible: ${error.message}`))
+        wake?.detector.catch((error: Error) => progress(workerText(language, 'wakeUnavailable', { error: error.message })))
       }
       // Warm up the speech model so the first request doesn't wait for a download.
       void speechToText(message.sttModel).catch(() => {})
@@ -257,9 +264,10 @@ port.on('message', async (message: VoiceWorkerRequest) => {
     case 'embed':
     case 'tts':
       try {
+        if (message.type === 'transcribe' || message.type === 'tts') language = message.language
         if (message.type === 'transcribe') {
           const pipe = await speechToText(asr?.model ?? 'whisper-base')
-          const result = (await pipe(message.samples, { language: 'spanish', task: 'transcribe' })) as { text: string }
+          const result = (await pipe(message.samples, { language: sttLanguage(message.language).whisper, task: 'transcribe' })) as { text: string }
           send({ type: 'result', id: message.id, text: result.text.trim() })
         } else if (message.type === 'embed') {
           const { processor, model } = await speakerModel()
@@ -267,7 +275,7 @@ port.on('message', async (message: VoiceWorkerRequest) => {
           const vector = Float32Array.from(embeddings.data as Float32Array)
           send({ type: 'result', id: message.id, vector }, [vector.buffer])
         } else {
-          await synthesize(message.id, message.text, message.voice)
+          await synthesize(message.id, message.text, message.voice, message.language)
           send({ type: 'done', id: message.id })
         }
       } catch (error) {

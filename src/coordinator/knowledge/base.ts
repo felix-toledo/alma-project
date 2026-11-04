@@ -2,16 +2,27 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, watch, type FSWatcher } from 'node:fs'
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, sep } from 'node:path'
+import type { Language } from '../../shared/i18n/language'
+import { isOwnNote, namesOf, resolveName, type NameKey } from '../../shared/i18n/names'
 import type { KnowledgeOverview, KnowledgeStatus, SearchHit, VaultEntry } from '../../shared/types'
+import { memoryHeader } from '../generated'
 import { resolveInWorkspace } from '../tools/paths'
-import { ToolError } from '../tools/types'
+import { ToolError, toolText, type ToolContext } from '../tools/types'
+import { STOPWORDS } from './stopwords'
 import { KnowledgeDb, type ChunkHit, type FileRow } from './db'
 import type { Embedder } from './embedder'
 import { chunkMarkdown, noteTitle, slugify, splitFrontmatter, yamlValue } from './markdown'
 
 export const ALMA_DIR = 'Alma'
-export const MEMORY_FILE = `${ALMA_DIR}/Recuerdos.md`
-export const KNOWLEDGE_DIR = `${ALMA_DIR}/Conocimientos`
+/** Alma's memory file and knowledge folder under each language's name (BR-23); the base picks one per vault. */
+const inAlma = (key: NameKey): Record<Language, string> => ({ es: `${ALMA_DIR}/${namesOf(key).es}`, en: `${ALMA_DIR}/${namesOf(key).en}` })
+export const MEMORY_FILES = inAlma('names.memoryFile')
+export const KNOWLEDGE_DIRS = inAlma('names.knowledgeDir')
+/** The Spanish names: what a vault with neither one gets under `es`. */
+export const MEMORY_FILE = MEMORY_FILES.es
+export const KNOWLEDGE_DIR = KNOWLEDGE_DIRS.es
+
+type Say = Pick<ToolContext, 'reportText'>
 
 const MAX_NOTE_BYTES = 5 * 1024 * 1024
 const EMBED_BATCH = 8
@@ -21,9 +32,6 @@ const RECALL_MIN_SIMILARITY = 0.45
 const DUPLICATE_SIMILARITY = 0.9
 const MAX_MEMORY_CHARS = 4000
 
-const STOPWORDS = new Set(
-  'de la el los las un una unos unas y o u a al del en con por para que como es son se su sus lo le les mi mis tu tus me te nos ya no si sí pero mas más muy este esta estos estas ese esa eso the of and to in is'.split(' ')
-)
 
 /** FTS5 expression for free text: every meaningful word as a quoted prefix, OR-ed so BM25 ranks partial matches. */
 export function ftsQuery(text: string): string {
@@ -53,12 +61,6 @@ export function parseMemories(text: string): string[] {
 
 const normalize = (text: string): string => text.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
 
-const MEMORY_HEADER = `# Recuerdos
-
-Lo que Alma recuerda de vos. Se incluye en todas las conversaciones. Editá o borrá líneas cuando quieras.
-
-`
-
 interface Options {
   root: string
   dataDir: string
@@ -67,6 +69,8 @@ interface Options {
   trash(absolutePath: string): Promise<void>
   onStatus(status: KnowledgeStatus): void
   onChanged(): void
+  /** The app language when a note is written (Spanish when the caller does not say). */
+  language?(): Language
 }
 
 /**
@@ -85,11 +89,33 @@ export class KnowledgeBase {
 
   constructor(private options: Options) {
     this.root = options.root
-    if (!existsSync(this.root)) throw new Error(`El vault no existe: ${this.root}`)
+    if (!existsSync(this.root)) throw new ToolError('tool.vault.missing', { path: this.root })
     const indexDir = join(options.dataDir, 'knowledge')
     mkdirSync(indexDir, { recursive: true })
     const id = createHash('sha1').update(this.root.toLowerCase()).digest('hex').slice(0, 16)
     this.db = new KnowledgeDb(join(indexDir, `${id}.db`), options.embedder.modelId)
+  }
+
+  private get language(): Language {
+    return this.options.language?.() ?? 'es'
+  }
+
+  /** The memory file or knowledge folder in use: the one that exists, else the current language's name (BR-23). */
+  private nameInUse(names: Record<Language, string>): string {
+    return resolveName(this.language, names, (name) => existsSync(join(this.root, ...name.split('/'))))
+  }
+
+  /** The vault path of Alma's memories file. */
+  memoryFile(): string {
+    return this.nameInUse(MEMORY_FILES)
+  }
+
+  private knowledgeDir(): string {
+    return this.nameInUse(KNOWLEDGE_DIRS)
+  }
+
+  private isMemoryFile(path: string): boolean {
+    return path === MEMORY_FILES.es || path === MEMORY_FILES.en
   }
 
   /** Indexes what changed since last time, then keeps watching the folder (edits made by other apps count too). */
@@ -102,7 +128,7 @@ export class KnowledgeBase {
       })
       this.watcher.on('error', (error) => console.error('[knowledge] watcher:', error))
     } catch (error) {
-      console.error('[knowledge] no se pudo vigilar el vault:', error)
+      console.error('[knowledge] could not watch the vault:', error)
     }
   }
 
@@ -171,7 +197,9 @@ export class KnowledgeBase {
       this.db.renameFile(previous, path)
       return this.db.touch(path, meta.mtime, meta.size)
     }
-    const origin = splitFrontmatter(text).data.origen ?? ''
+    // The index keeps the Spanish marker for a note of Alma's whichever language wrote it.
+    const data = splitFrontmatter(text).data
+    const origin = isOwnNote(data) ? namesOf('names.originValue').es : (data[namesOf('names.originKey').es] ?? '')
     const row: FileRow = { path, mtime: meta.mtime, size: meta.size, hash, title: noteTitle(path, text), origin }
     this.db.replaceFile(row, chunkMarkdown(text))
   }
@@ -248,7 +276,7 @@ export class KnowledgeBase {
   async recall(request: string, limit = 5): Promise<{ memories: string[]; fragments: SearchHit[] }> {
     const memories = await this.memories()
     if (!request.trim()) return { memories, fragments: [] }
-    const fused = (await this.rawSearch(request, 30)).filter((hit) => hit.path !== MEMORY_FILE)
+    const fused = (await this.rawSearch(request, 30)).filter((hit) => !this.isMemoryFile(hit.path))
     const hasVectors = fused.some((hit) => hit.similarity !== undefined)
     const relevant = fused.filter((hit) =>
       hasVectors ? (hit.similarity ?? 0) >= RECALL_MIN_SIMILARITY : (hit.keywordRank ?? Infinity) < limit
@@ -260,7 +288,7 @@ export class KnowledgeBase {
   // Files (for the editor and the tools)
 
   resolve(path: string): string {
-    if (isHidden(path)) throw new ToolError(`${path} es una carpeta interna y no se puede usar.`)
+    if (isHidden(path)) throw new ToolError('tool.kb.hidden', { path })
     return resolveInWorkspace(this.root, path)
   }
 
@@ -292,8 +320,8 @@ export class KnowledgeBase {
   async read(path: string): Promise<{ content: string; mtime: number }> {
     const absolute = this.resolve(path)
     const info = await stat(absolute).catch(() => null)
-    if (!info?.isFile()) throw new ToolError(`No existe la nota ${path}.`)
-    if (info.size > MAX_NOTE_BYTES) throw new ToolError(`${path} es demasiado grande para abrirlo (${info.size} bytes).`)
+    if (!info?.isFile()) throw new ToolError('tool.kb.noNote', { path })
+    if (info.size > MAX_NOTE_BYTES) throw new ToolError('tool.kb.tooBig', { path, bytes: info.size })
     return { content: await readFile(absolute, 'utf8'), mtime: Math.floor(info.mtimeMs) }
   }
 
@@ -310,7 +338,7 @@ export class KnowledgeBase {
 
   async create(path: string, kind: 'file' | 'folder'): Promise<void> {
     const absolute = this.resolve(path)
-    if (existsSync(absolute)) throw new ToolError(`Ya existe ${path}.`)
+    if (existsSync(absolute)) throw new ToolError('tool.kb.exists', { path })
     if (kind === 'folder') await mkdir(absolute, { recursive: true })
     else await this.write(path, '')
     this.options.onChanged()
@@ -319,8 +347,8 @@ export class KnowledgeBase {
   async rename(from: string, to: string): Promise<void> {
     const source = this.resolve(from)
     const target = this.resolve(to)
-    if (!existsSync(source)) throw new ToolError(`No existe ${from}.`)
-    if (existsSync(target) && source.toLowerCase() !== target.toLowerCase()) throw new ToolError(`Ya existe ${to}.`)
+    if (!existsSync(source)) throw new ToolError('tool.kb.notFound', { path: from })
+    if (existsSync(target) && source.toLowerCase() !== target.toLowerCase()) throw new ToolError('tool.kb.exists', { path: to })
     await mkdir(dirname(target), { recursive: true })
     await rename(source, target)
     await this.scan()
@@ -328,7 +356,7 @@ export class KnowledgeBase {
 
   async delete(path: string): Promise<void> {
     const absolute = this.resolve(path)
-    if (absolute === this.root) throw new ToolError('No se puede borrar el vault entero desde acá.')
+    if (absolute === this.root) throw new ToolError('tool.kb.cannotDeleteRoot')
     await this.options.trash(absolute)
     await this.scan()
   }
@@ -337,81 +365,94 @@ export class KnowledgeBase {
   // Alma's own notes: short memories and AI-written knowledge
 
   async memories(): Promise<string[]> {
-    const text = await readFile(join(this.root, ...MEMORY_FILE.split('/')), 'utf8').catch(() => '')
+    const text = await readFile(join(this.root, ...this.memoryFile().split('/')), 'utf8').catch(() => '')
     return parseMemories(text)
   }
 
   private async writeMemories(lines: string[]): Promise<void> {
-    const absolute = join(this.root, ...MEMORY_FILE.split('/'))
+    const file = this.memoryFile()
+    const absolute = join(this.root, ...file.split('/'))
     const current = await readFile(absolute, 'utf8').catch(() => '')
     // Keep whatever the user wrote around the list; only the bullet lines are rewritten.
-    const prose = current ? current.split(/\r?\n/).filter((line) => !/^\s*[-*]\s+/.test(line)).join('\n').trimEnd() : MEMORY_HEADER.trimEnd()
-    await this.write(MEMORY_FILE, `${prose}\n\n${lines.map((line) => `- ${line}`).join('\n')}\n`)
+    const prose = current ? current.split(/\r?\n/).filter((line) => !/^\s*[-*]\s+/.test(line)).join('\n').trimEnd() : memoryHeader(this.language).trimEnd()
+    await this.write(file, `${prose}\n\n${lines.map((line) => `- ${line}`).join('\n')}\n`)
   }
 
-  async remember(text: string): Promise<string> {
+  async remember(text: string, ctx: Say = {}): Promise<string> {
     const line = text.replace(/\s+/g, ' ').trim()
-    if (!line) throw new ToolError('El recuerdo está vacío.')
+    if (!line) throw new ToolError('tool.kb.emptyMemory')
     const memories = await this.memories()
-    if (memories.some((m) => normalize(m) === normalize(line))) return `Ya lo recordaba: «${line}».`
+    if (memories.some((m) => normalize(m) === normalize(line))) return toolText(ctx, 'tool.kb.alreadyRemembered', { line })
     const total = memories.reduce((sum, m) => sum + m.length, 0) + line.length
     if (total > MAX_MEMORY_CHARS) {
-      throw new ToolError(`La memoria está llena (${MAX_MEMORY_CHARS} caracteres). Olvidá algo obsoleto con forget o guardalo como conocimiento con save_knowledge.`)
+      throw new ToolError('tool.kb.memoryFull', { max: MAX_MEMORY_CHARS })
     }
     await this.writeMemories([...memories, line])
-    return `Recordado: «${line}» (en ${MEMORY_FILE}).`
+    return toolText(ctx, 'tool.kb.remembered', { line, file: this.memoryFile() })
   }
 
-  async forget(text: string): Promise<string> {
+  async forget(text: string, ctx: Say = {}): Promise<string> {
     const memories = await this.memories()
     const wanted = normalize(text)
     let matches = memories.filter((m) => normalize(m) === wanted)
     if (matches.length === 0) matches = memories.filter((m) => normalize(m).includes(wanted))
-    if (matches.length === 0) throw new ToolError(`No hay ningún recuerdo que coincida con «${text}».`)
-    if (matches.length > 1) throw new ToolError(`Coinciden ${matches.length} recuerdos; indicá el texto exacto:\n${matches.map((m) => `- ${m}`).join('\n')}`)
+    if (matches.length === 0) throw new ToolError('tool.kb.noMemoryMatch', { text })
+    if (matches.length > 1) throw new ToolError('tool.kb.manyMemoryMatches', { count: matches.length, data: matches.map((m) => `- ${m}`).join('\n') })
     await this.writeMemories(memories.filter((m) => m !== matches[0]))
-    return `Olvidado: «${matches[0]}».`
+    return toolText(ctx, 'tool.kb.forgotten', { line: matches[0] })
   }
 
   /**
    * Creates or updates an AI knowledge note. Before creating, looks for a note that already says the same
    * (Mem0-style dedupe) and points the model at it instead of writing a duplicate.
    */
-  async saveKnowledge(input: { title: string; content: string; path?: string; threadId?: string }): Promise<{ path: string; created: boolean; message: string }> {
+  async saveKnowledge(input: { title: string; content: string; path?: string; threadId?: string }, ctx: Say = {}): Promise<{ path: string; created: boolean; message: string }> {
     const now = new Date().toISOString()
     if (input.path) {
       const existing = await this.read(input.path)
       const { data } = splitFrontmatter(existing.content)
-      if (data.origen !== 'ia') throw new ToolError(`${input.path} es una nota del usuario; solo se pueden actualizar notas creadas por Alma.`)
-      await this.write(input.path, knowledgeNote(input.title, input.content, { ...data, actualizado: now }))
-      return { path: input.path, created: false, message: `Actualicé ${input.path}.` }
+      if (!isOwnNote(data)) throw new ToolError('tool.kb.userNote', { path: input.path })
+      // The note keeps the key it already has, in whichever language it was written.
+      const updated = resolveName(this.language, namesOf('names.updatedKey'), (key) => key in data)
+      await this.write(input.path, knowledgeNote(input.title, input.content, { ...data, [updated]: now }))
+      return { path: input.path, created: false, message: toolText(ctx, 'tool.kb.updated', { path: input.path }) }
     }
 
     const vector = await this.queryVector(`${input.title}\n${input.content}`)
     if (vector) {
-      const duplicate = this.db.nearest(vector, 3).find((hit) => 1 - hit.distance >= DUPLICATE_SIMILARITY && hit.path !== MEMORY_FILE)
+      const duplicate = this.db.nearest(vector, 3).find((hit) => 1 - hit.distance >= DUPLICATE_SIMILARITY && !this.isMemoryFile(hit.path))
       if (duplicate) {
         const own = this.db.file(duplicate.path)?.origin === 'ia'
         return {
           path: duplicate.path,
           created: false,
-          message: own
-            ? `No guardé nada: ${duplicate.path} ya dice casi lo mismo (similitud ${(1 - duplicate.distance).toFixed(2)}). Si hay algo nuevo, actualizala con save_knowledge pasando path: "${duplicate.path}" y el contenido completo.`
-            : `No guardé nada: la nota del usuario ${duplicate.path} ya cubre esto (similitud ${(1 - duplicate.distance).toFixed(2)}).`
+          message: toolText(ctx, own ? 'tool.kb.duplicateOwn' : 'tool.kb.duplicateUser', { path: duplicate.path, similarity: (1 - duplicate.distance).toFixed(2) })
         }
       }
     }
 
-    const base = `${KNOWLEDGE_DIR}/${slugify(input.title)}`
+    const base = `${this.knowledgeDir()}/${slugify(input.title)}`
     let path = `${base}.md`
     for (let n = 2; existsSync(join(this.root, ...path.split('/'))); n++) path = `${base}-${n}.md`
-    await this.write(path, knowledgeNote(input.title, input.content, { origen: 'ia', tipo: 'conocimiento', creado: now, actualizado: now, ...(input.threadId ? { conversacion: input.threadId } : {}) }))
-    return { path, created: true, message: `Guardé el conocimiento en ${path}.` }
+    await this.write(path, knowledgeNote(input.title, input.content, this.newNoteData(now, input.threadId)))
+    return { path, created: true, message: toolText(ctx, 'tool.kb.saved', { path }) }
+  }
+
+  /** The frontmatter of a note Alma writes now, in the current language. */
+  private newNoteData(now: string, threadId?: string): Record<string, string> {
+    const text = (key: NameKey): string => namesOf(key)[this.language]
+    return {
+      [text('names.originKey')]: text('names.originValue'),
+      [text('names.typeKey')]: text('names.typeValue'),
+      [text('names.createdKey')]: now,
+      [text('names.updatedKey')]: now,
+      ...(threadId ? { [text('names.conversationKey')]: threadId } : {})
+    }
   }
 
   async overview(): Promise<KnowledgeOverview> {
-    const notes = this.db.knowledgeFiles(`${KNOWLEDGE_DIR}/`).map((row) => ({ path: row.path, title: row.title, mtime: row.mtime }))
-    return { memories: await this.memories(), notes }
+    const notes = this.db.knowledgeFiles(`${this.knowledgeDir()}/`).map((row) => ({ path: row.path, title: row.title, mtime: row.mtime }))
+    return { memories: await this.memories(), memoryFile: this.memoryFile(), notes }
   }
 
   async close(): Promise<void> {

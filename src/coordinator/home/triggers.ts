@@ -4,6 +4,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { extractJson, newId, ruleMatches, type CameraWatch, type HomeRules, type JudgmentRule } from '../../shared/home'
+import type { Language } from '../../shared/i18n/language'
+import { watchEndedNotice, watchMatchNotice } from '../notices'
+import { watchQuestion } from '../prompts/vision'
 import type { Picture } from '../vision'
 import type { HomeHub, StateChange } from './hub'
 
@@ -19,6 +22,8 @@ export interface TriggerDeps {
   notify(title: string, body: string, photo?: Buffer): void
   look(pictures: Picture[], question: string): Promise<{ text: string }>
   onChange(rules: HomeRules): void
+  /** The app language when an alert goes out (Spanish when the caller does not say). */
+  language?(): Language
 }
 
 export class HomeTriggers {
@@ -128,7 +133,8 @@ export class HomeTriggers {
     const watch = this.data.watches.find((w) => w.id === id)
     if (!watch) return
     if (Date.now() >= watch.until) {
-      this.deps.notify(`Terminó la vigilancia de ${watch.cameraName}`, `Miré ${watch.checks} veces buscando: ${watch.condition}. No pasó nada.`)
+      const ended = watchEndedNotice(this.deps.language?.() ?? 'es', watch.cameraName, watch.checks, watch.condition)
+      this.deps.notify(ended.title, ended.body)
       this.stopWatch(id)
       return
     }
@@ -140,7 +146,7 @@ export class HomeTriggers {
         const photo = await this.deps.hub.cameraSnapshot(watch.entityId)
         const answer = await this.deps.look(
           [{ mediaType: 'image/jpeg', data: photo.toString('base64') }],
-          `Es la cámara «${watch.cameraName}». ¿Se cumple esto ahora?: «${watch.condition}». Respondé SOLO un JSON: {"match": true|false, "note": "qué ves, en una frase"}.`
+          watchQuestion(watch.cameraName, watch.condition)
         )
         watch.checks++
         let verdict: { match?: boolean; note?: string } = {}
@@ -151,7 +157,8 @@ export class HomeTriggers {
         }
         watch.lastNote = verdict.note
         if (verdict.match) {
-          this.deps.notify(`${watch.cameraName}: ${watch.condition}`, verdict.note ?? 'Se cumplió la condición.', photo)
+          const matched = watchMatchNotice(this.deps.language?.() ?? 'es', watch.cameraName, watch.condition, verdict.note)
+          this.deps.notify(matched.title, matched.body, photo)
           if (!watch.repeat) {
             this.stopWatch(id)
             return

@@ -1,4 +1,4 @@
-// Domótica, as the coordinator sees it: the engine (Home Assistant), the hub (live view and actions), the plan and the
+// Home automation, as the coordinator sees it: the engine (Home Assistant), the hub (live view and actions), the plan and the
 // rules, wired together and answering the window's `home.*` requests. Agents reach the same pieces through tools/home.ts.
 import { join } from 'node:path'
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -10,6 +10,7 @@ import type { Picture } from '../vision'
 import { HomeEngine } from './engine'
 import { HomeHub, type StateChange } from './hub'
 import { autoPlace, PlanError, PlanStore, replaceFloorShape, sanitizePlan } from './plan'
+import { ToolError } from '../tools/types'
 import { HomeTriggers } from './triggers'
 
 export interface HomeDeps {
@@ -30,7 +31,7 @@ const EMPTY_SNAPSHOT: HomeSnapshot = { things: [], areas: [], scenes: [], automa
 
 export class HomeService {
   readonly engine: HomeEngine
-  readonly hub = new HomeHub()
+  readonly hub = new HomeHub(() => this.deps.settings().language)
   readonly plan: PlanStore
   readonly triggers: HomeTriggers
   /** Where pictures (camera stills, photos the user sends) are kept. */
@@ -39,7 +40,7 @@ export class HomeService {
 
   constructor(private deps: HomeDeps) {
     this.inbox = join(deps.dataDir, 'inbox')
-    this.plan = new PlanStore(deps.dataDir)
+    this.plan = new PlanStore(deps.dataDir, () => deps.settings().language)
     this.engine = new HomeEngine({
       dataDir: deps.dataDir,
       settings: () => deps.settings(),
@@ -56,7 +57,8 @@ export class HomeService {
       launch: (rule, change, name) => deps.launchRule(rule, change, name),
       notify: (title, body, photo) => deps.notify(title, body, photo),
       look: (pictures, question) => deps.look(pictures, question),
-      onChange: () => deps.emit({ type: 'home.rules', rules: this.rulesView() })
+      onChange: () => deps.emit({ type: 'home.rules', rules: this.rulesView() }),
+      language: () => deps.settings().language
     })
     let lastAutomations = ''
     this.hub.onSnapshot((snapshot) => {
@@ -109,7 +111,7 @@ export class HomeService {
   /** Saves a plan: rooms get their Home Assistant area, and a device moved into another room joins that area. */
   async savePlan(input: HomePlan): Promise<HomePlan> {
     const before = this.plan.get()
-    const plan = sanitizePlan(input)
+    const plan = sanitizePlan(input, this.deps.settings().language)
     if (this.hub.ready) {
       const snapshot = this.hub.snapshot()
       const areaName = new Map(snapshot.areas.map((a) => [a.id, a.name]))
@@ -136,8 +138,8 @@ export class HomeService {
 
   async planFromDrawing(path: string, floorId?: string): Promise<HomePlan> {
     const drawing = parseDrawing(await this.deps.readVault(path))
-    const { rooms, doors } = planFromDrawing(drawing.elements)
-    if (!rooms.length) throw new PlanError('No encontré rectángulos en el dibujo: dibujá cada habitación como un rectángulo (con su nombre adentro).')
+    const { rooms, doors } = planFromDrawing(drawing.elements, this.deps.settings().language)
+    if (!rooms.length) throw new PlanError('tool.plan.noRects')
     return this.savePlan(replaceFloorShape(this.plan.get(), floorId, rooms, doors, { kind: 'excalidraw', ref: path }))
   }
 
@@ -180,9 +182,9 @@ export class HomeService {
       case 'home.entries':
         return this.hub.entries()
       case 'home.flow.start':
-        return this.hub.startFlow(request.domain)
+        return this.hub.startFlow(request.domain, this.deps.settings().language)
       case 'home.flow.step':
-        return this.hub.stepFlow(request.flowId, request.data, request.menu)
+        return this.hub.stepFlow(request.flowId, request.data, request.menu, this.deps.settings().language)
       case 'home.flow.abort':
         await this.hub.abortFlow(request.flowId)
         return null
@@ -211,7 +213,7 @@ export class HomeService {
         else this.triggers.removeJudgment(request.id)
         return null
       default:
-        throw new Error(`Pedido desconocido: ${(request as { method: string }).method}`)
+        throw new ToolError('tool.error', { data: `Unknown request: ${(request as { method: string }).method}` })
     }
   }
 

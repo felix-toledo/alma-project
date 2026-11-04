@@ -73,7 +73,7 @@ describe('geometría del plano', () => {
     const { rooms, doors } = planFromVision({ rooms: [{ name: 'Baño', polygon: [[0, 0], [50, 0], [50, 100], [0, 100]] }, { name: 'Dormitorio', polygon: [[50, 0], [100, 0], [100, 100], [50, 100]] }], doors: [{ a: [50, 40], b: [50, 60] }] })
     expect(rooms).toHaveLength(2)
     expect(doors).toHaveLength(1)
-    expect(() => planFromVision({ rooms: [] })).toThrow(/ninguna habitación/)
+    expect(() => planFromVision({ rooms: [] })).toThrow(/No room was recognized/)
   })
 
   it('extractJson saca el JSON de una respuesta con texto y vallas', () => {
@@ -217,9 +217,9 @@ describe('plan: operaciones', () => {
   it('rechaza lo inválido con mensajes claros', () => {
     const plan = base()
     expect(() => applyPlanOp(plan, { op: 'add_room', name: 'cocina', rect: [0, 0, 10, 10] })).toThrow(PlanError)
-    expect(() => applyPlanOp(plan, { op: 'add_room', name: 'X' })).toThrow(/Falta la forma/)
-    expect(() => applyPlanOp(plan, { op: 'rename_room', room: 'garage', name: 'G' })).toThrow(/No existe la habitación/)
-    expect(() => applyPlanOp(plan, { op: 'remove_floor', floor: 'piso-1' })).toThrow(/al menos un piso/)
+    expect(() => applyPlanOp(plan, { op: 'add_room', name: 'X' })).toThrow(/shape is missing/)
+    expect(() => applyPlanOp(plan, { op: 'rename_room', room: 'garage', name: 'G' })).toThrow(/does not exist/)
+    expect(() => applyPlanOp(plan, { op: 'remove_floor', floor: 'piso-1' })).toThrow(/At least one floor/)
   })
 
   it('reemplazar las habitaciones conserva el área de HA de las que siguen con el mismo nombre', () => {
@@ -331,7 +331,7 @@ describe('herramientas del agente', () => {
 
   it('pide aclarar si hay varias y actúa sobre todas con all', async () => {
     const { homeControlTool } = homeToolsModule
-    await expect(homeControlTool.run(homeControlTool.schema.parse({ target: 'luces de la cocina', action: 'off' }), ctx())).rejects.toThrow(/coincide con 2/)
+    await expect(homeControlTool.run(homeControlTool.schema.parse({ target: 'luces de la cocina', action: 'off' }), ctx())).rejects.toThrow(/matches 2 devices/)
     await homeControlTool.run(homeControlTool.schema.parse({ target: 'luces de la cocina', action: 'off', all: true }), ctx())
     expect(calls.map((c) => c[0])).toEqual(['light.techo', 'light.mesada'])
     expect(calls.every((c) => c[1] === 'light/turn_off')).toBe(true)
@@ -348,9 +348,9 @@ describe('herramientas del agente', () => {
 
   it('con la domótica apagada o sin conexión explica qué hacer', async () => {
     const { homeOverviewTool, homeControlTool } = homeToolsModule
-    await expect(homeOverviewTool.run({}, { settings: { home: { enabled: false } } } as never)).rejects.toThrow(/apagada/)
+    await expect(homeOverviewTool.run({}, { settings: { home: { enabled: false } } } as never)).rejects.toThrow(/is off/)
     const offline = { settings, home: { hub: { ready: false }, engine: { status: () => ({ state: 'missing' }) } } } as never
-    await expect(homeControlTool.run(homeControlTool.schema.parse({ target: 'x', action: 'on' }), offline)).rejects.toThrow(/no está conectada/)
+    await expect(homeControlTool.run(homeControlTool.schema.parse({ target: 'x', action: 'on' }), offline)).rejects.toThrow(/not connected/)
   })
 
   it('camera_photo manda la foto por Telegram sin pasar por la visión', async () => {
@@ -360,7 +360,7 @@ describe('herramientas del agente', () => {
     const home = (context as { home: Record<string, unknown> }).home
     home.hub = hub
     home.saveStill = hub.saveStill
-    expect(await cameraPhotoTool.run(cameraPhotoTool.schema.parse({ camera: 'patio' }), context)).toMatch(/enviada por Telegram/)
+    expect(await cameraPhotoTool.run(cameraPhotoTool.schema.parse({ camera: 'patio' }), context)).toMatch(/sent by Telegram/)
     expect(sent).toHaveLength(1)
   })
 
@@ -369,7 +369,7 @@ describe('herramientas del agente', () => {
     const text = await homeOverviewTool.run({}, ctx())
     expect(text).toMatch(/Cocina \(2\)/)
     expect(text).toMatch(/Dormitorio \(1\)/)
-    expect(text).toMatch(/Sin habitación \(2\)/)
+    expect(text).toMatch(/No room \(2\)/)
   })
 })
 

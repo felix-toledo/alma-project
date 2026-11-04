@@ -2,6 +2,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { McpServerConfig, McpServerStatus } from '../shared/types'
+import type { Language } from '../shared/i18n/language'
+import { translate } from '../shared/i18n/messages'
+import { ToolError } from './tools/types'
 import type { ToolSpec } from './providers/types'
 
 interface McpTool {
@@ -30,10 +33,18 @@ function describeError(error: unknown): string {
 }
 
 /** Connects to the user's MCP servers and exposes their tools to agents. */
+/** The status of a server whose connection closed, in the app language. */
+export function closedStatus(name: string, language: Language): McpServerStatus {
+  return { name, state: 'error', error: translate(language, 'mcp.closed'), tools: [] }
+}
+
 export class McpManager {
   private servers = new Map<string, ServerEntry>()
 
-  constructor(private onStatus: (servers: McpServerStatus[]) => void) {}
+  constructor(
+    private onStatus: (servers: McpServerStatus[]) => void,
+    private language: () => Language = () => 'es'
+  ) {}
 
   statuses(): McpServerStatus[] {
     return [...this.servers.values()].map((entry) => entry.status)
@@ -118,7 +129,7 @@ export class McpManager {
       }
       client.onclose = () => {
         if (this.servers.get(name) === entry && entry.status.state === 'connected') {
-          entry.status = { name, state: 'error', error: 'La conexión se cerró.', tools: [] }
+          entry.status = closedStatus(name, this.language())
           this.emit()
         }
       }
@@ -153,9 +164,9 @@ export class McpManager {
       if (parts.length === 0 && 'structuredContent' in result && result.structuredContent) {
         parts.push(JSON.stringify(result.structuredContent, null, 2))
       }
-      return { text: parts.join('\n') || '(sin contenido)', isError: result.isError === true }
+      return { text: parts.join('\n') || '(no content)', isError: result.isError === true }
     }
-    throw new Error(`La herramienta MCP ${qualifiedName} no está disponible.`)
+    throw new ToolError('tool.mcp.unavailable', { name: qualifiedName })
   }
 
   async closeAll(): Promise<void> {

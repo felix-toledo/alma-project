@@ -18,12 +18,15 @@ import {
   type PlanRoom,
   type Point
 } from '../../shared/home'
+import type { Language } from '../../shared/i18n/language'
+import { translate } from '../../shared/i18n/messages'
+import { ToolError } from '../tools/types'
 import { fold } from './model'
 
-export class PlanError extends Error {}
+export class PlanError extends ToolError {}
 
 /** Whatever was loaded or sent becomes a valid plan: at least one floor, clean polygons, no duplicate ids. */
-export function sanitizePlan(raw: unknown): HomePlan {
+export function sanitizePlan(raw: unknown, language: Language = 'es'): HomePlan {
   const input = raw as Partial<HomePlan> | null
   const floors: PlanFloor[] = []
   const seen = new Set<string>()
@@ -38,7 +41,7 @@ export function sanitizePlan(raw: unknown): HomePlan {
     for (const room of floor?.rooms ?? []) {
       const polygon = cleanPolygon(room?.polygon)
       if (!polygon) continue
-      rooms.push({ id: unique(room.id, 'room'), name: String(room.name ?? '').trim() || `Habitación ${rooms.length + 1}`, areaId: typeof room.areaId === 'string' ? room.areaId : null, polygon, ...(room.color ? { color: String(room.color) } : {}) })
+      rooms.push({ id: unique(room.id, 'room'), name: String(room.name ?? '').trim() || translate(language, 'plan.roomN', { n: rooms.length + 1 }), areaId: typeof room.areaId === 'string' ? room.areaId : null, polygon, ...(room.color ? { color: String(room.color) } : {}) })
     }
     const doors: PlanDoor[] = []
     for (const door of floor?.doors ?? []) {
@@ -50,9 +53,9 @@ export function sanitizePlan(raw: unknown): HomePlan {
       placed.add(item.ref)
       return true
     })
-    floors.push({ id: unique(floor?.id, 'piso'), name: String(floor?.name ?? '').trim() || `Piso ${floors.length + 1}`, rooms, doors, items: items.map((i) => ({ ref: i.ref, x: Math.round(i.x), y: Math.round(i.y) })) })
+    floors.push({ id: unique(floor?.id, 'piso'), name: String(floor?.name ?? '').trim() || translate(language, 'plan.floorN', { n: floors.length + 1 }), rooms, doors, items: items.map((i) => ({ ref: i.ref, x: Math.round(i.x), y: Math.round(i.y) })) })
   }
-  if (!floors.length) return emptyPlan()
+  if (!floors.length) return emptyPlan(language)
   return { floors, ...(input?.source ? { source: input.source } : {}), updatedAt: Date.now() }
 }
 
@@ -60,18 +63,21 @@ export class PlanStore {
   private file: string
   private plan: HomePlan
 
-  constructor(dataDir: string) {
+  constructor(
+    dataDir: string,
+    private language: () => Language = () => 'es'
+  ) {
     const dir = join(dataDir, 'home')
     mkdirSync(dir, { recursive: true })
     this.file = join(dir, 'plan.json')
-    this.plan = existsSync(this.file) ? this.load() : emptyPlan()
+    this.plan = existsSync(this.file) ? this.load() : emptyPlan(this.language())
   }
 
   private load(): HomePlan {
     try {
-      return sanitizePlan(JSON.parse(readFileSync(this.file, 'utf8')))
+      return sanitizePlan(JSON.parse(readFileSync(this.file, 'utf8')), this.language())
     } catch {
-      return emptyPlan()
+      return emptyPlan(this.language())
     }
   }
 
@@ -80,7 +86,7 @@ export class PlanStore {
   }
 
   set(plan: HomePlan): HomePlan {
-    this.plan = sanitizePlan(plan)
+    this.plan = sanitizePlan(plan, this.language())
     const tmp = this.file + '.tmp'
     writeFileSync(tmp, JSON.stringify(this.plan, null, 2), 'utf8')
     renameSync(tmp, this.file)
@@ -107,45 +113,45 @@ export function findFloor(plan: HomePlan, key?: string): PlanFloor {
   if (!key) return plan.floors[0]
   const wanted = fold(key)
   const floor = plan.floors.find((f) => f.id === key || fold(f.name) === wanted) ?? plan.floors.find((f) => fold(f.name).includes(wanted))
-  if (!floor) throw new PlanError(`No existe el piso «${key}». Pisos: ${plan.floors.map((f) => f.name).join(', ')}.`)
+  if (!floor) throw new PlanError('tool.plan.noFloor', { key, names: plan.floors.map((f) => f.name).join(', ') })
   return floor
 }
 
 export function findRoom(floor: PlanFloor, key: string): PlanRoom {
   const wanted = fold(key)
   const room = floor.rooms.find((r) => r.id === key || fold(r.name) === wanted) ?? floor.rooms.find((r) => fold(r.name).includes(wanted))
-  if (!room) throw new PlanError(`No existe la habitación «${key}» en ${floor.name}. Habitaciones: ${floor.rooms.map((r) => r.name).join(', ') || '(ninguna)'}.`)
+  if (!room) throw floor.rooms.length ? new PlanError('tool.plan.noRoom', { key, floor: floor.name, names: floor.rooms.map((r) => r.name).join(', ') }) : new PlanError('tool.plan.noRoomNone', { key, floor: floor.name })
   return room
 }
 
 function shapeOf(op: { rect?: [number, number, number, number]; polygon?: Point[] }): Point[] {
   if (op.polygon) {
     const polygon = cleanPolygon(op.polygon)
-    if (!polygon) throw new PlanError('El polígono necesita al menos 3 puntos [x, y] en centímetros.')
+    if (!polygon) throw new PlanError('tool.plan.polygon')
     return polygon
   }
   if (op.rect && op.rect.every(Number.isFinite) && op.rect[2] > 0 && op.rect[3] > 0) return rectPolygon(...op.rect)
-  throw new PlanError('Falta la forma: rect [x, y, ancho, alto] o polygon [[x, y], …], en centímetros.')
+  throw new PlanError('tool.plan.shape')
 }
 
-export function applyPlanOp(source: HomePlan, op: PlanOp, things: HomeThing[] = []): HomePlan {
+export function applyPlanOp(source: HomePlan, op: PlanOp, things: HomeThing[] = [], language: Language = 'es'): HomePlan {
   const plan = structuredClone(source)
   switch (op.op) {
     case 'add_floor':
-      plan.floors.push({ id: newId('piso'), name: op.name.trim() || `Piso ${plan.floors.length + 1}`, rooms: [], doors: [], items: [] })
+      plan.floors.push({ id: newId('piso'), name: op.name.trim() || translate(language, 'plan.floorN', { n: plan.floors.length + 1 }), rooms: [], doors: [], items: [] })
       break
     case 'rename_floor':
       findFloor(plan, op.floor).name = op.name.trim()
       break
     case 'remove_floor': {
-      if (plan.floors.length === 1) throw new PlanError('Tiene que quedar al menos un piso.')
+      if (plan.floors.length === 1) throw new PlanError('tool.plan.lastFloor')
       const floor = findFloor(plan, op.floor)
       plan.floors = plan.floors.filter((f) => f !== floor)
       break
     }
     case 'add_room': {
       const floor = findFloor(plan, op.floor)
-      if (floor.rooms.some((r) => fold(r.name) === fold(op.name))) throw new PlanError(`Ya hay una habitación «${op.name}» en ${floor.name}.`)
+      if (floor.rooms.some((r) => fold(r.name) === fold(op.name))) throw new PlanError('tool.plan.roomExists', { name: op.name, floor: floor.name })
       floor.rooms.push({ id: newId('room'), name: op.name.trim(), areaId: null, polygon: shapeOf(op) })
       break
     }
@@ -173,7 +179,7 @@ export function applyPlanOp(source: HomePlan, op: PlanOp, things: HomeThing[] = 
       let at: Point
       if (op.x !== undefined && op.y !== undefined) at = [op.x, op.y]
       else if (op.room) at = spotIn(floor, findRoom(floor, op.room))
-      else throw new PlanError('Indicá la habitación (room) o las coordenadas (x, y).')
+      else throw new PlanError('tool.plan.where')
       floor.items.push({ ref, x: Math.round(at[0]), y: Math.round(at[1]) })
       break
     }
@@ -227,23 +233,23 @@ export function describePlan(plan: HomePlan, things: HomeThing[]): string {
   const byId = new Map(things.map((t) => [t.id, t]))
   const lines: string[] = []
   for (const floor of plan.floors) {
-    lines.push(`Piso «${floor.name}» (id ${floor.id}) — unidades en cm, x a la derecha, y hacia abajo:`)
-    if (!floor.rooms.length) lines.push('  (sin habitaciones: todavía no se dibujó el plano)')
+    lines.push(`Floor “${floor.name}” (id ${floor.id}) — units in cm, x to the right, y downward:`)
+    if (!floor.rooms.length) lines.push('  (no rooms: the plan has not been drawn yet)')
     for (const room of floor.rooms) {
       const box = bbox(room.polygon)
       const inside = floor.items.filter((i) => roomAt(floor, [i.x, i.y])?.id === room.id)
-      lines.push(`  ${room.name}: desde (${box.x}, ${box.y}) ${box.w}×${box.h} cm${room.areaId ? ` · área HA ${room.areaId}` : ''}`)
+      lines.push(`  ${room.name}: from (${box.x}, ${box.y}) ${box.w}×${box.h} cm${room.areaId ? ` · HA area ${room.areaId}` : ''}`)
       for (const item of inside) {
         const thing = byId.get(item.ref)
-        lines.push(`    · ${thing ? `${thing.name} [${thing.kind}]` : item.ref} en (${item.x}, ${item.y})`)
+        lines.push(`    · ${thing ? `${thing.name} [${thing.kind}]` : item.ref} at (${item.x}, ${item.y})`)
       }
     }
     const loose = floor.items.filter((i) => !roomAt(floor, [i.x, i.y]))
-    for (const item of loose) lines.push(`  fuera de las habitaciones: ${byId.get(item.ref)?.name ?? item.ref} en (${item.x}, ${item.y})`)
-    if (floor.doors.length) lines.push(`  puertas: ${floor.doors.map((d) => `(${d.a}) → (${d.b})`).join('; ')}`)
+    for (const item of loose) lines.push(`  outside the rooms: ${byId.get(item.ref)?.name ?? item.ref} at (${item.x}, ${item.y})`)
+    if (floor.doors.length) lines.push(`  doors: ${floor.doors.map((d) => `(${d.a}) → (${d.b})`).join('; ')}`)
   }
   const placed = new Set(plan.floors.flatMap((f) => f.items.map((i) => i.ref)))
   const unplaced = things.filter((t) => !placed.has(t.id))
-  if (unplaced.length) lines.push(`Sin ubicar en el plano: ${unplaced.map((t) => t.name).join(', ')}`)
+  if (unplaced.length) lines.push(`Not placed on the plan: ${unplaced.map((t) => t.name).join(', ')}`)
   return lines.join('\n')
 }

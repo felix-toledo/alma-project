@@ -10,7 +10,7 @@ const isRealUserMessage = (m: ChatMessage): boolean => m.role === 'user' && m.co
 function shorten(text: string, keep: number): string {
   if (text.length <= keep * 2 + 200) return text
   return `${text.slice(0, keep)}
-[… recortado: ${text.length - keep * 2} caracteres de una respuesta anterior …]
+[… trimmed: ${text.length - keep * 2} characters of an earlier answer …]
 ${text.slice(-keep)}`
 }
 
@@ -19,7 +19,7 @@ function compactBlock(block: Block, keep: number): Block {
     const content = shorten(block.content, keep)
     return content === block.content ? block : { ...block, content }
   }
-  if (block.type === 'image') return { type: 'text', text: '[imagen anterior omitida]' }
+  if (block.type === 'image') return { type: 'text', text: '[earlier image omitted]' }
   return block
 }
 

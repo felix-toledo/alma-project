@@ -1,8 +1,15 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { Language } from '../shared/i18n/language'
+import { translate } from '../shared/i18n/messages'
 import type { Thread, ThreadSummary } from '../shared/types'
+import { ToolError } from './tools/types'
 
-export const UNTITLED = 'Nueva conversación'
+/** The title a conversation has until its first message names it: the language in effect when it is created. */
+export const untitledTitle = (language: Language): string => translate(language, 'thread.untitled')
+
+/** Either language's untitled title counts, so a conversation made before a language change still gets named. */
+export const isUntitled = (title: string): boolean => title === untitledTitle('es') || title === untitledTitle('en')
 
 /** One JSON file per thread under <userData>/threads. */
 export class ThreadStore {
@@ -10,7 +17,10 @@ export class ThreadStore {
   private threads = new Map<string, Thread>()
   private timers = new Map<string, NodeJS.Timeout>()
 
-  constructor(dataDir: string) {
+  constructor(
+    dataDir: string,
+    private language: () => Language = () => 'es'
+  ) {
     this.dir = join(dataDir, 'threads')
     mkdirSync(this.dir, { recursive: true })
     for (const file of readdirSync(this.dir)) {
@@ -32,7 +42,7 @@ export class ThreadStore {
 
   get(id: string): Thread {
     const thread = this.threads.get(id)
-    if (!thread) throw new Error('La conversación no existe.')
+    if (!thread) throw new ToolError('error.noThread')
     return thread
   }
 
@@ -40,7 +50,7 @@ export class ThreadStore {
     const now = Date.now()
     const thread: Thread = {
       id: crypto.randomUUID(),
-      title: UNTITLED,
+      title: untitledTitle(this.language()),
       agentId,
       workspace,
       ...(channel ? { channel } : {}),

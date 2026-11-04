@@ -39,7 +39,7 @@ function runText(run: Element): string {
   for (const el of childElements(run)) {
     if (el.tagName === 'w:t') text += el.textContent ?? ''
     else if (el.tagName === 'w:tab') text += '\t'
-    else if (el.tagName === 'w:br') text += el.getAttribute('w:type') === 'page' ? '[salto de página]' : '\n'
+    else if (el.tagName === 'w:br') text += el.getAttribute('w:type') === 'page' ? '[page break]' : '\n'
     else if (el.tagName === 'w:cr') text += '\n'
   }
   return text
@@ -101,7 +101,7 @@ async function load(buffer: Buffer, label: string) {
   const zip = await openZip(buffer, label)
   const doc = await zipXml(zip, DOCUMENT, label)
   const body = elements(doc, 'w:body')[0]
-  if (!body) throw new ToolError(`${label} no tiene cuerpo de documento.`)
+  if (!body) throw new ToolError('tool.office.noBody', { label })
   const stylesFile = zip.file('word/styles.xml')
   const styles = stylesFile ? parseXml(await stylesFile.async('string'), 'word/styles.xml').documentElement : null
   return { zip, doc, body, styles }
@@ -127,7 +127,7 @@ export async function readDocx(buffer: Buffer, label: string, range?: string): P
   }
   const paragraphs = all.filter((b) => b.el.tagName === 'w:p').length
   const tables = all.filter((b) => b.el.tagName === 'w:tbl').length
-  return `Documento de Word: ${paragraphs} párrafos, ${tables} tablas${span ? ` (mostrando párrafos ${range})` : ''}. Los párrafos vacíos se omiten.\n\n${lines.join('\n') || '(sin texto)'}`
+  return `Word document: ${paragraphs} paragraphs, ${tables} tables${span ? ` (showing paragraphs ${range})` : ''}. Empty paragraphs are omitted.\n\n${lines.join('\n') || '(no text)'}`
 }
 
 // ---------------------------------------------------------------------------
@@ -246,26 +246,26 @@ export async function editDocx(buffer: Buffer, label: string, ops: DocxOp[]): Pr
   const changes: string[] = []
   const blockOf = (ref: string): Element => {
     const el = byRef.get(ref.trim().toLowerCase())
-    if (!el) throw new ToolError(`No existe ${ref} en el documento. Leelo con office_read para ver las referencias (p1, p2…, t1…).`)
-    if (!el.parentNode) throw new ToolError(`${ref} ya se borró en una operación anterior.`)
+    if (!el) throw new ToolError('tool.office.docxNoRef', { ref })
+    if (!el.parentNode) throw new ToolError('tool.office.docxDeleted', { ref })
     return el
   }
   for (const op of ops) {
     if (op.op === 'replace') {
       const paragraphs = elements(doc, 'w:p')
       const found = countInParagraphs(paragraphs, 'w:p', 'w:t', op.find)
-      if (!found) throw new ToolError(`«${op.find}» no aparece en el documento (se busca dentro de cada párrafo). Leelo con office_read y copiá el texto exacto.`)
-      if (found > 1 && !op.all) throw new ToolError(`«${op.find}» aparece ${found} veces. Agregá contexto para que sea único o usá all: true.`)
+      if (!found) throw new ToolError('tool.office.docxNotFound', { find: op.find })
+      if (found > 1 && !op.all) throw new ToolError('tool.office.docxAmbiguous', { find: op.find, count: found })
       replaceInParagraphs(paragraphs, 'w:p', 'w:t', op.find, op.with, true)
-      changes.push(`reemplazado «${op.find}» → «${op.with}» (${found} vez${found > 1 ? 'es' : ''})`)
+      changes.push(`replaced “${op.find}” → “${op.with}” (${found} time(s))`)
     } else if (op.op === 'insert_after') {
       let anchor: Element | undefined
       if (op.ref) anchor = blockOf(op.ref)
       else if (op.find) {
         const find = op.find
         anchor = blocks(body).find((b) => b.ref && elements(b.el, 'w:p').concat(b.el.tagName === 'w:p' ? [b.el] : []).some((p) => paragraphText(p).includes(find)))?.el
-        if (!anchor) throw new ToolError(`Ningún párrafo contiene «${op.find}».`)
-      } else throw new ToolError('insert_after necesita ref (p. ej. "p3") o find.')
+        if (!anchor) throw new ToolError('tool.office.docxNoParagraph', { find: op.find })
+      } else throw new ToolError('tool.office.docxNeedsRef')
       const fragment = parseXml(`<w:body xmlns:w="${W_NS}">${markdownToOoxml(op.markdown, styleNames)}</w:body>`, 'markdown')
       let after: Element = anchor
       for (const node of childElements(fragment.documentElement!)) {
@@ -276,7 +276,7 @@ export async function editDocx(buffer: Buffer, label: string, ops: DocxOp[]): Pr
       // Word wants a paragraph between a table and the end of the body.
       const next = after.nextSibling as Element | null
       if (after.tagName === 'w:tbl' && (!next || next.tagName === 'w:sectPr')) anchor.parentNode!.insertBefore(doc.createElementNS(W_NS, 'w:p'), next)
-      changes.push(`insertado contenido después de ${op.ref ?? `«${op.find}»`}`)
+      changes.push(`inserted content after ${op.ref ?? `“${op.find}”`}`)
     } else {
       const el = blockOf(op.ref)
       el.parentNode!.removeChild(el)

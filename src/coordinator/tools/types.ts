@@ -1,5 +1,6 @@
 import * as z from 'zod/v4'
-import type { HostRequest, PendingApproval, Routine, Settings } from '../../shared/types'
+import { translateText, type MessageKey, type ParamsArg } from '../../shared/i18n/messages'
+import type { HostRequest, Language, PendingApproval, Routine, Settings, ToolText } from '../../shared/types'
 import type { RecentMessage } from '../channels/whatsapp'
 import type { CompanyEngine } from '../company/engine'
 import type { Company } from '../../shared/types'
@@ -19,10 +20,17 @@ export interface Host {
   request(request: HostRequest): Promise<{ ok: boolean; message: string }>
 }
 
+/** The language of the run a tool call belongs to. Contexts built by hand (tests) carry none and read as Spanish. */
+export const languageOf = (ctx: Pick<ToolContext, 'language' | 'settings'>): Language => ctx.language ?? ctx.settings?.language ?? 'es'
+
 export interface ToolContext {
   workspace: string
   signal: AbortSignal
   settings: Settings
+  /** The language of the run this call belongs to, fixed when the run started. */
+  language?: Language
+  /** Set by the agent: gets the key of a result written through `toolText`, to store it for display. */
+  reportText?(text: ToolText): void
   host: Host
   /** The active vault, if any. */
   knowledge?: KnowledgeBase | null
@@ -61,8 +69,36 @@ export interface ToolDefinition<I = unknown> {
   preview?(input: I, ctx: ToolContext): Promise<PendingApproval['preview']>
 }
 
-/** An error whose message goes back to the model as an `is_error` tool result. */
-export class ToolError extends Error {}
+/**
+ * An error whose message goes back to the model as an `is_error` tool result. It is always built from a dictionary
+ * key: it reads in English for the model and keeps the key so the card can show it in the person's language.
+ */
+export class ToolError extends Error {
+  readonly text: ToolText
+  constructor(key: MessageKey, params?: ToolText['params']) {
+    const text: ToolText = { key, ...(params ? { params } : {}) }
+    super(translateText('en', text))
+    this.text = text
+  }
+}
+
+/** An error as the person reads it: a `ToolError` in the app language, any other error as it is (the model reads `message`, English). */
+export function shownError(error: Error, language: Language): string {
+  return error instanceof ToolError ? translateText(language, error.text) : error.message
+}
+
+/** The same as `toolText` for a `ToolText` that was built elsewhere (the company engine returns them). */
+export function sayText(ctx: Pick<ToolContext, 'reportText'>, text: ToolText): string {
+  ctx.reportText?.(text)
+  return translateText('en', text)
+}
+
+/** A tool result written by Alma: English for the model, and the key reported so the card shows it translated. */
+export function toolText<K extends MessageKey>(ctx: Pick<ToolContext, 'reportText'>, key: K, ...params: ParamsArg<K>): string {
+  const text: ToolText = { key, ...(params[0] ? { params: params[0] as ToolText['params'] } : {}) }
+  ctx.reportText?.(text)
+  return translateText('en', text)
+}
 
 export function defineTool<S extends z.ZodType>(tool: {
   name: string
@@ -88,5 +124,5 @@ const MAX_RESULT_CHARS = 24_000
 export function truncateMiddle(text: string, max = MAX_RESULT_CHARS): string {
   if (text.length <= max) return text
   const half = Math.floor(max / 2)
-  return `${text.slice(0, half)}\n\n… [${text.length - max} caracteres omitidos] …\n\n${text.slice(-half)}`
+  return `${text.slice(0, half)}\n\n… [${text.length - max} characters omitted] …\n\n${text.slice(-half)}`
 }

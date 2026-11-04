@@ -1,7 +1,9 @@
 // Telegram channel: the bot runs inside the coordinator (long polling, no server or open port needed).
 import { Bot, InlineKeyboard, InputFile, type Context } from 'grammy'
 import { audit } from '../../shared/audit'
+import { type MessageKey, type ParamsArg, translate } from '../../shared/i18n/messages'
 import type { LiveEvent, PendingApproval, Settings, TelegramSettings, TelegramStatus, Thread } from '../../shared/types'
+import { approvalButtons, approvalPrompt, approvalToast, describeTelegramError } from './texts'
 
 const TELEGRAM_LIMIT = 4096
 const STATUS_EDIT_MS = 1500
@@ -66,6 +68,11 @@ export class TelegramChannel {
 
   constructor(private deps: TelegramDeps) {}
 
+  /** What the code says, in the app language of the moment. */
+  private text<K extends MessageKey>(key: K, ...params: ParamsArg<K>): string {
+    return translate(this.deps.settings().language, key, ...params)
+  }
+
   currentStatus(): TelegramStatus {
     return this.status
   }
@@ -99,7 +106,7 @@ export class TelegramChannel {
     try {
       await bot.init()
     } catch (error) {
-      if (this.runningToken === token) this.setStatus({ state: 'error', error: describe(error) })
+      if (this.runningToken === token) this.setStatus({ state: 'error', error: this.describe(error) })
       return
     }
     if (this.runningToken !== token) return
@@ -108,7 +115,7 @@ export class TelegramChannel {
     void bot
       .start({ drop_pending_updates: true, onStart: () => this.setStatus({ state: 'online', username: bot.botInfo.username }) })
       .catch((error) => {
-        if (this.bot === bot) this.setStatus({ state: 'error', error: describe(error) })
+        if (this.bot === bot) this.setStatus({ state: 'error', error: this.describe(error) })
       })
   }
 
@@ -150,53 +157,53 @@ export class TelegramChannel {
 
   private async deny(ctx: Context): Promise<void> {
     if (ctx.chat?.type !== 'private') return
-    const who = ctx.from?.username ? `@${ctx.from.username}` : 'tu cuenta (no tiene nombre de usuario)'
-    await ctx.reply(`No estás autorizado para usar este bot. Para habilitarte, agregá ${who} en Alma → Configuración → Telegram.`)
+    const who = ctx.from?.username ? `@${ctx.from.username}` : this.text('tg.noUser')
+    await ctx.reply(this.text('tg.denied', { who }))
   }
 
   private async onStart(ctx: Context): Promise<void> {
     if (!this.check(ctx)) return this.deny(ctx)
-    await ctx.reply('Hola, soy Alma. Escribime o mandame un audio. /nuevo empieza una conversación nueva.')
+    await ctx.reply(this.text('tg.start'))
   }
 
   private async onNew(ctx: Context): Promise<void> {
     if (!this.check(ctx)) return this.deny(ctx)
     this.deps.conversation(true)
-    await ctx.reply('Listo, conversación nueva.')
+    await ctx.reply(this.text('chan.newDone'))
   }
 
   private async onVoice(ctx: Context): Promise<void> {
     if (!this.check(ctx)) return this.deny(ctx)
     const media = ctx.message?.voice ?? ctx.message?.audio
     if (!media || !this.deps.transcribe) {
-      await ctx.reply('Todavía no puedo escuchar audios: activá la voz en Alma → Configuración → Voz.')
+      await ctx.reply(this.text('chan.noVoice'))
       return
     }
     try {
       const file = await ctx.getFile()
       const response = await fetch(`https://api.telegram.org/file/bot${this.runningToken}/${file.file_path}`)
       const text = await this.deps.transcribe(await response.arrayBuffer(), media.mime_type ?? 'audio/ogg')
-      if (!text.trim()) return void (await ctx.reply('No entendí el audio.'))
+      if (!text.trim()) return void (await ctx.reply(this.text('chan.noAudio')))
       await ctx.reply(`🎙️ «${text.trim()}»`)
       await this.onText(ctx, text)
     } catch (error) {
-      await ctx.reply(`No pude transcribir el audio: ${describe(error)}`)
+      await ctx.reply(this.text('chan.audioFailed', { error: this.describe(error) }))
     }
   }
 
   /** A photo becomes a file in the inbox, and the agent is told where it is (look_at_image reads it). */
   private async onPhoto(ctx: Context): Promise<void> {
     if (!this.check(ctx)) return this.deny(ctx)
-    if (!this.deps.saveImage) return void (await ctx.reply('Todavía no puedo mirar fotos.'))
+    if (!this.deps.saveImage) return void (await ctx.reply(this.text('tg.noPhotos')))
     try {
       const photo = ctx.message!.photo!.at(-1)!
       const file = await ctx.api.getFile(photo.file_id)
       const response = await fetch(`https://api.telegram.org/file/bot${this.runningToken}/${file.file_path}`)
       const path = this.deps.saveImage(Buffer.from(await response.arrayBuffer()), `telegram-${photo.file_unique_id}.jpg`)
-      await this.onText(ctx, `[El usuario te mandó una imagen: ${path}. Mirala con look_at_image.]${ctx.message!.caption ? `
+      await this.onText(ctx, `[The user sent you an image: ${path}. Look at it with look_at_image.]${ctx.message!.caption ? `
 ${ctx.message!.caption}` : ''}`)
     } catch (error) {
-      await ctx.reply(`No pude bajar la foto: ${describe(error)}`)
+      await ctx.reply(this.text('tg.photoFailed', { error: this.describe(error) }))
     }
   }
 
@@ -204,12 +211,12 @@ ${ctx.message!.caption}` : ''}`)
     if (!this.check(ctx)) return this.deny(ctx)
     const chatId = ctx.chat!.id
     const thread = this.deps.conversation()
-    const placeholder = await ctx.reply('Pensando…')
+    const placeholder = await ctx.reply(this.text('chan.thinking'))
     let lastStatus = ''
     let lastEdit = 0
     const off = this.deps.onEvent((event) => {
       if (event.type !== 'stream.tool' || event.scope.threadId !== thread.id) return
-      const status = `Pensando… (${event.name.replace(/^mcp__/, '').replace(/_/g, ' ')})`
+      const status = this.text('chan.thinkingTool', { tool: event.name.replace(/^mcp__/, '').replace(/_/g, ' ') })
       const now = Date.now()
       if (status === lastStatus || now - lastEdit < STATUS_EDIT_MS) return
       lastStatus = status
@@ -219,9 +226,9 @@ ${ctx.message!.caption}` : ''}`)
     let answer: string
     try {
       await this.deps.ask(thread.id, text)
-      answer = this.deps.lastAnswer(thread.id) || 'Listo.'
+      answer = this.deps.lastAnswer(thread.id) || this.text('chan.done')
     } catch (error) {
-      answer = `No pude completar el pedido: ${describe(error)}`
+      answer = this.text('chan.failed', { error: this.describe(error) })
     } finally {
       off()
     }
@@ -239,23 +246,17 @@ ${ctx.message!.caption}` : ''}`)
       const sent = this.approvalMessages.get(event.approvalId)
       if (!sent) return
       this.approvalMessages.delete(event.approvalId)
-      void this.bot.api.editMessageText(sent.chatId, sent.messageId, `${sent.text}\n\n(respondido)`).catch(() => {})
+      void this.bot.api.editMessageText(sent.chatId, sent.messageId, `${sent.text}\n\n${this.text('tg.answered')}`).catch(() => {})
     }
   }
 
   private async askApproval(chatId: number, approval: PendingApproval): Promise<void> {
-    const input = JSON.stringify(approval.input, null, 1)
-    const text = [
-      approval.flagged ? '⚠️ Auto-review marcó esta acción como riesgosa.' : '¿Permitir esta acción?',
-      approval.reason ?? '',
-      `Herramienta: ${approval.toolName}`,
-      input.length > 1500 ? `${input.slice(0, 1500)}…` : input
-    ]
-      .filter(Boolean)
-      .join('\n')
-    const keyboard = new InlineKeyboard().text('Permitir', `ap:${approval.approvalId}:allow`)
-    if (approval.allowAlways) keyboard.text('Siempre', `ap:${approval.approvalId}:always`)
-    keyboard.text('Rechazar', `ap:${approval.approvalId}:deny`)
+    const language = this.deps.settings().language
+    const text = approvalPrompt(language, approval)
+    const buttons = approvalButtons(language)
+    const keyboard = new InlineKeyboard().text(buttons.allow, `ap:${approval.approvalId}:allow`)
+    if (approval.allowAlways) keyboard.text(buttons.always, `ap:${approval.approvalId}:always`)
+    keyboard.text(buttons.deny, `ap:${approval.approvalId}:deny`)
     const message = await this.bot!.api.sendMessage(chatId, text, { reply_markup: keyboard })
     this.approvalMessages.set(approval.approvalId, { chatId, messageId: message.message_id, text })
   }
@@ -264,13 +265,10 @@ ${ctx.message!.caption}` : ''}`)
     const match = /^ap:([\w-]+):(allow|always|deny)$/.exec(ctx.callbackQuery?.data ?? '')
     if (!match || !this.check(ctx)) return void (await ctx.answerCallbackQuery())
     this.deps.respondApproval(match[1], match[2] as 'allow' | 'always' | 'deny')
-    await ctx.answerCallbackQuery({ text: match[2] === 'deny' ? 'Rechazado' : 'Permitido' })
+    await ctx.answerCallbackQuery({ text: approvalToast(this.deps.settings().language, match[2] as 'allow' | 'always' | 'deny') })
   }
-}
 
-function describe(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  if (/401|unauthorized/i.test(message)) return 'el token no es válido (revisalo en @BotFather).'
-  if (/409|conflict/i.test(message)) return 'otro programa está usando este bot (¿quedó ALMA corriendo?).'
-  return message
+  private describe(error: unknown): string {
+    return describeTelegramError(this.deps.settings().language, error)
+  }
 }

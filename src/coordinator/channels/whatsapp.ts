@@ -5,9 +5,12 @@ import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import makeWASocket, { Browsers, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion, jidNormalizedUser, useMultiFileAuthState, type WAMessage } from 'baileys'
 import { toDataURL } from 'qrcode'
-import type { LiveEvent, PendingApproval, Settings, Thread, WhatsAppSettings, WhatsAppStatus } from '../../shared/types'
-import { parseYesNo } from '../voice/speech'
+import type { LiveEvent, Settings, Thread, WhatsAppSettings, WhatsAppStatus } from '../../shared/types'
+import { type MessageKey, type ParamsArg, translate } from '../../shared/i18n/messages'
+import { parseYesNo } from '../../shared/i18n/vocab'
+import { ToolError } from '../tools/types'
 import { splitForTelegram } from './telegram'
+import { approvalPrompt } from './texts'
 
 /** Alma's messages in the self chat start with this, so they're easy to tell apart (and never answered). */
 const MARK = '🤖 '
@@ -73,6 +76,11 @@ export class WhatsAppChannel {
   private retry: ReturnType<typeof setTimeout> | null = null
 
   constructor(private deps: WhatsAppDeps) {}
+
+  /** What the code says, in the app language of the moment. */
+  private text<K extends MessageKey>(key: K, ...params: ParamsArg<K>): string {
+    return translate(this.deps.settings().language, key, ...params)
+  }
 
   currentStatus(): WhatsAppStatus {
     return this.status
@@ -151,7 +159,7 @@ export class WhatsAppChannel {
       if (code === DisconnectReason.loggedOut) {
         // Unlinked from the phone: forget the session so the next start shows a QR.
         await rm(this.authDir, { recursive: true, force: true })
-        this.setStatus({ state: 'error', error: 'WhatsApp desvinculó a Alma. Volvé a escanear el QR.' })
+        this.setStatus({ state: 'error', error: this.text('wa.unlinked') })
       }
       if (this.running) this.retry = setTimeout(() => void this.start(), code === DisconnectReason.restartRequired ? 0 : 3000)
     }
@@ -186,14 +194,14 @@ export class WhatsAppChannel {
     let text = textOf(message)
     if (text.startsWith(MARK.trim())) return
     if (!text && message.message.audioMessage) {
-      if (!this.deps.transcribe) return void this.reply(jid, 'Todavía no puedo escuchar audios: activá la voz en Alma → Configuración → Voz.')
+      if (!this.deps.transcribe) return void this.reply(jid, this.text('chan.noVoice'))
       try {
         const audio = (await downloadMediaMessage(message, 'buffer', {})) as Buffer
         text = (await this.deps.transcribe(audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength) as ArrayBuffer, message.message.audioMessage.mimetype ?? 'audio/ogg')).trim()
-        if (!text) return void this.reply(jid, 'No entendí el audio.')
+        if (!text) return void this.reply(jid, this.text('chan.noAudio'))
         await this.reply(jid, `🎙️ «${text}»`)
       } catch (error) {
-        return void this.reply(jid, `No pude transcribir el audio: ${(error as Error).message}`)
+        return void this.reply(jid, this.text('chan.audioFailed', { error: (error as Error).message }))
       }
     }
     if (!text) return
@@ -207,15 +215,15 @@ export class WhatsAppChannel {
     }
     if (/^\/nuevo\b/i.test(text)) {
       this.deps.conversation(true)
-      return void this.reply(jid, 'Listo, conversación nueva.')
+      return void this.reply(jid, this.text('chan.newDone'))
     }
     const thread = this.deps.conversation()
     let answer: string
     try {
       await this.deps.ask(thread.id, text)
-      answer = this.deps.lastAnswer(thread.id) || 'Listo.'
+      answer = this.deps.lastAnswer(thread.id) || this.text('chan.done')
     } catch (error) {
-      answer = `No pude completar el pedido: ${(error as Error).message}`
+      answer = this.text('chan.failed', { error: (error as Error).message })
     }
     await this.reply(jid, answer)
   }
@@ -234,7 +242,7 @@ export class WhatsAppChannel {
     if (!socket?.user) return
     if (event.type === 'approval.request' && event.approval.threadId === this.config().threadId) {
       this.pendingApproval = event.approval.approvalId
-      void this.reply(jidNormalizedUser(socket.user.id), approvalText(event.approval))
+      void this.reply(jidNormalizedUser(socket.user.id), approvalPrompt(this.deps.settings().language, event.approval, { askYesNo: true }))
     }
     if (event.type === 'approval.resolved' && event.approvalId === this.pendingApproval) this.pendingApproval = null
   }
@@ -248,14 +256,14 @@ export class WhatsAppChannel {
     const digits = phoneDigits(to)
     if (digits.length >= 8 && !/[a-záéíóúñ]/i.test(to)) {
       const [found] = (await socket.onWhatsApp(digits)) ?? []
-      if (!found?.exists) throw new Error(`El número ${digits} no tiene WhatsApp. Pasalo con código de país (Argentina: 549 + área + número).`)
+      if (!found?.exists) throw new ToolError('tool.wa.noNumber', { number: digits })
       return { jid: found.jid, label: this.names.get(jidNormalizedUser(found.jid)) ?? `+${digits}` }
     }
     const wanted = to.trim().toLowerCase()
     const matches = [...this.names].filter(([, name]) => name.toLowerCase().includes(wanted))
     if (matches.length === 1) return { jid: matches[0][0], label: matches[0][1] }
-    if (matches.length > 1) throw new Error(`Hay varios contactos que coinciden con «${to}»: ${matches.slice(0, 8).map(([, n]) => n).join(', ')}. Pedile al usuario cuál, o el número.`)
-    throw new Error(`No conozco a «${to}» en WhatsApp. Pedile al usuario el número con código de país.`)
+    if (matches.length > 1) throw new ToolError('tool.wa.several', { to, names: matches.slice(0, 8).map(([, n]) => n).join(', ') })
+    throw new ToolError('tool.wa.unknown', { to })
   }
 
   async send(jid: string, text: string): Promise<void> {
@@ -271,20 +279,7 @@ export class WhatsAppChannel {
   }
 
   private requireSocket(): Socket {
-    if (!this.socket || this.status.state !== 'online') throw new Error('WhatsApp no está conectado: activalo y escaneá el QR en Configuración → WhatsApp.')
+    if (!this.socket || this.status.state !== 'online') throw new ToolError('tool.wa.notConnected')
     return this.socket
   }
-}
-
-function approvalText(approval: PendingApproval): string {
-  const input = JSON.stringify(approval.input, null, 1)
-  return [
-    approval.flagged ? '⚠️ Auto-review marcó esta acción como riesgosa.' : '¿Permitir esta acción?',
-    approval.reason ?? '',
-    `Herramienta: ${approval.toolName}`,
-    input.length > 1500 ? `${input.slice(0, 1500)}…` : input,
-    'Respondé *sí* o *no*.'
-  ]
-    .filter(Boolean)
-    .join('\n')
 }

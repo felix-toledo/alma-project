@@ -1,8 +1,9 @@
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import * as z from 'zod/v4'
+import { compareText } from '../../shared/i18n/format'
 import { displayPath, resolveInWorkspace } from './paths'
-import { defineTool, ToolError, truncateMiddle } from './types'
+import { defineTool, languageOf, ToolError, toolText, truncateMiddle } from './types'
 
 const SKIPPED_DIRS = new Set(['node_modules', '.git', 'out', 'dist', 'build', '.next', '__pycache__', '.venv'])
 const MAX_READ_BYTES = 2 * 1024 * 1024
@@ -14,11 +15,11 @@ function looksBinary(buffer: Buffer): boolean {
 
 async function readText(path: string, label: string): Promise<string> {
   const info = await stat(path).catch(() => null)
-  if (!info) throw new ToolError(`No existe: ${label}`)
-  if (info.isDirectory()) throw new ToolError(`${label} es una carpeta; usá list_dir.`)
-  if (info.size > MAX_READ_BYTES) throw new ToolError(`${label} pesa ${info.size} bytes; es demasiado grande para leerlo entero.`)
+  if (!info) throw new ToolError('tool.fs.notFound', { path: label })
+  if (info.isDirectory()) throw new ToolError('tool.fs.isFolder', { path: label })
+  if (info.size > MAX_READ_BYTES) throw new ToolError('tool.fs.tooBig', { path: label, bytes: info.size })
   const buffer = await readFile(path)
-  if (looksBinary(buffer)) throw new ToolError(`${label} parece un archivo binario.`)
+  if (looksBinary(buffer)) throw new ToolError('tool.fs.binary', { path: label })
   return buffer.toString('utf8')
 }
 
@@ -54,12 +55,12 @@ async function* walk(dir: string, signal: AbortSignal): AsyncGenerator<string> {
 export const readFileTool = defineTool({
   name: 'read_file',
   description:
-    'Lee un archivo de texto de la carpeta de trabajo y devuelve sus líneas numeradas. Usalo antes de editar un archivo o para responder preguntas sobre su contenido. Para archivos largos, pedí un rango con offset y limit.',
+    'Reads a text file from the working folder and returns its numbered lines. Use it before editing a file or to answer questions about its content. For long files, ask for a range with offset and limit.',
   risk: 'read',
   schema: z.object({
-    path: z.string().describe('Ruta relativa a la carpeta de trabajo'),
-    offset: z.number().int().min(1).optional().describe('Primera línea a leer (1 = inicio)'),
-    limit: z.number().int().min(1).max(5000).optional().describe('Cantidad de líneas (por defecto 2000)')
+    path: z.string().describe('Path relative to the working folder'),
+    offset: z.number().int().min(1).optional().describe('First line to read (1 = start)'),
+    limit: z.number().int().min(1).max(5000).optional().describe('Number of lines (default 2000)')
   }),
   async run({ path, offset = 1, limit = 2000 }, ctx) {
     const target = resolveInWorkspace(ctx.workspace, path)
@@ -67,28 +68,29 @@ export const readFileTool = defineTool({
     const slice = lines.slice(offset - 1, offset - 1 + limit)
     const width = String(offset + slice.length).length
     const body = slice.map((line, i) => `${String(offset + i).padStart(width)}\t${line}`).join('\n')
-    const more = offset - 1 + slice.length < lines.length ? `\n… (${lines.length} líneas en total)` : ''
-    return truncateMiddle(body + more)
+    if (offset - 1 + slice.length >= lines.length) return truncateMiddle(body)
+    return truncateMiddle(toolText(ctx, 'tool.fs.moreLines', { data: body, total: lines.length }))
   }
 })
 
 export const listDirTool = defineTool({
   name: 'list_dir',
   description:
-    'Lista el contenido de una carpeta dentro de la carpeta de trabajo (las carpetas terminan en /). Usalo para orientarte antes de leer o buscar archivos.',
+    'Lists the contents of a folder inside the working folder (folders end with /). Use it to get your bearings before reading or searching files.',
   risk: 'read',
   schema: z.object({
-    path: z.string().optional().describe('Ruta relativa; por defecto la raíz de la carpeta de trabajo'),
-    depth: z.number().int().min(1).max(4).optional().describe('Niveles a recorrer (por defecto 1)')
+    path: z.string().optional().describe('Relative path; defaults to the root of the working folder'),
+    depth: z.number().int().min(1).max(4).optional().describe('Levels to walk (default 1)')
   }),
   async run({ path = '.', depth = 1 }, ctx) {
     const root = resolveInWorkspace(ctx.workspace, path)
     const lines: string[] = []
+    const compare = compareText(languageOf(ctx))
     const visit = async (dir: string, level: number): Promise<void> => {
       const entries = await readdir(dir, { withFileTypes: true }).catch(() => {
-        throw new ToolError(`No se puede listar ${displayPath(ctx.workspace, dir)}`)
+        throw new ToolError('tool.fs.cannotList', { path: displayPath(ctx.workspace, dir) })
       })
-      entries.sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name))
+      entries.sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || compare(a.name, b.name))
       for (const entry of entries) {
         if (lines.length >= 1000) return
         const indent = '  '.repeat(level)
@@ -101,20 +103,21 @@ export const listDirTool = defineTool({
       }
     }
     await visit(root, 0)
-    if (lines.length === 0) return '(carpeta vacía)'
-    return lines.join('\n') + (lines.length >= 1000 ? '\n… (listado truncado)' : '')
+    if (lines.length === 0) return toolText(ctx, 'tool.fs.emptyFolder')
+    if (lines.length >= 1000) return toolText(ctx, 'tool.fs.listTruncated', { data: lines.join('\n') })
+    return lines.join('\n')
   }
 })
 
 export const searchFilesTool = defineTool({
   name: 'search_files',
   description:
-    'Busca una expresión regular en los archivos de texto de la carpeta de trabajo y devuelve ruta:línea: texto. Usalo para encontrar dónde se define o usa algo. Ignora node_modules, .git y carpetas de build.',
+    'Searches the text files in the working folder for a regular expression and returns path:line: text. Use it to find where something is defined or used. Skips node_modules, .git and build folders.',
   risk: 'read',
   schema: z.object({
-    pattern: z.string().describe('Expresión regular (sintaxis de JavaScript)'),
-    path: z.string().optional().describe('Subcarpeta donde buscar'),
-    glob: z.string().optional().describe('Filtro de archivos, p. ej. "*.ts" o "src/**/*.tsx"'),
+    pattern: z.string().describe('Regular expression (JavaScript syntax)'),
+    path: z.string().optional().describe('Subfolder to search in'),
+    glob: z.string().optional().describe('File filter, e.g. "*.ts" or "src/**/*.tsx"'),
     case_sensitive: z.boolean().optional()
   }),
   async run({ pattern, path = '.', glob, case_sensitive = false }, ctx) {
@@ -122,7 +125,7 @@ export const searchFilesTool = defineTool({
     try {
       regex = new RegExp(pattern, case_sensitive ? '' : 'i')
     } catch (error) {
-      throw new ToolError(`Expresión regular inválida: ${(error as Error).message}`)
+      throw new ToolError('tool.fs.badRegex', { error: (error as Error).message })
     }
     const root = resolveInWorkspace(ctx.workspace, path)
     const filter = glob ? globToRegExp(glob) : null
@@ -138,52 +141,52 @@ export const searchFilesTool = defineTool({
       for (let i = 0; i < lines.length; i++) {
         if (regex.test(lines[i])) {
           matches.push(`${rel}:${i + 1}: ${lines[i].trim().slice(0, 300)}`)
-          if (matches.length >= 300) return matches.join('\n') + '\n… (más de 300 coincidencias; afiná la búsqueda)'
+          if (matches.length >= 300) return toolText(ctx, 'tool.fs.tooManyMatches', { data: matches.join('\n') })
         }
       }
     }
-    return matches.length ? matches.join('\n') : 'Sin coincidencias.'
+    return matches.length ? matches.join('\n') : toolText(ctx, 'tool.fs.noMatches')
   }
 })
 
 export const writeFileTool = defineTool({
   name: 'write_file',
   description:
-    'Crea un archivo o lo reemplaza completo con el contenido indicado (crea las carpetas que falten). Para cambiar una parte de un archivo existente usá edit_file.',
+    'Creates a file or replaces it entirely with the given content (creates any missing folders). To change part of an existing file use edit_file.',
   risk: 'write',
   schema: z.object({
-    path: z.string().describe('Ruta relativa a la carpeta de trabajo'),
-    content: z.string().describe('Contenido completo del archivo')
+    path: z.string().describe('Path relative to the working folder'),
+    content: z.string().describe('Full content of the file')
   }),
   async run({ path, content }, ctx) {
     const target = resolveInWorkspace(ctx.workspace, path)
     await mkdir(dirname(target), { recursive: true })
     await writeFile(target, content, 'utf8')
-    return `Escrito ${displayPath(ctx.workspace, target)} (${Buffer.byteLength(content)} bytes).`
+    return toolText(ctx, 'tool.fs.written', { path: displayPath(ctx.workspace, target), bytes: Buffer.byteLength(content) })
   }
 })
 
 export const editFileTool = defineTool({
   name: 'edit_file',
   description:
-    'Reemplaza un fragmento exacto de un archivo existente. old_string debe aparecer una sola vez (incluí contexto suficiente) salvo que uses replace_all. Leé el archivo antes de editarlo.',
+    'Replaces an exact fragment of an existing file. old_string must appear exactly once (include enough context) unless you use replace_all. Read the file before editing it.',
   risk: 'write',
   schema: z.object({
     path: z.string(),
-    old_string: z.string().min(1).describe('Texto exacto a reemplazar'),
-    new_string: z.string().describe('Texto nuevo'),
+    old_string: z.string().min(1).describe('Exact text to replace'),
+    new_string: z.string().describe('New text'),
     replace_all: z.boolean().optional()
   }),
   async run({ path, old_string, new_string, replace_all = false }, ctx) {
     const target = resolveInWorkspace(ctx.workspace, path)
     const original = await readText(target, path)
     const count = original.split(old_string).length - 1
-    if (count === 0) throw new ToolError('old_string no aparece en el archivo. Volvé a leerlo y copiá el texto exacto.')
+    if (count === 0) throw new ToolError('tool.fs.oldNotFound')
     if (count > 1 && !replace_all) {
-      throw new ToolError(`old_string aparece ${count} veces. Agregá contexto para que sea único o usá replace_all.`)
+      throw new ToolError('tool.fs.oldAmbiguous', { count })
     }
     const updated = replace_all ? original.split(old_string).join(new_string) : original.replace(old_string, () => new_string)
     await writeFile(target, updated, 'utf8')
-    return `Editado ${displayPath(ctx.workspace, target)} (${replace_all ? count : 1} reemplazo${count > 1 && replace_all ? 's' : ''}).`
+    return toolText(ctx, 'tool.fs.edited', { path: displayPath(ctx.workspace, target), count: replace_all ? count : 1 })
   }
 })

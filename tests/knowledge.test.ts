@@ -140,10 +140,10 @@ describe('KnowledgeBase', { timeout: 30_000 }, () => {
 
   it('remembers, refuses duplicates and forgets, keeping the user prose in Recuerdos.md', async () => {
     const { kb, root } = await openVault({})
-    expect(await kb.remember('Prefiere respuestas cortas')).toContain('Recordado')
-    expect(await kb.remember('prefiere  respuestas CORTAS')).toContain('Ya lo recordaba')
+    expect(await kb.remember('Prefiere respuestas cortas')).toContain('Remembered')
+    expect(await kb.remember('prefiere  respuestas CORTAS')).toContain('I already remembered it')
     await kb.remember('Trabaja con Electron')
-    await expect(kb.forget('Python')).rejects.toThrow(/No hay ningún recuerdo/)
+    await expect(kb.forget('Python')).rejects.toThrow(/No memory matches/)
     await kb.forget('cortas')
     expect(await kb.memories()).toEqual(['Trabaja con Electron'])
     expect(readFileSync(join(root, ...MEMORY_FILE.split('/')), 'utf8')).toContain('Lo que Alma recuerda de vos')
@@ -164,17 +164,17 @@ describe('KnowledgeBase', { timeout: 30_000 }, () => {
     const updated = await kb.saveKnowledge({ title: 'Tiempos de bge-m3', content: 'Ahora 300 ms.', path: first.path })
     expect(updated.created).toBe(false)
     expect((await kb.read(first.path)).content).toContain('Ahora 300 ms.')
-    await expect(kb.saveKnowledge({ title: 'x', content: 'pisar nota del usuario', path: 'Mias/Idea.md' })).rejects.toThrow(/nota del usuario/)
+    await expect(kb.saveKnowledge({ title: 'x', content: 'pisar nota del usuario', path: 'Mias/Idea.md' })).rejects.toThrow(/is a user note/)
 
     expect((await kb.overview()).notes.map((n) => n.path)).toEqual([first.path])
   })
 
   it('confines every path to the vault and never touches hidden folders', async () => {
     const { kb, root, trashed } = await openVault({ 'nota.md': 'hola' })
-    await expect(kb.read('../fuera.md')).rejects.toThrow(/fuera de la carpeta/)
-    await expect(kb.write('..\\..\\fuera.md', 'x')).rejects.toThrow(/fuera de la carpeta/)
-    await expect(kb.create('.interna/x.md', 'file')).rejects.toThrow(/interna/)
-    await expect(kb.delete('.')).rejects.toThrow(/vault entero/)
+    await expect(kb.read('../fuera.md')).rejects.toThrow(/outside the working folder/)
+    await expect(kb.write('..\\..\\fuera.md', 'x')).rejects.toThrow(/outside the working folder/)
+    await expect(kb.create('.interna/x.md', 'file')).rejects.toThrow(/internal folder/)
+    await expect(kb.delete('.')).rejects.toThrow(/whole vault/)
     await kb.delete('nota.md')
     expect(trashed).toEqual([join(root, 'nota.md')])
     expect(existsSync(join(root, 'nota.md'))).toBe(false)

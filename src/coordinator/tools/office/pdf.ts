@@ -15,8 +15,8 @@ async function load(buffer: Buffer | Uint8Array, label: string): Promise<PDFDocu
   try {
     return await PDFDocument.load(buffer, { ignoreEncryption: false })
   } catch (error) {
-    if (/encrypt/i.test((error as Error).message)) throw new ToolError(`${label} está protegido con contraseña; no se puede modificar.`)
-    throw new ToolError(`No se pudo abrir ${label} como PDF: ${(error as Error).message}`)
+    if (/encrypt/i.test((error as Error).message)) throw new ToolError('tool.office.pdfEncrypted', { label })
+    throw new ToolError('tool.office.pdfOpen', { label, error: (error as Error).message })
   }
 }
 
@@ -33,21 +33,21 @@ export async function readPdf(buffer: Buffer, label: string, range?: string): Pr
   try {
     pages = (await extractText(new Uint8Array(buffer), { mergePages: false })).text
   } catch (error) {
-    throw new ToolError(`No se pudo leer ${label} como PDF: ${(error as Error).message}`)
+    throw new ToolError('tool.office.pdfRead', { label, error: (error as Error).message })
   }
   const span = parseSpan(range)
   const text = pages
-    .map((page, i) => (inSpan(span, i + 1) ? `--- Página ${i + 1} ---\n${page.trim() || '(sin texto: puede ser una imagen escaneada)'}` : ''))
+    .map((page, i) => (inSpan(span, i + 1) ? `--- Page ${i + 1} ---\n${page.trim() || '(no text: it may be a scanned image)'}` : ''))
     .filter(Boolean)
     .join('\n\n')
   let form = ''
   try {
     const fields = (await PDFDocument.load(buffer, { ignoreEncryption: true })).getForm().getFields()
-    if (fields.length) form = `\n\nCampos de formulario (${fields.length}):\n${fields.map((f) => `- ${f.getName()}: ${fieldValue(f)}`).join('\n')}`
+    if (fields.length) form = `\n\nForm fields (${fields.length}):\n${fields.map((f) => `- ${f.getName()}: ${fieldValue(f)}`).join('\n')}`
   } catch {
     // Text was readable; a broken or encrypted form just isn't listed.
   }
-  return `PDF de ${pages.length} páginas.\n\n${text}${form}`
+  return `PDF of ${pages.length} page(s).\n\n${text}${form}`
 }
 
 /** Standard PDF fonts only cover Latin-1 (enough for Spanish); anything else becomes "?". */
@@ -108,7 +108,7 @@ export async function createPdf(markdown: string): Promise<Buffer> {
 
 const pageList = (pdf: PDFDocument, pages: number[]): number[] => {
   const count = pdf.getPageCount()
-  for (const n of pages) if (!Number.isInteger(n) || n < 1 || n > count) throw new ToolError(`No existe la página ${n} (el PDF tiene ${count}).`)
+  for (const n of pages) if (!Number.isInteger(n) || n < 1 || n > count) throw new ToolError('tool.office.pdfNoPage', { n, count })
   return [...new Set(pages)]
 }
 
@@ -120,32 +120,32 @@ export async function editPdf(buffer: Buffer, label: string, ops: PdfOp[], readO
       for (const path of op.paths) {
         const other = await load(await readOther(path), path)
         for (const page of await pdf.copyPages(other, other.getPageIndices())) pdf.addPage(page)
-        changes.push(`agregadas ${other.getPageCount()} páginas de ${path}`)
+        changes.push(`added ${other.getPageCount()} page(s) from ${path}`)
       }
     } else if (op.op === 'delete_pages') {
       const pages = pageList(pdf, op.pages)
-      if (pages.length >= pdf.getPageCount()) throw new ToolError('No se pueden borrar todas las páginas.')
+      if (pages.length >= pdf.getPageCount()) throw new ToolError('tool.office.pdfAllPages')
       // Numbers refer to the PDF as it is at this step; remove from the end so they don't shift.
       for (const n of pages.sort((a, b) => b - a)) pdf.removePage(n - 1)
-      changes.push(`borradas las páginas ${pages.sort((a, b) => a - b).join(', ')}`)
+      changes.push(`deleted pages ${pages.sort((a, b) => a - b).join(', ')}`)
     } else if (op.op === 'rotate') {
-      if (op.degrees % 90) throw new ToolError('Solo se puede rotar de a 90° (90, 180, 270, -90).')
+      if (op.degrees % 90) throw new ToolError('tool.office.pdfRotate')
       for (const n of pageList(pdf, op.pages)) {
         const page = pdf.getPage(n - 1)
         page.setRotation(degrees((((page.getRotation().angle + op.degrees) % 360) + 360) % 360))
       }
-      changes.push(`rotadas ${op.degrees}° las páginas ${op.pages.join(', ')}`)
+      changes.push(`rotated pages ${op.pages.join(', ')} by ${op.degrees}°`)
     } else if (op.op === 'fill_form') {
       const form = pdf.getForm()
       for (const [name, value] of Object.entries(op.fields)) {
         const field = form.getFieldMaybe(name)
-        if (!field) throw new ToolError(`El formulario no tiene el campo «${name}». Leé el PDF con office_read para ver los nombres.`)
+        if (!field) throw new ToolError('tool.office.pdfNoField', { name })
         if (field instanceof PDFTextField) field.setText(String(value))
         else if (field instanceof PDFCheckBox) (value === true || /^(s[ií]|true|x|1|marcad[ao])$/i.test(String(value)) ? field.check() : field.uncheck())
         else if (field instanceof PDFDropdown || field instanceof PDFOptionList || field instanceof PDFRadioGroup) field.select(String(value))
-        else throw new ToolError(`El campo «${name}» no se puede completar (firma u otro tipo).`)
+        else throw new ToolError('tool.office.pdfFieldType', { name })
       }
-      changes.push(`completados ${Object.keys(op.fields).length} campos`)
+      changes.push(`filled ${Object.keys(op.fields).length} field(s)`)
     } else {
       const font = await pdf.embedFont(StandardFonts.HelveticaBold)
       const pages = op.page ? pageList(pdf, [op.page]) : pdf.getPageIndices().map((i) => i + 1)
@@ -153,7 +153,7 @@ export async function editPdf(buffer: Buffer, label: string, ops: PdfOp[], readO
         const page = pdf.getPage(n - 1)
         page.drawText(encodable(font)(op.text), { x: op.x ?? 40, y: op.y ?? 40, size: op.size ?? 14, font, color: rgb(0.75, 0.1, 0.1) })
       }
-      changes.push(`sello «${op.text}» en ${op.page ? `la página ${op.page}` : 'todas las páginas'}`)
+      changes.push(`stamp “${op.text}” on ${op.page ? `page ${op.page}` : 'all pages'}`)
     }
   }
   return { buffer: Buffer.from(await pdf.save()), changes }

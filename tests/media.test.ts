@@ -67,7 +67,7 @@ describe('generate_image', () => {
   it('picks the newest image model and saves the image in the workspace', async () => {
     const { ctx } = context()
     const out = await generateImageTool.run({ prompt: 'Una taza de café al amanecer, luz cálida', aspect_ratio: '4:5', filename: 'Café de mañana' }, ctx)
-    const path = /^Imagen guardada: (.+)$/m.exec(out)![1]
+    const path = /^Image saved: (.+)$/m.exec(out)![1]
     expect(path).toMatch(/^imagenes\/cafe-de-manana-\d{8}-\d{6}\.png$/)
     expect(readFileSync(join(workspace, path))).toEqual(PNG)
     expect(requests[0].url).toBe('/v1/images/generations')
@@ -80,7 +80,7 @@ describe('generate_image', () => {
     ctx.settings.providers.xai.apiKey = ''
     const previous = process.env.XAI_API_KEY
     delete process.env.XAI_API_KEY
-    await expect(generateImageTool.run({ prompt: 'una imagen cualquiera de prueba' }, ctx)).rejects.toThrow(/API key de xAI/)
+    await expect(generateImageTool.run({ prompt: 'una imagen cualquiera de prueba' }, ctx)).rejects.toThrow(/xAI API key/)
     if (previous) process.env.XAI_API_KEY = previous
   })
 
@@ -106,8 +106,8 @@ describe('instagram_publish', () => {
     const { ctx, hostRequests } = context()
     writeFileSync(join(workspace, 'post.gif'), 'GIF89a')
     writeFileSync(join(workspace, 'ok.jpg'), PNG)
-    await expect(instagramPublishTool.run({ image_path: 'nada.png', caption: 'x' }, ctx)).rejects.toThrow(/No existe/)
-    await expect(instagramPublishTool.run({ image_path: 'post.gif', caption: 'x' }, ctx)).rejects.toThrow(/PNG o JPEG/)
+    await expect(instagramPublishTool.run({ image_path: 'nada.png', caption: 'x' }, ctx)).rejects.toThrow(/does not exist/)
+    await expect(instagramPublishTool.run({ image_path: 'post.gif', caption: 'x' }, ctx)).rejects.toThrow(/PNG or JPEG/)
     const tags = Array.from({ length: 31 }, (_, i) => `#tag${i}`).join(' ')
     await expect(instagramPublishTool.run({ image_path: 'ok.jpg', caption: tags }, ctx)).rejects.toThrow(/30 hashtags/)
     expect(hostRequests).toHaveLength(0)

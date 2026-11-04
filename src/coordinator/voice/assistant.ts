@@ -6,8 +6,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import { META_BASE_URL } from '../../shared/defaults'
+import { resolveKokoroVoice } from '../../shared/voices'
+import { type MessageKey, type ParamsArg, translate } from '../../shared/i18n/messages'
+import { isGoodbye, parseYesNo } from '../../shared/i18n/vocab'
+import type { Language } from '../../shared/i18n/language'
 import type { LiveEvent, PendingApproval, Settings, Thread, VoicePlayback, VoiceSettings, VoiceStatus } from '../../shared/types'
-import { BargeIn, concat, cosine, Endpointer, FILLERS, followUpMs, int16ToFloat, isEcho, isGoodbye, parseYesNo, SentenceStream, speakable, toWav } from './speech'
+import { sttLanguage } from './languages'
+import { approvalQuestion, approvalRetry, BargeIn, concat, cosine, Endpointer, fillers, followUpMs, int16ToFloat, isEcho, SentenceStream, speakable, toWav } from './speech'
 import type { VoiceWorkerReply, VoiceWorkerRequest } from './voice-worker'
 
 const pick = <T>(list: T[]): T => list[Math.floor(Math.random() * list.length)]
@@ -67,6 +72,26 @@ export class VoiceAssistant {
     return this.deps.settings().voice
   }
 
+  /** The language of the turn in progress, fixed when it began: a change of `language` applies from the next turn (spec 025 AC-1.10). Outside a turn, the one of the moment. */
+  private turnLanguage: Language | null = null
+
+  private get language(): Language {
+    return this.turnLanguage ?? this.deps.settings().language
+  }
+
+  private beginTurn(): void {
+    this.turnLanguage = this.deps.settings().language
+  }
+
+  private endTurn(): void {
+    this.turnLanguage = null
+  }
+
+  /** Text for the person, in the language of the turn. */
+  private text<K extends MessageKey>(key: K, ...params: ParamsArg<K>): string {
+    return translate(this.language, key, ...params)
+  }
+
   currentStatus(): VoiceStatus {
     return this.status
   }
@@ -82,10 +107,10 @@ export class VoiceAssistant {
   sync(): void {
     const { enabled, wakeWord, sttModel, tts, kokoroVoice, elevenVoiceId, elevenModel } = this.config
     // The voice is part of the key: choosing another one prepares its fillers.
-    const key = JSON.stringify({ enabled, wakeWord, sttModel, tts, kokoroVoice, elevenVoiceId, elevenModel })
+    const key = JSON.stringify({ enabled, wakeWord, sttModel, tts, kokoroVoice, elevenVoiceId, elevenModel, language: this.deps.settings().language })
     if (key === this.configKey) return
     this.configKey = key
-    if (enabled || this.worker) this.post({ type: 'config', wakeWord, sttModel, warmKokoro: enabled && tts === 'kokoro' })
+    if (enabled || this.worker) this.post({ type: 'config', wakeWord, sttModel, warmKokoro: enabled && tts === 'kokoro', language: this.deps.settings().language })
     if (enabled) this.prepareFillers()
     if (!enabled) {
       this.cancelRecording()
@@ -103,10 +128,10 @@ export class VoiceAssistant {
     const worker = new Worker(join(__dirname, 'voiceWorker.js'), { workerData: { modelsDir: join(this.deps.dataDir, 'models') } })
     worker.on('message', (reply: VoiceWorkerReply) => this.onWorker(reply))
     worker.on('error', (error) => this.workerFailed(error instanceof Error ? error : new Error(String(error))))
-    worker.on('exit', (code) => code !== 0 && this.workerFailed(new Error(`El proceso de voz terminó (código ${code}).`)))
+    worker.on('exit', (code) => code !== 0 && this.workerFailed(new Error(this.text('voice.error.workerExit', { code: String(code) }))))
     this.worker = worker
     const { wakeWord, sttModel, enabled, tts } = this.config
-    worker.postMessage({ type: 'config', wakeWord, sttModel, warmKokoro: enabled && tts === 'kokoro' } satisfies VoiceWorkerRequest)
+    worker.postMessage({ type: 'config', wakeWord, sttModel, warmKokoro: enabled && tts === 'kokoro', language: this.deps.settings().language } satisfies VoiceWorkerRequest)
     return worker
   }
 
@@ -206,7 +231,7 @@ export class VoiceAssistant {
       try {
         const similarity = await this.similarity(phrase)
         if (similarity < this.config.speakerThreshold) {
-          this.deps.emit({ type: 'voice.status', status: { ...this.status, detail: `Voz no reconocida (${similarity.toFixed(2)})` } })
+          this.deps.emit({ type: 'voice.status', status: { ...this.status, detail: this.text('voice.detail.unrecognized', { score: similarity.toFixed(2) }) } })
           return
         }
       } catch (error) {
@@ -277,6 +302,7 @@ export class VoiceAssistant {
         const preroll = interrupted ? this.ring.slice(-Math.min(RING_CHUNKS, this.sinceInterrupt + PREROLL_CHUNKS)) : []
         this.interrupted = false
         const continuing = followUp > 0 || interrupted
+        this.beginTurn()
         this.setStatus({ state: 'recording', followUp: continuing })
         const audio = await this.record(followUp && !interrupted ? { startTimeoutMs: followUp } : {}, preroll)
         if (!audio) return
@@ -300,6 +326,7 @@ export class VoiceAssistant {
       this.deps.emit({ type: 'voice.status', status: { ...this.status, detail: (error as Error).message } })
     } finally {
       offApprovals()
+      this.endTurn()
       this.busy = false
       this.interrupted = false
       if (this.config.enabled) this.setStatus({ state: 'listening' })
@@ -314,8 +341,8 @@ export class VoiceAssistant {
 
     // Talk while the model writes: a filler right away, then each finished sentence as it streams in.
     const speech = this.utterance()
-    speech.add(pick(FILLERS.thinking), true)
-    const stream = new SentenceStream()
+    speech.add(pick(fillers(this.language).thinking), true)
+    const stream = new SentenceStream(this.language)
     let answer = ''
     let searchingSaid = false
     const offStream = this.deps.onEvent((event) => {
@@ -331,7 +358,7 @@ export class VoiceAssistant {
       } else if (event.type === 'stream.tool') {
         for (const sentence of stream.flush()) speech.add(sentence)
         // The model went to look something up without saying so: fill the silence once.
-        if (!answer.trim() && !searchingSaid) speech.add(pick(FILLERS.searching), true)
+        if (!answer.trim() && !searchingSaid) speech.add(pick(fillers(this.language).searching), true)
         searchingSaid = true
       }
     })
@@ -356,9 +383,9 @@ export class VoiceAssistant {
 
   /** "¿Sí o no?": approvals for the voice conversation are answered out loud (they also show in the app). */
   private async approveByVoice(approval: PendingApproval): Promise<void> {
-    const question = `Necesito tu permiso para ${approval.toolName.replace(/_/g, ' ')}${approval.flagged ? ', y podría ser riesgoso' : ''}. ¿Sí o no?`
+    const question = approvalQuestion(this.language, approval.toolName, approval.flagged)
     for (let attempt = 0; attempt < 2; attempt++) {
-      await this.say(attempt === 0 ? question : 'No te entendí. ¿Sí o no?')
+      await this.say(attempt === 0 ? question : approvalRetry(this.language))
       this.setStatus({ ...this.status, state: 'recording' })
       const audio = await this.record()
       const answer = audio ? parseYesNo(await this.transcribe(audio)) : null
@@ -374,7 +401,7 @@ export class VoiceAssistant {
   async transcribe(audio: Float32Array): Promise<string> {
     if (this.config.stt === 'meta') return this.transcribeWithMeta(toWav(audio))
     if (this.config.stt === 'openai') return this.transcribeWithOpenAI(new Blob([toWav(audio)], { type: 'audio/wav' }), 'audio.wav')
-    const reply = await this.call({ type: 'transcribe', id: ++this.nextId, samples: audio })
+    const reply = await this.call({ type: 'transcribe', id: ++this.nextId, samples: audio, language: this.language })
     return reply.type === 'result' ? (reply.text ?? '') : ''
   }
 
@@ -395,24 +422,24 @@ export class VoiceAssistant {
   /** Muse Voice Transcribe takes mono 16-bit WAV at 16 or 24 kHz (what toWav makes), up to 10 minutes. */
   private async transcribeWithMeta(wav: Uint8Array<ArrayBuffer>): Promise<string> {
     const key = this.deps.settings().providers.meta.apiKey || process.env.META_API_KEY
-    if (!key) throw new Error('Para transcribir con Meta cargá una API key de Meta en Configuración → Proveedores.')
+    if (!key) throw new Error(this.text('voice.error.metaKey'))
     const form = new FormData()
-    form.append('request', new Blob([JSON.stringify({ model: 'muse-voice-transcribe-1.0', audioEncoding: 'WAV', mode: 'PUSH_TO_TALK', languageBias: ['Spanish'] })], { type: 'application/json' }))
+    form.append('request', new Blob([JSON.stringify({ model: 'muse-voice-transcribe-1.0', audioEncoding: 'WAV', mode: 'PUSH_TO_TALK', languageBias: [sttLanguage(this.language).meta] })], { type: 'application/json' }))
     form.append('audio', new Blob([wav], { type: 'audio/wav' }), 'audio.wav')
     const response = await fetch(`${META_BASE_URL}/asr/transcribe`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' }, body: form })
-    if (!response.ok) throw new Error(`Meta no pudo transcribir (${response.status}): ${(await response.text()).slice(0, 200)}`)
+    if (!response.ok) throw new Error(this.text('voice.error.metaFailed', { status: response.status, body: (await response.text()).slice(0, 200) }))
     return ((await response.json()) as { transcript: string }).transcript.trim()
   }
 
   private async transcribeWithOpenAI(file: Blob, name: string): Promise<string> {
     const key = this.deps.settings().providers.openai.apiKey || process.env.OPENAI_API_KEY
-    if (!key) throw new Error('Para transcribir con OpenAI cargá una API key de OpenAI en Configuración → Proveedores.')
+    if (!key) throw new Error(this.text('voice.error.openaiKey'))
     const form = new FormData()
     form.append('file', file, name)
     form.append('model', 'gpt-4o-mini-transcribe')
-    form.append('language', 'es')
+    form.append('language', sttLanguage(this.language).openai)
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form })
-    if (!response.ok) throw new Error(`OpenAI no pudo transcribir (${response.status}): ${(await response.text()).slice(0, 200)}`)
+    if (!response.ok) throw new Error(this.text('voice.error.openaiFailed', { status: response.status, body: (await response.text()).slice(0, 200) }))
     return ((await response.json()) as { text: string }).text.trim()
   }
 
@@ -436,7 +463,7 @@ export class VoiceAssistant {
     this.turns.add(turn)
     return {
       add: (text, isFiller = false) => {
-        const speech = speakable(text)
+        const speech = speakable(text, this.language)
         if (!speech || turn.cancelled) return
         chain = chain.then(() => (turn.cancelled ? undefined : this.synthesize(speech, turn, isFiller)))
       },
@@ -476,16 +503,16 @@ export class VoiceAssistant {
     }
     try {
       if (tts === 'elevenlabs') emit({ kind: 'encoded', data: await this.elevenLabs(text, isFiller), mime: 'audio/mpeg' })
-      else if (tts === 'kokoro') await this.call({ type: 'tts', id: ++this.nextId, text, voice: kokoroVoice }, (samples) => emit({ kind: 'pcm', samples, sampleRate: 24000 }))
-      else emit({ kind: 'system', text, voice: windowsVoice })
+      else if (tts === 'kokoro') await this.call({ type: 'tts', id: ++this.nextId, text, voice: resolveKokoroVoice(kokoroVoice, this.language), language: this.language }, (samples) => emit({ kind: 'pcm', samples, sampleRate: 24000 }))
+      else emit({ kind: 'system', text, voice: windowsVoice, language: this.language })
       if (isFiller && tts !== 'windows') this.fillerCache.set(key, pieces)
     } catch (error) {
       console.error('[voice] tts failed:', error)
       // A filler in another voice sounds like someone else talking: skip it. An answer falls back to the system
       // voice rather than leaving Alma mute, and says why on screen.
       if (isFiller || turn.cancelled) return
-      this.deps.emit({ type: 'voice.status', status: { ...this.status, detail: `La voz elegida falló (${(error as Error).message}); usé la de Windows.` } })
-      this.play({ kind: 'system', text, voice: windowsVoice }, false)
+      this.deps.emit({ type: 'voice.status', status: { ...this.status, detail: this.text('voice.detail.fallback', { message: (error as Error).message }) } })
+      this.play({ kind: 'system', text, voice: windowsVoice, language: this.language }, false)
     }
   }
 
@@ -495,7 +522,8 @@ export class VoiceAssistant {
     if (tts === 'windows' || (tts === 'elevenlabs' && !elevenVoiceId)) return
     const turn = { cancelled: true } // into the cache, without playing
     // One at a time: ElevenLabs rate-limits parallel requests, and Kokoro runs them in order anyway.
-    void [...FILLERS.thinking, ...FILLERS.searching].reduce<Promise<void>>((chain, filler) => chain.then(() => this.synthesize(speakable(filler), turn, true)), Promise.resolve())
+    const said = fillers(this.language)
+    void [...said.thinking, ...said.searching].reduce<Promise<void>>((chain, filler) => chain.then(() => this.synthesize(speakable(filler), turn, true)), Promise.resolve())
   }
 
   private play(playback: VoicePlayback, last: boolean): void {
@@ -517,7 +545,7 @@ export class VoiceAssistant {
   private async elevenLabs(text: string, keep = false): Promise<ArrayBuffer> {
     const key = this.deps.settings().providers.elevenlabs.apiKey || process.env.ELEVENLABS_API_KEY
     const { elevenVoiceId, elevenModel } = this.config
-    if (!key || !elevenVoiceId) throw new Error('Falta la API key o la voz de ElevenLabs.')
+    if (!key || !elevenVoiceId) throw new Error(this.text('voice.error.elevenMissing'))
     const file = join(this.deps.dataDir, 'voice-cache', `${createHash('sha1').update(`${elevenVoiceId}|${elevenModel}|${text}`).digest('hex')}.mp3`)
     if (keep && existsSync(file)) {
       const bytes = await readFile(file)
@@ -528,7 +556,7 @@ export class VoiceAssistant {
       headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, model_id: elevenModel })
     })
-    if (!response.ok) throw new Error(`ElevenLabs respondió ${response.status}: ${(await response.text()).slice(0, 200)}`)
+    if (!response.ok) throw new Error(this.text('voice.error.elevenFailed', { status: response.status, body: (await response.text()).slice(0, 200) }))
     const audio = await response.arrayBuffer()
     if (keep) {
       await mkdir(join(this.deps.dataDir, 'voice-cache'), { recursive: true })
@@ -539,9 +567,9 @@ export class VoiceAssistant {
 
   async elevenVoices(): Promise<{ id: string; name: string; preview: string; labels: string }[]> {
     const key = this.deps.settings().providers.elevenlabs.apiKey || process.env.ELEVENLABS_API_KEY
-    if (!key) throw new Error('Cargá primero tu API key de ElevenLabs.')
+    if (!key) throw new Error(this.text('voice.error.elevenKey'))
     const response = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': key } })
-    if (!response.ok) throw new Error(`ElevenLabs respondió ${response.status}${response.status === 401 ? ': la key no es válida' : ''}.`)
+    if (!response.ok) throw new Error(this.text(response.status === 401 ? 'voice.error.elevenInvalid' : 'voice.error.elevenStatus', { status: response.status }))
     const { voices } = (await response.json()) as { voices: { voice_id: string; name: string; preview_url: string; labels?: Record<string, string> }[] }
     return voices.map((v) => ({ id: v.voice_id, name: v.name, preview: v.preview_url, labels: Object.values(v.labels ?? {}).join(' · ') }))
   }
@@ -564,7 +592,7 @@ export class VoiceAssistant {
 
   private async embed(audio: Float32Array): Promise<Float32Array> {
     const reply = await this.call({ type: 'embed', id: ++this.nextId, samples: audio })
-    if (reply.type !== 'result' || !reply.vector) throw new Error('No se pudo analizar la voz.')
+    if (reply.type !== 'result' || !reply.vector) throw new Error(this.text('voice.error.analyze'))
     return reply.vector
   }
 
@@ -575,7 +603,7 @@ export class VoiceAssistant {
 
   /** Averages several readings into one voice print; more samples make the check steadier. */
   async enroll(samples: ArrayBuffer[]): Promise<{ consistency: number }> {
-    if (samples.length === 0) throw new Error('No hay grabaciones.')
+    if (samples.length === 0) throw new Error(this.text('voice.error.noRecordings'))
     const vectors: Float32Array[] = []
     for (const sample of samples) vectors.push(await this.embed(int16ToFloat(new Int16Array(sample))))
     const mean = new Float32Array(vectors[0].length)
@@ -604,7 +632,7 @@ export class VoiceAssistant {
   }
 
   async testSpeaker(sample: ArrayBuffer): Promise<number> {
-    if (!this.profile) throw new Error('Todavía no entrenaste tu voz.')
+    if (!this.profile) throw new Error(this.text('voice.error.notTrained'))
     return this.similarity(int16ToFloat(new Int16Array(sample)))
   }
 }

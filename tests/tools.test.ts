@@ -23,11 +23,11 @@ describe('resolveInWorkspace', () => {
 
   it('rejects paths that escape the workspace', () => {
     expect(() => resolveInWorkspace(workspace, '../fuera.txt')).toThrow(ToolError)
-    expect(() => resolveInWorkspace(workspace, join(tmpdir(), 'otro.txt'))).toThrow(/fuera de la carpeta/)
+    expect(() => resolveInWorkspace(workspace, join(tmpdir(), 'otro.txt'))).toThrow(/outside the working folder/)
   })
 
   it('requires a workspace', () => {
-    expect(() => resolveInWorkspace('', 'a.txt')).toThrow(/carpeta de trabajo/)
+    expect(() => resolveInWorkspace('', 'a.txt')).toThrow(/No working folder is selected/)
   })
 })
 
@@ -47,7 +47,7 @@ describe('file tools', () => {
     const out = await readFileTool.run({ path: 'a/b/nota.txt', offset: 2, limit: 1 }, ctx)
     expect(out).toContain('2\tdos')
     expect(out).not.toContain('uno')
-    expect(out).toContain('3 líneas en total')
+    expect(out).toContain('3 lines in total')
   })
 
   it('refuses to write outside the workspace', async () => {
@@ -56,12 +56,12 @@ describe('file tools', () => {
 
   it('edits a unique fragment and rejects ambiguous ones', async () => {
     writeFileSync(join(workspace, 'f.txt'), 'hola mundo\nhola de nuevo\n')
-    await expect(editFileTool.run({ path: 'f.txt', old_string: 'hola', new_string: 'chau' }, ctx)).rejects.toThrow(/2 veces/)
+    await expect(editFileTool.run({ path: 'f.txt', old_string: 'hola', new_string: 'chau' }, ctx)).rejects.toThrow(/2 times/)
     await editFileTool.run({ path: 'f.txt', old_string: 'hola mundo', new_string: 'chau mundo' }, ctx)
     expect(readFileSync(join(workspace, 'f.txt'), 'utf8')).toBe('chau mundo\nhola de nuevo\n')
     await editFileTool.run({ path: 'f.txt', old_string: 'o', new_string: '0', replace_all: true }, ctx)
     expect(readFileSync(join(workspace, 'f.txt'), 'utf8')).toBe('chau mund0\nh0la de nuev0\n')
-    await expect(editFileTool.run({ path: 'f.txt', old_string: 'zzz', new_string: 'y' }, ctx)).rejects.toThrow(/no aparece/)
+    await expect(editFileTool.run({ path: 'f.txt', old_string: 'zzz', new_string: 'y' }, ctx)).rejects.toThrow(/does not appear/)
   })
 
   it('does not treat $ in replacement text specially', async () => {
@@ -89,14 +89,14 @@ describe('file tools', () => {
 describe('run_command', () => {
   it('runs in the workspace and reports the exit code', async () => {
     const out = await runCommandTool.run({ command: 'echo hola-agente' }, ctx)
-    expect(out).toContain('Código de salida: 0')
+    expect(out).toContain('Exit code: 0')
     expect(out).toContain('hola-agente')
   }, 30_000)
 
   it('stops commands that exceed the timeout', async () => {
     const command = process.platform === 'win32' ? 'Start-Sleep -Seconds 20' : 'sleep 20'
     const out = await runCommandTool.run({ command, timeout_seconds: 1 }, ctx)
-    expect(out).toContain('tiempo agotado')
+    expect(out).toContain('timed out')
   }, 30_000)
 })
 
@@ -105,6 +105,6 @@ describe('truncateMiddle', () => {
     const out = truncateMiddle('a'.repeat(50) + 'b'.repeat(50), 20)
     expect(out.startsWith('a'.repeat(10))).toBe(true)
     expect(out.endsWith('b'.repeat(10))).toBe(true)
-    expect(out).toContain('80 caracteres omitidos')
+    expect(out).toContain('80 characters omitted')
   })
 })

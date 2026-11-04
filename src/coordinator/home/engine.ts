@@ -9,6 +9,9 @@ import { createConnection } from 'node:net'
 import { join } from 'node:path'
 import type { HomeEngineStatus, HomeSettings } from '../../shared/home'
 import { HaClient, HaError, onboard, waitForHa } from './ha'
+import { type MessageKey, type ParamsArg, translate } from '../../shared/i18n/messages'
+import type { Language } from '../../shared/i18n/language'
+import { shownError } from '../tools/types'
 
 export const HA_VERSION = '2026.10.1'
 const HA_IMAGE = `ghcr.io/home-assistant/home-assistant:${HA_VERSION}`
@@ -35,7 +38,7 @@ interface Auth {
 
 export interface EngineDeps {
   dataDir: string
-  settings(): { home: HomeSettings }
+  settings(): { home: HomeSettings; language?: Language }
   /** Encrypts / decrypts with the OS keychain (main process). */
   seal(text: string): Promise<string>
   open(text: string): Promise<string>
@@ -85,7 +88,7 @@ async function ensureInDistro(path: string, content: string): Promise<void> {
 /** Writes a file inside the distro (dd takes the path as one argument, so no quoting is involved). */
 async function writeInDistro(path: string, content: string): Promise<void> {
   const result = await inDistro(['/bin/dd', `of=${path}`], { input: content })
-  if (result.code !== 0) throw new HaError(`No se pudo escribir ${path} en el motor: ${decodeWsl(result.stderr).slice(0, 200)}`)
+  if (result.code !== 0) throw new HaError('home.engine.writeFailed', { path, error: decodeWsl(result.stderr).slice(0, 200) })
 }
 
 export async function wslAvailable(): Promise<boolean> {
@@ -116,9 +119,9 @@ function portBusy(port: number): Promise<boolean> {
 }
 
 /** The managed configuration.yaml: rewritten at every start, so the port and time zone always match. */
-export function managedConfig(port: number, timeZone: string): string {
+export function managedConfig(port: number, timeZone: string, language: Language = 'es'): string {
   return [
-    '# Lo escribe Alma en cada arranque; los cambios se hacen desde la app.',
+    '# Written by Alma on every start; changes are made from the app.',
     'default_config:',
     // Scenes, automations and scripts made from Alma (or the window) are saved in these files.
     'automation: !include automations.yaml',
@@ -129,7 +132,7 @@ export function managedConfig(port: number, timeZone: string): string {
     '  name: Casa',
     '  unit_system: metric',
     `  time_zone: ${timeZone}`,
-    '  language: es',
+    `  language: ${language}`,
     'http:',
     '  server_host: 0.0.0.0',
     `  server_port: ${port}`,
@@ -201,6 +204,15 @@ export class HomeEngine {
     return this.current
   }
 
+  /** The status text the Home view shows, in the app language. */
+  private text<K extends MessageKey>(key: K, ...params: ParamsArg<K>): string {
+    return translate(this.deps.settings().language ?? 'es', key, ...params)
+  }
+
+  private shown(error: Error): string {
+    return shownError(error, this.deps.settings().language ?? 'es')
+  }
+
   private set(patch: Partial<HomeEngineStatus> & { state: HomeEngineStatus['state'] }): void {
     this.current = { mode: this.deps.settings().home.mode, url: this.current.url, version: this.current.version, ...patch }
     if (patch.state !== 'error') delete this.current.error
@@ -264,14 +276,14 @@ export class HomeEngine {
 
   private async bringUp(): Promise<void> {
     if (!(await wslAvailable())) {
-      this.set({ state: 'unsupported', error: 'WSL2 no está disponible en esta computadora. Activalo (wsl --install) o conectá un Home Assistant propio en modo externo.' })
+      this.set({ state: 'unsupported', error: this.text('home.engine.noWslHint') })
       return
     }
     if (!(await distroExists())) return this.set({ state: 'missing' })
     try {
       await this.startManaged()
     } catch (error) {
-      if (!this.stopping) this.set({ state: 'error', error: (error as Error).message })
+      if (!this.stopping) this.set({ state: 'error', error: this.shown(error as Error) })
     }
   }
 
@@ -286,20 +298,20 @@ export class HomeEngine {
       this.set({ state: 'missing', error: undefined })
       return
     }
-    this.set({ state: 'starting', step: 'Conectando con Home Assistant', url: creds.url })
+    this.set({ state: 'starting', step: this.text('home.engine.step.connecting'), url: creds.url })
     try {
       const version = await new HaClient(creds.url, creds.token).rest<{ version: string }>('GET', '/api/config')
       this.set({ state: 'ready', url: creds.url, version: version.version })
     } catch (error) {
-      this.set({ state: 'error', error: (error as Error).message, url: creds.url })
+      this.set({ state: 'error', error: this.shown(error as Error), url: creds.url })
     }
   }
 
   async connectExternalWith(url: string, token: string): Promise<void> {
     const clean = url.trim().replace(/\/+$/, '')
-    if (!/^https?:\/\//.test(clean)) throw new HaError('La dirección tiene que empezar con http:// o https://')
+    if (!/^https?:\/\//.test(clean)) throw new HaError('home.engine.badUrl')
     const version = await new HaClient(clean, token.trim()).rest<{ version: string }>('GET', '/api/config').catch((error: Error) => {
-      throw new HaError(`No se pudo entrar a ${clean}: ${error.message}`)
+      throw new HaError('home.engine.cannotEnter', { url: clean, error: error.message })
     })
     await this.saveAuth({ mode: 'external', url: clean, token: token.trim() })
     this.set({ state: 'ready', url: clean, version: version.version })
@@ -311,8 +323,8 @@ export class HomeEngine {
   install(): Promise<void> {
     return this.exclusive(async () => {
       if (!(await wslAvailable())) {
-        this.set({ state: 'unsupported', error: 'WSL2 no está disponible. Abrí PowerShell como administrador, corré «wsl --install», reiniciá y probá de nuevo.' })
-        throw new HaError('WSL2 no está disponible en esta computadora.')
+        this.set({ state: 'unsupported', error: this.text('home.engine.noWslAdmin') })
+        throw new HaError('home.engine.noWsl')
       }
       this.abort = new AbortController()
       this.stopping = false
@@ -321,7 +333,7 @@ export class HomeEngine {
         await this.startManaged()
       } catch (error) {
         if (this.stopping) return this.set({ state: 'missing' })
-        this.set({ state: 'error', error: (error as Error).message })
+        this.set({ state: 'error', error: this.shown(error as Error) })
         throw error
       } finally {
         this.abort = null
@@ -338,59 +350,59 @@ export class HomeEngine {
         return Infinity
       }
     })()
-    if (free < NEEDED_BYTES) throw new HaError(`Falta espacio en disco: hacen falta unos ${Math.ceil(NEEDED_BYTES / 1e9)} GB libres y hay ${(free / 1e9).toFixed(1)} GB.`)
+    if (free < NEEDED_BYTES) throw new HaError('home.engine.noSpace', { need: Math.ceil(NEEDED_BYTES / 1e9), free: (free / 1e9).toFixed(1) })
 
     const crane = join(this.dir, 'crane.exe')
     if (!existsSync(crane)) {
-      this.set({ state: 'installing', step: 'Descargando herramientas', progress: 0.01 })
+      this.set({ state: 'installing', step: this.text('home.engine.step.downloadingTools'), progress: 0.01 })
       const response = await fetch(CRANE_URL, { signal })
-      if (!response.ok) throw new HaError(`No se pudo bajar crane (${response.status}).`)
+      if (!response.ok) throw new HaError('home.engine.craneDownload', { status: response.status })
       const archive = Buffer.from(await response.arrayBuffer())
-      if (createHash('sha256').update(archive).digest('hex') !== CRANE_SHA256) throw new HaError('La descarga de crane no coincide con el checksum esperado.')
+      if (createHash('sha256').update(archive).digest('hex') !== CRANE_SHA256) throw new HaError('home.engine.craneChecksum')
       const tgz = join(this.dir, 'crane.tgz')
       writeFileSync(tgz, archive)
       // Windows' own bsdtar by full path: a GNU tar earlier in PATH (Git for Windows) reads "C:" as a remote host.
       const unpacked = await run(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xzf', tgz, '-C', this.dir, 'crane.exe'], { timeoutMs: 60_000 })
       rmSync(tgz, { force: true })
-      if (unpacked.code !== 0 || !existsSync(crane)) throw new HaError('No se pudo descomprimir crane.')
+      if (unpacked.code !== 0 || !existsSync(crane)) throw new HaError('home.engine.craneUnpack')
     }
 
     const rootfs = join(this.dir, 'rootfs.tar')
     rmSync(rootfs, { force: true })
-    this.set({ state: 'installing', step: `Descargando Home Assistant ${HA_VERSION} (unos 1,2 GB)`, progress: 0.03 })
+    this.set({ state: 'installing', step: this.text('home.engine.step.downloadingHa', { version: HA_VERSION }), progress: 0.03 })
     const ticker = setInterval(() => {
       try {
-        this.set({ state: 'installing', step: `Descargando Home Assistant ${HA_VERSION} (unos 1,2 GB)`, progress: 0.03 + Math.min(statSync(rootfs).size / ROOTFS_BYTES, 1) * 0.57 })
+        this.set({ state: 'installing', step: this.text('home.engine.step.downloadingHa', { version: HA_VERSION }), progress: 0.03 + Math.min(statSync(rootfs).size / ROOTFS_BYTES, 1) * 0.57 })
       } catch {
         // not created yet
       }
     }, 1500)
     try {
       const exported = await run(crane, ['export', '--platform', 'linux/amd64', HA_IMAGE, rootfs], { signal })
-      if (exported.code !== 0) throw new HaError(`No se pudo bajar Home Assistant: ${exported.stderr.toString('utf8').slice(0, 300)}`)
+      if (exported.code !== 0) throw new HaError('home.engine.haDownload', { error: exported.stderr.toString('utf8').slice(0, 300) })
     } finally {
       clearInterval(ticker)
     }
 
     // The import has no progress output; it takes a few minutes, so the bar creeps on its own estimate.
     const started = Date.now()
-    const creep = setInterval(() => this.set({ state: 'installing', step: 'Instalando el motor en WSL (unos minutos)', progress: 0.6 + Math.min((Date.now() - started) / 240_000, 1) * 0.25 }), 2000)
+    const creep = setInterval(() => this.set({ state: 'installing', step: this.text('home.engine.step.installing'), progress: 0.6 + Math.min((Date.now() - started) / 240_000, 1) * 0.25 }), 2000)
     try {
       const vm = join(this.dir, 'vm')
       mkdirSync(vm, { recursive: true })
       const imported = await wsl(['--import', distroName(), vm, rootfs, '--version', '2'], { signal })
-      if (imported.code !== 0) throw new HaError(`WSL no pudo importar el motor: ${decodeWsl(imported.stderr || imported.stdout).slice(0, 300)}`)
+      if (imported.code !== 0) throw new HaError('home.engine.wslImport', { error: decodeWsl(imported.stderr || imported.stdout).slice(0, 300) })
     } finally {
       clearInterval(creep)
       rmSync(rootfs, { force: true })
     }
 
-    this.set({ state: 'installing', step: 'Configurando', progress: 0.9 })
+    this.set({ state: 'installing', step: this.text('home.engine.step.configuring'), progress: 0.9 })
     await writeInDistro('/usr/local/bin/alma-ha.sh', RUN_SCRIPT)
     await inDistro(['/bin/mkdir', '-p', '/config/custom_components'])
     const sonoff = await inDistro(['/usr/local/bin/python3', '-c', SONOFF_INSTALL], { timeoutMs: 120_000 })
     // eWeLink is optional: the engine works without it, and the user can retry later.
-    if (!decodeWsl(sonoff.stdout).includes('ok')) console.error('[home] no se pudo instalar SonoffLAN:', decodeWsl(sonoff.stderr).slice(0, 300))
+    if (!decodeWsl(sonoff.stdout).includes('ok')) console.error('[home] could not install SonoffLAN:', decodeWsl(sonoff.stderr).slice(0, 300))
   }
 
   // ---------------------------------------------------------------------------
@@ -399,7 +411,7 @@ export class HomeEngine {
   private async startManaged(): Promise<void> {
     if (this.proc) return
     this.stopping = false
-    this.set({ state: 'starting', step: 'Iniciando Home Assistant (la primera vez tarda unos minutos)', progress: undefined })
+    this.set({ state: 'starting', step: this.text('home.engine.step.starting'), progress: undefined })
     if (await portBusy(this.port)) {
       const creds = await this.credentials()
       if (creds?.url === `http://127.0.0.1:${this.port}`) {
@@ -412,13 +424,13 @@ export class HomeEngine {
       }
     }
     this.port = (await portBusy(this.port)) ? (this.port === DEFAULT_PORT ? ALT_PORT : this.port) : this.port
-    if (await portBusy(this.port)) throw new HaError(`El puerto ${this.port} está ocupado por otro programa.`)
+    if (await portBusy(this.port)) throw new HaError('home.engine.portBusy', { port: this.port })
     writeFileSync(join(this.dir, 'engine.json'), JSON.stringify({ port: this.port }), 'utf8')
     const url = `http://127.0.0.1:${this.port}`
     await writeInDistro('/usr/local/bin/alma-ha.sh', RUN_SCRIPT)
     await writeInDistro(FFMPEG_PATH, FFMPEG_SCRIPT)
     await inDistro(['/bin/chmod', '+x', FFMPEG_PATH])
-    await writeInDistro('/config/configuration.yaml', managedConfig(this.port, Intl.DateTimeFormat().resolvedOptions().timeZone))
+    await writeInDistro('/config/configuration.yaml', managedConfig(this.port, Intl.DateTimeFormat().resolvedOptions().timeZone, this.deps.settings().language ?? 'es'))
     for (const file of ['automations', 'scenes', 'scripts']) await ensureInDistro(`/config/${file}.yaml`, '[]\n')
 
     this.tail = []
@@ -434,10 +446,10 @@ export class HomeEngine {
 
     try {
       await waitForHa(url, BOOT_TIMEOUT_MS, this.abort?.signal)
-      if (this.proc !== child) throw new HaError('Home Assistant se detuvo mientras arrancaba.')
+      if (this.proc !== child) throw new HaError('home.engine.stopped')
       await this.ensureAccount(url)
       const creds = await this.credentials()
-      if (!creds) throw new HaError('No hay una cuenta guardada para Home Assistant.')
+      if (!creds) throw new HaError('home.engine.noAccount')
       const config = await new HaClient(url, creds.token).rest<{ version: string }>('GET', '/api/config')
       this.set({ state: 'ready', url, version: config.version })
     } catch (error) {
@@ -451,10 +463,10 @@ export class HomeEngine {
     if (await this.credentials()) return
     const steps = (await (await fetch(`${url}/api/onboarding`)).json().catch(() => [])) as { step: string; done: boolean }[]
     if (steps.find((s) => s.step === 'user')?.done) {
-      throw new HaError('Home Assistant ya tiene una cuenta que Alma no conoce. Reinstalá el motor desde Configuración → Casa.')
+      throw new HaError('home.engine.unknownAccount')
     }
     const password = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('')
-    const account = await onboard(url, password)
+    const account = await onboard(url, password, this.deps.settings().language ?? 'es')
     await this.saveAuth({ mode: 'managed', url, token: account.token, password })
   }
 
@@ -465,11 +477,11 @@ export class HomeEngine {
     const now = Date.now()
     this.restarts = this.restarts.filter((t) => now - t < 10 * 60_000)
     if (this.restarts.length >= 3) {
-      this.set({ state: 'error', error: `Home Assistant se detuvo varias veces (código ${code}). ${this.tail.slice(-3).join(' ')}`.trim() })
+      this.set({ state: 'error', error: this.text('home.engine.crashed', { code: String(code), tail: this.tail.slice(-3).join(' ') }).trim() })
       return
     }
     this.restarts.push(now)
-    this.set({ state: 'starting', step: 'Home Assistant se detuvo; reiniciando' })
+    this.set({ state: 'starting', step: this.text('home.engine.step.restarting') })
     void this.exclusive(() => this.startManaged()).catch((error: Error) => this.set({ state: 'error', error: error.message }))
   }
 

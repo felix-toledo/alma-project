@@ -38,7 +38,7 @@ describe('isDue (daily)', () => {
 
   it('respects the chosen weekdays and the enabled flag', () => {
     const weekdays = routine({ kind: 'daily', time: '10:00', days: [1, 2, 3, 4, 5] })
-    expect(isDue(weekdays, undefined, at('2026-10-17T11:00:00'))).toBe(false) // sábado
+    expect(isDue(weekdays, undefined, at('2026-10-17T11:00:00'))).toBe(false) // Saturday
     expect(isDue(weekdays, undefined, at('2026-10-16T11:00:00'))).toBe(true) // viernes
     expect(isDue({ ...daily, enabled: false }, undefined, at('2026-10-15T11:00:00'))).toBe(false)
   })

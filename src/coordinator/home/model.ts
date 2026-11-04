@@ -1,6 +1,8 @@
-// Turns Home Assistant's registries and states into the things Alma talks about: "la luz de la cocina", "la cámara
-// del patio". Pure, so it's tested without a Home Assistant.
+// Turns Home Assistant's registries and states into the things Alma talks about («la luz de la cocina»,
+// «la cámara del patio»). Pure, so it's tested without a Home Assistant.
 import { DEVICE_DOMAINS, type DeviceKind, type HomeArea, type HomeAutomation, type HomeScene, type HomeSensor, type HomeThing } from '../../shared/home'
+import { compareText } from '../../shared/i18n/format'
+import type { Language } from '../../shared/i18n/language'
 import type { StateObject } from './ha'
 
 export interface RegArea {
@@ -73,7 +75,7 @@ function friendly(state: StateObject | undefined, fallback: string): string {
 }
 
 /** A device with exactly one controllable entity IS that entity; one with several (a two-gang switch) shows each. */
-export function buildThings(states: Map<string, StateObject>, areas: RegArea[], devices: RegDevice[], entities: RegEntity[]): HomeThing[] {
+export function buildThings(states: Map<string, StateObject>, areas: RegArea[], devices: RegDevice[], entities: RegEntity[], language: Language = 'es'): HomeThing[] {
   void areas
   const deviceById = new Map(devices.map((d) => [d.id, d]))
   // Entities that have a state but no registry entry (YAML ones, demos, anything without a unique id) still count.
@@ -141,16 +143,22 @@ export function buildThings(states: Map<string, StateObject>, areas: RegArea[], 
     if (!(domainOf(entity.entity_id) in DEVICE_DOMAINS)) continue
     things.push(make(entity, undefined, entity.entity_id, friendly(states.get(entity.entity_id), entity.entity_id), []))
   }
-  return things.sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  const compare = compareText(language)
+  return things.sort((a, b) => compare(a.name, b.name))
 }
 
-export const buildAreas = (areas: RegArea[]): HomeArea[] => areas.map((a) => ({ id: a.area_id, name: a.name })).sort((a, b) => a.name.localeCompare(b.name, 'es'))
-
-export function buildScenes(states: Map<string, StateObject>): HomeScene[] {
-  return [...states.values()].filter((s) => s.entity_id.startsWith('scene.')).map((s) => ({ entityId: s.entity_id, name: friendly(s, s.entity_id) })).sort((a, b) => a.name.localeCompare(b.name, 'es'))
+export const buildAreas = (areas: RegArea[], language: Language = 'es'): HomeArea[] => {
+  const compare = compareText(language)
+  return areas.map((a) => ({ id: a.area_id, name: a.name })).sort((a, b) => compare(a.name, b.name))
 }
 
-export function buildAutomations(states: Map<string, StateObject>): HomeAutomation[] {
+export function buildScenes(states: Map<string, StateObject>, language: Language = 'es'): HomeScene[] {
+  const compare = compareText(language)
+  return [...states.values()].filter((s) => s.entity_id.startsWith('scene.')).map((s) => ({ entityId: s.entity_id, name: friendly(s, s.entity_id) })).sort((a, b) => compare(a.name, b.name))
+}
+
+export function buildAutomations(states: Map<string, StateObject>, language: Language = 'es'): HomeAutomation[] {
+  const compare = compareText(language)
   return [...states.values()]
     .filter((s) => s.entity_id.startsWith('automation.'))
     .map((s) => ({
@@ -160,7 +168,7 @@ export function buildAutomations(states: Map<string, StateObject>): HomeAutomati
       enabled: s.state === 'on',
       lastTriggered: typeof s.attributes.last_triggered === 'string' ? s.attributes.last_triggered : null
     }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    .sort((a, b) => compare(a.name, b.name))
 }
 
 /** Lower-case, accent-free, for matching what a person says against names. */

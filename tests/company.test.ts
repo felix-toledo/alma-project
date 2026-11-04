@@ -37,7 +37,7 @@ function setup(budgetUsd = 0) {
     store: new CompanyStore(mkdtempSync(join(tmpdir(), 'alma-company-'))),
     runMember: (_c, member, title, prompt) => {
       runs.push({ member, title, prompt })
-      const id = /Tarea (t-\w+)/.exec(prompt)?.[1]
+      const id = /Task (t-\w+)/.exec(prompt)?.[1]
       // Fake agents: the assignee delivers; a boss reviewing approves.
       const done = Promise.resolve().then(() => {
         if (title.startsWith('Tarea') && id) engine.report(company, id, member, 'review', `hecho por ${member}`)
@@ -47,7 +47,7 @@ function setup(budgetUsd = 0) {
       return { threadId: `th-${runs.length}`, done }
     },
     complete: async (profile, _system, prompt) =>
-      prompt.includes('Devolvé {') ? { text: JSON.stringify({ summary: 'ok', decisions: ['Lanzar'], actions: [{ owner: 'mkt', title: 'Campaña', description: 'Armar la campaña' }] }) } : { text: `habla ${profile.id}` },
+      prompt.includes('Return {') ? { text: JSON.stringify({ summary: 'ok', decisions: ['Lanzar'], actions: [{ owner: 'mkt', title: 'Campaña', description: 'Armar la campaña' }] }) } : { text: `habla ${profile.id}` },
     writeNote: async (_c, path, content) => void (notes[path] = content),
     notify: () => {},
     emit: () => {}

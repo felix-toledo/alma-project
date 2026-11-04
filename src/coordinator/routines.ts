@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { translate } from '../shared/i18n/messages'
+import type { Language } from '../shared/i18n/language'
 import { isDue } from '../shared/schedule'
 import type { Routine, RoutineState } from '../shared/types'
 
@@ -16,7 +18,8 @@ export class RoutineRunner {
     private getRoutines: () => Routine[],
     /** Starts the routine (a task gets a new thread; a reminder has none); resolves when it ends. */
     private launch: (routine: Routine) => { threadId?: string; done: Promise<void> },
-    private onChange: (state: Record<string, RoutineState>) => void
+    private onChange: (state: Record<string, RoutineState>) => void,
+    private language: () => Language = () => 'es'
   ) {
     this.file = join(dataDir, 'routines-state.json')
     if (existsSync(this.file)) {
@@ -51,7 +54,7 @@ export class RoutineRunner {
   }
 
   run(routine: Routine): string | undefined {
-    if (this.state[routine.id]?.running) throw new Error('La rutina ya se está ejecutando.')
+    if (this.state[routine.id]?.running) throw new Error(translate(this.language(), 'error.routineRunning'))
     const { threadId, done } = this.launch(routine)
     this.state[routine.id] = { lastRunAt: Date.now(), lastThreadId: threadId, running: true }
     this.save()

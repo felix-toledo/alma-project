@@ -1,6 +1,7 @@
 // The hub: Alma's live view of the house. Keeps a WebSocket to Home Assistant, mirrors states and registries, and
 // does everything a person or an agent can ask for (control, rename, move, add, remove, scenes, automations).
 import type { FlowStep, HomeArea, HomeAutomation, HomeEntry, HomeIntegration, HomeScene, HomeSnapshot, HomeThing } from '../../shared/home'
+import type { Language } from '../../shared/i18n/language'
 import { abortFlow, listIntegrations, resetFlowCache, startFlow, stepFlow } from './flow'
 import { HaClient, HaError, type HaEvent, type StateObject } from './ha'
 import { buildAreas, buildAutomations, buildScenes, buildThings, findThings, type RegArea, type RegDevice, type RegEntity } from './model'
@@ -17,6 +18,9 @@ const DEBOUNCE_MS = 300
 const HIDDEN_ENTRIES = new Set(['sun', 'radio_browser', 'google_translate', 'met', 'backup', 'hassio', 'cloud', 'go2rtc', 'shopping_list'])
 
 export class HomeHub {
+  /** The app language, read when a list is built: what it sorts by and what Home Assistant is asked for. */
+  constructor(private language: () => Language = () => 'es') {}
+
   private ha: HaClient | null = null
   private states = new Map<string, StateObject>()
   private areas: RegArea[] = []
@@ -51,7 +55,7 @@ export class HomeHub {
   }
 
   private client(): HaClient {
-    if (!this.ha?.connected) throw new HaError('La casa no está conectada. Abrí Casa y revisá el motor en Configuración → Casa.')
+    if (!this.ha?.connected) throw new HaError('tool.ha.houseOff')
     return this.ha
   }
 
@@ -148,10 +152,10 @@ export class HomeHub {
 
   snapshot(): HomeSnapshot {
     return {
-      things: buildThings(this.states, this.areas, this.devices, this.entities),
-      areas: buildAreas(this.areas),
-      scenes: buildScenes(this.states),
-      automations: buildAutomations(this.states)
+      things: buildThings(this.states, this.areas, this.devices, this.entities, this.language()),
+      areas: buildAreas(this.areas, this.language()),
+      scenes: buildScenes(this.states, this.language()),
+      automations: buildAutomations(this.states, this.language())
     }
   }
 
@@ -191,7 +195,7 @@ export class HomeHub {
   async updateThing(id: string, patch: { name?: string; areaId?: string | null }): Promise<void> {
     const ha = this.client()
     const thing = this.thing(id)
-    if (!thing) throw new HaError('Ese dispositivo no existe.')
+    if (!thing) throw new HaError('tool.ha.noDevice')
     const isDevice = this.devices.some((d) => d.id === id)
     if (isDevice) {
       await ha.call({ type: 'config/device_registry/update', device_id: id, ...(patch.name !== undefined ? { name_by_user: patch.name.trim() || null } : {}), ...(patch.areaId !== undefined ? { area_id: patch.areaId } : {}) })
@@ -206,9 +210,9 @@ export class HomeHub {
     const device = this.devices.find((d) => d.id === id)
     if (!device) {
       const thing = this.thing(id)
-      if (!thing) throw new HaError('Ese dispositivo no existe.')
+      if (!thing) throw new HaError('tool.ha.noDevice')
       await ha.call({ type: 'config/entity_registry/update', entity_id: thing.entityId, disabled_by: 'user' })
-      return 'Quedó oculto.'
+      return 'It was hidden.'
     }
     const linked = new Set([...(device.config_entries ?? []), ...this.entities.filter((e) => e.device_id === id && e.config_entry_id).map((e) => e.config_entry_id as string)])
     try {
@@ -218,10 +222,10 @@ export class HomeHub {
         if (shared) await ha.call({ type: 'config/device_registry/remove_config_entry', device_id: id, config_entry_id: entryId })
         else await ha.rest('DELETE', `/api/config/config_entries/entry/${entryId}`)
       }
-      return 'Se quitó.'
+      return 'It was removed.'
     } catch {
       await ha.call({ type: 'config/device_registry/update', device_id: id, disabled_by: 'user' })
-      return 'Esa integración no permite quitar dispositivos sueltos: quedó oculto.'
+      return 'That integration does not allow removing single devices: it was hidden.'
     }
   }
 
@@ -248,7 +252,7 @@ export class HomeHub {
   // Adding devices (config flows) and integrations
 
   integrations(): Promise<HomeIntegration[]> {
-    return listIntegrations(this.client())
+    return listIntegrations(this.client(), this.language())
   }
 
   async entries(): Promise<HomeEntry[]> {
@@ -256,12 +260,12 @@ export class HomeHub {
     return list.filter((e) => !HIDDEN_ENTRIES.has(e.domain)).map((e) => ({ entryId: e.entry_id, domain: e.domain, title: e.title, state: e.state }))
   }
 
-  startFlow(domain: string): Promise<FlowStep> {
-    return startFlow(this.client(), domain)
+  startFlow(domain: string, language: Language = 'es'): Promise<FlowStep> {
+    return startFlow(this.client(), domain, language)
   }
 
-  async stepFlow(flowId: string, data?: Record<string, unknown>, menu?: string): Promise<FlowStep> {
-    const step = await stepFlow(this.client(), flowId, data, menu)
+  async stepFlow(flowId: string, data?: Record<string, unknown>, menu?: string, language: Language = 'es'): Promise<FlowStep> {
+    const step = await stepFlow(this.client(), flowId, data, menu, language)
     if (step.kind === 'done' || step.kind === 'abort') await this.reviveDevices(step.handler).catch(() => undefined)
     return step
   }
@@ -303,7 +307,7 @@ export class HomeHub {
 
   async deleteScene(entityId: string): Promise<void> {
     const sceneId = this.states.get(entityId)?.attributes.id
-    if (typeof sceneId !== 'string') throw new HaError('Esa escena no se puede borrar desde Alma (viene de la configuración).')
+    if (typeof sceneId !== 'string') throw new HaError('tool.ha.noDeleteScene')
     await this.client().rest('DELETE', `/api/config/scene/config/${sceneId}`)
     await this.callService('scene', 'reload')
   }
@@ -334,11 +338,11 @@ export class HomeHub {
   }
 
   automations(): HomeAutomation[] {
-    return buildAutomations(this.states)
+    return buildAutomations(this.states, this.language())
   }
 
   scenes(): HomeScene[] {
-    return buildScenes(this.states)
+    return buildScenes(this.states, this.language())
   }
 
   // ---------------------------------------------------------------------------
@@ -346,13 +350,13 @@ export class HomeHub {
 
   /** A still from a camera (JPEG). */
   async cameraSnapshot(entityId: string): Promise<Buffer> {
-    if (!entityId.startsWith('camera.')) throw new HaError('Esa entidad no es una cámara.')
+    if (!entityId.startsWith('camera.')) throw new HaError('tool.ha.notCamera')
     // Many cameras (Tapo included) allow one video connection at a time: if another is closing, a closed one takes up to ~8 s to let go.
     for (let attempt = 0; ; attempt++) {
       try {
         return await this.client().rest<Buffer>('GET', `/api/camera_proxy/${entityId}`, undefined, { raw: true, timeoutMs: 20_000 })
       } catch (error) {
-        if (attempt >= 5) throw new HaError(`La cámara no entregó la imagen (${(error as Error).message}). Muchas cámaras aceptan una sola conexión de video a la vez: si tenés la vista en vivo abierta en Casa, cerrala e intentá de nuevo.`)
+        if (attempt >= 5) throw new HaError('tool.ha.cameraFailed', { error: (error as Error).message })
         await new Promise((resolve) => setTimeout(resolve, 2000))
       }
     }

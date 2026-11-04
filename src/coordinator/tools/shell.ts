@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import * as z from 'zod/v4'
 import { resolveInWorkspace } from './paths'
-import { defineTool, truncateMiddle } from './types'
+import { defineTool, toolText, truncateMiddle } from './types'
 
 const MAX_OUTPUT_CHARS = 200_000
 
@@ -37,12 +37,12 @@ export const runCommandTool = defineTool({
   name: 'run_command',
   description:
     process.platform === 'win32'
-      ? 'Ejecuta un comando de PowerShell en la carpeta de trabajo y devuelve su salida y código de salida. Usalo para builds, tests, git y scripts. No uses comandos interactivos.'
-      : 'Ejecuta un comando de shell (bash) en la carpeta de trabajo y devuelve su salida y código de salida. Usalo para builds, tests, git y scripts. No uses comandos interactivos.',
+      ? 'Runs a PowerShell command in the working folder and returns its output and exit code. Use it for builds, tests, git and scripts. Do not use interactive commands.'
+      : 'Runs a shell (bash) command in the working folder and returns its output and exit code. Use it for builds, tests, git and scripts. Do not use interactive commands.',
   risk: 'exec',
   schema: z.object({
-    command: z.string().min(1).describe('Comando a ejecutar'),
-    timeout_seconds: z.number().int().min(1).max(600).optional().describe('Límite de tiempo (por defecto 120)')
+    command: z.string().min(1).describe('Command to run'),
+    timeout_seconds: z.number().int().min(1).max(600).optional().describe('Time limit (default 120)')
   }),
   run({ command, timeout_seconds = 120 }, ctx) {
     const cwd = resolveInWorkspace(ctx.workspace, '.')
@@ -56,7 +56,7 @@ export const runCommandTool = defineTool({
         stdio: ['ignore', 'pipe', 'pipe']
       })
       let output = ''
-      let reason = ''
+      let stopped: 'timeout' | 'cancelled' | undefined
       const append = (chunk: Buffer): void => {
         output += chunk.toString('utf8')
         // Keep memory bounded on runaway output; truncateMiddle trims the final result.
@@ -65,21 +65,30 @@ export const runCommandTool = defineTool({
       child.stdout.on('data', append)
       child.stderr.on('data', append)
 
-      const stop = (why: string): void => {
-        reason = why
+      const stop = (why: 'timeout' | 'cancelled'): void => {
+        stopped = why
         if (child.pid) killTree(child.pid)
       }
-      const timer = setTimeout(() => stop(`tiempo agotado tras ${timeout_seconds}s`), timeout_seconds * 1000)
-      const onAbort = (): void => stop('cancelado por el usuario')
+      const timer = setTimeout(() => stop('timeout'), timeout_seconds * 1000)
+      const onAbort = (): void => stop('cancelled')
       ctx.signal.addEventListener('abort', onAbort, { once: true })
 
-      const finish = (summary: string): void => {
+      const finish = (text: () => string): void => {
         clearTimeout(timer)
         ctx.signal.removeEventListener('abort', onAbort)
-        resolve(truncateMiddle(`${summary}\n${output.trim() || '(sin salida)'}`))
+        resolve(truncateMiddle(text()))
       }
-      child.on('error', (error) => finish(`No se pudo ejecutar el comando: ${error.message}`))
-      child.on('close', (code) => finish(reason ? `Proceso detenido: ${reason}.` : `Código de salida: ${code}`))
+      const data = (): string => output.trim() || '(no output)'
+      child.on('error', (error) => finish(() => toolText(ctx, 'tool.cmd.failed', { error: error.message, data: data() })))
+      child.on('close', (code) =>
+        finish(() =>
+          stopped === 'timeout'
+            ? toolText(ctx, 'tool.cmd.timeout', { seconds: timeout_seconds, data: data() })
+            : stopped === 'cancelled'
+              ? toolText(ctx, 'tool.cmd.cancelled', { data: data() })
+              : toolText(ctx, 'tool.cmd.exit', { code: String(code), data: data() })
+        )
+      )
     })
   }
 })

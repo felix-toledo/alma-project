@@ -32,9 +32,9 @@ describe('compose', () => {
   })
 
   it('rejects unknown names with the valid options', () => {
-    expect(() => compose({ palette: 'nope' })).toThrow(/Paleta desconocida.*papel/)
-    expect(() => compose({ elements: [{ type: 'dragon' }] })).toThrow(/Elemento desconocido.*blob/)
-    expect(() => compose({ font: 'comic' })).toThrow(/Fuente desconocida.*moderna/)
+    expect(() => compose({ palette: 'nope' })).toThrow(/Unknown palette.*papel/)
+    expect(() => compose({ elements: [{ type: 'dragon' }] })).toThrow(/Unknown element.*blob/)
+    expect(() => compose({ font: 'comic' })).toThrow(/Unknown font.*moderna/)
   })
 
   it('keeps text readable when brand colors would hide it', () => {
@@ -67,7 +67,7 @@ describe('user library', () => {
     writeFileSync(join(dir, 'MiFuente.ttf'), 'fake')
     const library = await loadLibrary(dir)
     const { svg, summary } = compose({ title: 'Hola', font: 'mifuente', elements: [{ type: 'estrella' }, { type: 'Flor' }], seed: 3 }, library)
-    expect(summary).toContain('paleta: marca')
+    expect(summary).toContain('palette: marca')
     expect(svg).toContain('#102030')
     expect(svg).toContain("font-family:'u-mifuente'")
     expect(svg).toContain('data:image/svg+xml') // the logo, as an image
@@ -90,15 +90,15 @@ describe('user library', () => {
     )
     const library = await loadLibrary(dir)
     const { svg, summary } = compose({ recipe: 'Anuncio', title: 'Hola', elements: [{ type: 'circulo' }], seed: 1 }, library)
-    expect(summary).toMatch(/Receta: Anuncio · Plantilla: anuncio · paleta: neon/)
+    expect(summary).toMatch(/Recipe: Anuncio · Template: anuncio · palette: neon/)
     expect(svg).toMatch(/<svg [^>]*viewBox="0 0 24 24"[^>]* color="#123456" style="--acento:#abcdef">/)
     expect(svg).not.toContain('onload')
     expect(svg).toContain('<circle r=') // the caller's elements add to the recipe's
     expect(svg).not.toContain('Q0 0') // no destellos from the anuncio template
-    expect(() => compose({ recipe: 'nada' }, library)).toThrow(/Receta desconocida.*anuncio/)
+    expect(() => compose({ recipe: 'nada' }, library)).toThrow(/Unknown recipe.*anuncio/)
 
     writeFileSync(join(dir, 'recetas.json'), '{"mala": {"template": "inventada"}}')
-    await expect(loadLibrary(dir)).rejects.toThrow(/receta "mala".*template/)
+    await expect(loadLibrary(dir)).rejects.toThrow(/recipe "mala".*template/)
   })
 })
 
@@ -112,7 +112,7 @@ describe('compose_image tool', () => {
       host: { request: async (request: HostRequest) => (requests.push(request), { ok: true, message: '' }) }
     }
     const result = await composeImageTool.run({ template: 'cita', title: 'Ser y estar', seed: 5 }, ctx)
-    expect(result).toMatch(/^Imagen guardada: imagenes\/ser-y-estar-\d+-\d+\.png$/m)
+    expect(result).toMatch(/^Image saved: imagenes\/ser-y-estar-\d+-\d+\.png$/m)
     const files = readdirSync(join(workspace, 'imagenes'))
     expect(files.some((f) => f.endsWith('.svg'))).toBe(true)
     const request = requests[0] as Extract<HostRequest, { action: 'image.render' }>

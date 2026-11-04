@@ -200,7 +200,7 @@ function blobPath(r: number, rng: () => number): string {
   })
   const at = (i: number): number[] => pts[(i + count) % count]
   let d = `M${n(pts[0][0])} ${n(pts[0][1])}`
-  // Catmull-Rom through the points, as cubic Béziers: a smooth closed blob.
+  // Catmull-Rom through the points, as cubic Bezier curves: a smooth closed blob.
   for (let i = 0; i < count; i++) {
     const [p0, p1, p2, p3] = [at(i - 1), at(i), at(i + 1), at(i + 2)]
     d += `C${n(p1[0] + (p2[0] - p0[0]) / 6)} ${n(p1[1] + (p2[1] - p0[1]) / 6)} ${n(p2[0] - (p3[0] - p1[0]) / 6)} ${n(p2[1] - (p3[1] - p1[1]) / 6)} ${n(p2[0])} ${n(p2[1])}`

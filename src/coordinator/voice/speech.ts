@@ -1,5 +1,10 @@
 // Pure helpers for the voice assistant: what to say out loud, yes/no answers and end-of-speech detection.
+import type { Language } from '../../shared/i18n/language'
+import { translate } from '../../shared/i18n/messages'
 import type { ChatMessage } from '../../shared/types'
+
+// The yes/no and closing vocabulary lives in shared (both languages at once); voice code keeps importing it from here.
+export { isGoodbye, parseYesNo } from '../../shared/i18n/vocab'
 
 /** The tool a model calls in a voice conversation when nothing is left to say or wait for. */
 export const END_VOICE_TOOL = 'end_voice_conversation'
@@ -15,12 +20,12 @@ export function conversationEnded(messages: ChatMessage[]): boolean {
 }
 
 /** Markdown answer → plain text worth hearing: no code, URLs, tables or formatting marks. */
-export function speakable(markdown: string): string {
+export function speakable(markdown: string, language: Language = 'es'): string {
   return markdown
-    .replace(/```[\s\S]*?```/g, ' (te dejé el código en la pantalla) ')
+    .replace(/```[\s\S]*?```/g, ` ${translate(language, 'voice.say.code')} `)
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/https?:\/\/\S+/g, 'un enlace')
+    .replace(/https?:\/\/\S+/g, translate(language, 'voice.say.link'))
     .replace(/^\s*\|.*\|\s*$/gm, '')
     .replace(/^\s{0,3}#{1,6}\s+/gm, '')
     .replace(/^\s*[-*+]\s+\[[ xX]\]\s+/gm, '')
@@ -57,6 +62,8 @@ export function splitSentences(text: string, max = 280): string[] {
 export class SentenceStream {
   private buffer = ''
 
+  constructor(private language: Language = 'es') {}
+
   push(text: string): string[] {
     this.buffer += text
     const fences = this.buffer.split('```').length - 1
@@ -64,7 +71,7 @@ export class SentenceStream {
     let cut = -1
     for (const match of region.matchAll(/[.!?…:]+["»)]?(?=\s)|\n/g)) cut = match.index + match[0].length
     if (cut <= 0) return []
-    const ready = speakable(this.buffer.slice(0, cut))
+    const ready = speakable(this.buffer.slice(0, cut), this.language)
     this.buffer = this.buffer.slice(cut)
     // One sentence per piece: the first one synthesizes (and sounds) sooner than a whole paragraph.
     return ready ? splitSentences(ready) : []
@@ -72,31 +79,28 @@ export class SentenceStream {
 
   /** Whatever is left when the model stops (or before it runs a tool). */
   flush(): string[] {
-    const rest = speakable(this.buffer)
+    const rest = speakable(this.buffer, this.language)
     this.buffer = ''
     return rest ? [rest] : []
   }
 }
 
 /** Fillers said right away so silence never feels like a hang (cached as audio after the first time). */
-export const FILLERS = {
-  thinking: ['Mmm…', 'A ver…', 'Mmm, dejame pensar.', 'Esperá que pienso.', 'Ya te contesto.'],
-  searching: ['Dame un segundo, que busco.', 'Ya va, lo estoy buscando.', 'Un momento, que me fijo.']
+export function fillers(language: Language = 'es'): { thinking: string[]; searching: string[] } {
+  return {
+    thinking: ([1, 2, 3, 4, 5] as const).map((n) => translate(language, `voice.filler.thinking.${n}`)),
+    searching: ([1, 2, 3] as const).map((n) => translate(language, `voice.filler.searching.${n}`))
+  }
 }
 
-/** "Sí, dale" → yes; "no, cancelá" → no; anything else → null (ask again). */
-export function parseYesNo(text: string): 'yes' | 'no' | null {
-  const t = text
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^\p{L}\s]/gu, ' ')
-  const no = /\b(no|nop|nunca|cancela\w*|rechaza\w*|para|frena|negativo|mejor no)\b/.test(t)
-  const yes = /\b(si|dale|ok|okay|claro|bueno|perfecto|adelante|hacelo|permiti\w*|acepto|afirmativo|de una)\b/.test(t)
-  if (no && !yes) return 'no'
-  if (yes && !no) return 'yes'
-  return null
+export const FILLERS = fillers('es')
+
+/** What Alma asks out loud before running something that needs the person's yes. */
+export function approvalQuestion(language: Language, toolName: string, flagged: boolean): string {
+  return translate(language, 'voice.approval.ask', { action: toolName.replace(/_/g, ' '), risky: flagged ? translate(language, 'voice.approval.risky') : '' })
 }
+
+export const approvalRetry = (language: Language): string => translate(language, 'voice.approval.retry')
 
 const CHUNK_MS = 80
 
@@ -199,21 +203,6 @@ export function isEcho(heard: string, said: string): boolean {
 export function followUpMs(answer: string): number {
   return /[?¿]\s*["»)]?\s*$/.test(answer.trim()) ? 10_000 : 6_000
 }
-
-/** "Gracias", "listo, nada más", "chau": the user is closing the conversation, not asking something new. */
-export function isGoodbye(text: string): boolean {
-  const t = text
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^\p{L}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return GOODBYE.test(t)
-}
-
-const CLOSING = 'gracias|muchas gracias|listo|nada|nada mas|chau|chao|adios|eso es todo|eso era todo|ya esta|esta bien|ok|okey|perfecto|genial|buenisimo|joya|de nada|hasta luego|nos vemos'
-const GOODBYE = new RegExp(`^(no )?(${CLOSING})( (${CLOSING}|alma))*$`)
 
 export function int16ToFloat(pcm: Int16Array): Float32Array {
   return Float32Array.from(pcm, (x) => x / 32768)

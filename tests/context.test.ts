@@ -19,7 +19,7 @@ describe('compactHistory (spec 024)', () => {
     expect(old.length).toBeLessThan(2000)
     expect(old.startsWith('aaa')).toBe(true)
     expect(old.endsWith('zzz')).toBe(true)
-    expect(old).toContain('recortado')
+    expect(old).toContain('trimmed')
     expect(out[3].content.some((b) => b.type === 'image')).toBe(false)
     expect(out[3].content.find((b) => b.type === 'text')).toEqual({ type: 'text', text: 'mirá' })
     expect(results(out[6])[0].content).toBe(big)
@@ -36,7 +36,7 @@ describe('compactHistory (spec 024)', () => {
     for (let i = 0; i < 8; i++) run.push(call(`c${i}`), result(`c${i}`, huge))
     const out = compactHistory(run)
     expect(results(out[2])[0].content.length).toBeLessThan(3500)
-    expect(results(out[2])[0].content).toContain('recortado')
+    expect(results(out[2])[0].content).toContain('trimmed')
     expect(results(out.at(-1)!)[0].content).toBe(huge)
   })
 

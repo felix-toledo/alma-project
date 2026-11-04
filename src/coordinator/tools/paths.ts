@@ -23,12 +23,12 @@ function realpathOfExistingAncestor(path: string): string {
  * Model output is untrusted: `..`, absolute paths elsewhere and symlinks are all checked.
  */
 export function resolveInWorkspace(workspace: string, path: string): string {
-  if (!workspace) throw new ToolError('No hay carpeta de trabajo seleccionada para esta conversación.')
-  if (!existsSync(workspace)) throw new ToolError(`La carpeta de trabajo no existe: ${workspace}`)
+  if (!workspace) throw new ToolError('tool.cwd.none')
+  if (!existsSync(workspace)) throw new ToolError('tool.cwd.missing', { path: workspace })
   const root = realpathSync(workspace)
   const target = resolve(root, path || '.')
   if (!isInside(root, target) || !isInside(root, realpathOfExistingAncestor(target))) {
-    throw new ToolError(`La ruta ${path} está fuera de la carpeta de trabajo.`)
+    throw new ToolError('tool.cwd.outside', { path })
   }
   return target
 }

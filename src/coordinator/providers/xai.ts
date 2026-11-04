@@ -3,13 +3,15 @@
 // Meta's Muse models (https://api.meta.ai/v1).
 import OpenAI from 'openai'
 import * as z from 'zod/v4'
+import type { Language } from '../../shared/i18n/language'
+import { translate } from '../../shared/i18n/messages'
 import type { Block, ChatMessage, ProviderId } from '../../shared/types'
 import { ProviderConfigError, type Provider, type ReviewVerdict, type StopReason, type TurnRequest, type TurnResult } from './types'
 
 type ChatParam = OpenAI.Chat.ChatCompletionMessageParam
 
 const ReviewSchema = z.object({ verdict: z.enum(['allow', 'flag']), reason: z.string() })
-const JSON_ONLY = '\nRespondé solo con un objeto JSON: {"verdict": "allow" | "flag", "reason": "<por qué>"}.'
+const JSON_ONLY = '\nAnswer only with a JSON object: {"verdict": "allow" | "flag", "reason": "<why>"}.'
 
 /**
  * `replayReasoning`: DeepSeek's thinking mode with tools rejects (400) any later request that doesn't carry its
@@ -170,11 +172,16 @@ export class XaiProvider implements Provider {
   private client: OpenAI
   private defaultModel?: Promise<string>
 
-  constructor(apiKey: string, baseUrl: string, private readonly flavor: Flavor = XAI) {
+  constructor(
+    apiKey: string,
+    baseUrl: string,
+    private readonly flavor: Flavor = XAI,
+    private readonly language: Language = 'es'
+  ) {
     this.id = flavor.id
     const key = apiKey || process.env[flavor.envVar]
     if (!key) {
-      throw new ProviderConfigError(`Falta la API key de ${flavor.name}. Cargala en Configuración → Proveedores o definí ${flavor.envVar}.`)
+      throw new ProviderConfigError(translate(language, 'provider.missingKey', { name: flavor.name, envVar: flavor.envVar }))
     }
     this.client = new OpenAI({ apiKey: key, baseURL: baseUrl, fetch: readableErrorsFetch })
   }
@@ -183,7 +190,7 @@ export class XaiProvider implements Provider {
     if (model) return model
     this.defaultModel ??= this.listModels().then((ids) => {
       const picked = this.flavor.pickDefaultModel(ids)
-      if (!picked) throw new ProviderConfigError(`No se encontró un modelo disponible en tu cuenta de ${this.flavor.name}.`)
+      if (!picked) throw new ProviderConfigError(translate(this.language, 'provider.noModel', { name: this.flavor.name }))
       return picked
     })
     return this.defaultModel
@@ -213,7 +220,7 @@ export class XaiProvider implements Provider {
       )
       .catch((error: unknown) => {
         if (error instanceof OpenAI.AuthenticationError) {
-          throw new ProviderConfigError(`${this.flavor.name} rechazó la API key. Revisala en Configuración → Proveedores.`)
+          throw new ProviderConfigError(translate(this.language, 'provider.rejected', { name: this.flavor.name }))
         }
         throw error
       })
@@ -276,7 +283,7 @@ export class XaiProvider implements Provider {
     return {
       content,
       stopReason: mapFinishReason(finishReason, calls.length > 0),
-      stopDetail: finishReason === 'content_filter' ? `${this.flavor.name} filtró la respuesta.` : undefined,
+      stopDetail: finishReason === 'content_filter' ? translate(this.language, 'provider.filtered', { name: this.flavor.name }) : undefined,
       usage,
       model
     }
@@ -311,7 +318,7 @@ export class XaiProvider implements Provider {
       const raw = response.choices[0]?.message.content ?? ''
       return ReviewSchema.parse(JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)))
     } catch {
-      return { verdict: 'flag', reason: 'El revisor no devolvió un veredicto válido.' }
+      return { verdict: 'flag', reason: 'The reviewer did not return a valid verdict.' }
     }
   }
 

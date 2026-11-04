@@ -3,6 +3,9 @@ import type { MessagePortMain } from 'electron'
 import { audit, initAudit } from '../shared/audit'
 import { effectiveProfile } from '../shared/defaults'
 import type { JudgmentRule } from '../shared/home'
+import { formatDateTime } from '../shared/i18n/format'
+import { translate } from '../shared/i18n/messages'
+import { welcomeNoteFile } from '../shared/i18n/names'
 import type {
   AudioEnvelope,
   ChatMessage,
@@ -25,6 +28,9 @@ import { join } from 'node:path'
 import { repairDanglingToolUses, runAgent } from './agent'
 import { ApprovalBroker } from './approval'
 import { listImageModels } from './images'
+import { houseThreadTitle, routineThreadTitle } from './generated'
+import { houseRulePrompt } from './prompts/house'
+import { approvalNotice, reminderNotice, routineNotice, ruleFailedNotice } from './notices'
 import { erasePersonalFiles, exportPersonalData } from './privacy'
 import { TelegramChannel } from './channels/telegram'
 import { WhatsAppChannel } from './channels/whatsapp'
@@ -40,10 +46,10 @@ import { WorkerEmbedder } from './knowledge/embedder'
 import { McpManager } from './mcp'
 import { getProvider } from './providers'
 import { RoutineRunner } from './routines'
-import { ThreadStore, summarize, UNTITLED } from './store'
+import { isUntitled, ThreadStore, summarize, untitledTitle } from './store'
 import { imageDataUrl } from './tools/media'
 import { resolveInWorkspace } from './tools/paths'
-import type { Host } from './tools/types'
+import { shownError, type Host } from './tools/types'
 import type { StateChange } from './home/hub'
 
 let settings: Settings
@@ -88,28 +94,15 @@ const host: Host = {
 
 function notifyApproval(approval: PendingApproval): void {
   const thread = store.get(approval.threadId)
-  if (approval.toolName === 'instagram_publish') {
-    const caption = approval.preview?.caption?.split('\n')[0] ?? ''
-    toParent({ type: 'notify', title: 'Post listo para Instagram', body: caption || thread.title, threadId: thread.id })
-  } else {
-    toParent({ type: 'notify', title: 'Un agente necesita tu aprobación', body: thread.title, threadId: thread.id })
-  }
+  const caption = approval.preview?.caption?.split('\n')[0]
+  toParent({ type: 'notify', ...approvalNotice(settings.language, { toolName: approval.toolName, caption }, thread.title), threadId: thread.id })
 }
 
 const approvals = new ApprovalBroker((event) => {
   broadcast(event)
   if (event.type === 'approval.request') notifyApproval(event.approval)
 })
-const mcp = new McpManager((servers) => broadcast({ type: 'mcp.status', servers }))
-
-const WELCOME_NOTE = `# Bienvenida
-
-Este es tu vault: una carpeta de notas en markdown.
-
-- Alma busca en estas notas para responderte y guarda lo que aprende en la carpeta \`Alma/\`.
-- \`Alma/Recuerdos.md\` tiene lo que Alma recuerda de vos; editalo cuando quieras.
-- \`Alma/Conocimientos/\` tiene las notas que escribe Alma.
-`
+const mcp = new McpManager((servers) => broadcast({ type: 'mcp.status', servers }), () => settings.language)
 
 let vaultSync = Promise.resolve()
 
@@ -126,7 +119,7 @@ async function openActiveVault(): Promise<void> {
   knowledge = null
   await previous?.close()
   if (target && existsSync(target)) {
-    embedder ??= new WorkerEmbedder(join(dataDir, 'models'), () => knowledge?.emitStatus())
+    embedder ??= new WorkerEmbedder(join(dataDir, 'models'), () => knowledge?.emitStatus(), () => settings.language)
     try {
       knowledge = new KnowledgeBase({
         root: target,
@@ -137,12 +130,13 @@ async function openActiveVault(): Promise<void> {
           if (!result.ok) throw new Error(result.message)
         },
         onStatus: (status) => broadcast({ type: 'knowledge.status', status }),
-        onChanged: () => broadcast({ type: 'vault.changed' })
+        onChanged: () => broadcast({ type: 'vault.changed' }),
+        language: () => settings.language
       })
       knowledge.start()
       knowledge.warmUp()
     } catch (error) {
-      console.error('[coordinator] no se pudo abrir el vault:', error)
+      console.error('[coordinator] could not open the vault:', error)
     }
   }
   broadcast({ type: 'knowledge.status', status: knowledge?.status() ?? null })
@@ -159,7 +153,7 @@ function vaultFor(root: string): KnowledgeBase | null {
   if (!base) {
     try {
       mkdirSync(root, { recursive: true })
-      embedder ??= new WorkerEmbedder(join(dataDir, 'models'), () => knowledge?.emitStatus())
+      embedder ??= new WorkerEmbedder(join(dataDir, 'models'), () => knowledge?.emitStatus(), () => settings.language)
       base = new KnowledgeBase({
         root,
         dataDir,
@@ -169,12 +163,13 @@ function vaultFor(root: string): KnowledgeBase | null {
           if (!result.ok) throw new Error(result.message)
         },
         onStatus: () => {},
-        onChanged: () => broadcast({ type: 'vault.changed' })
+        onChanged: () => broadcast({ type: 'vault.changed' }),
+        language: () => settings.language
       })
       base.start()
       companyVaults.set(root.toLowerCase(), base)
     } catch (error) {
-      console.error('[coordinator] no se pudo abrir el vault de la empresa:', error)
+      console.error('[coordinator] could not open the company vault:', error)
       return null
     }
   }
@@ -188,34 +183,34 @@ function companySettings(company: Company): Settings {
 }
 
 function activeVault(): KnowledgeBase {
-  if (!knowledge) throw new Error('No hay un vault abierto.')
+  if (!knowledge) throw new Error(translate(settings.language, 'error.noVault'))
   return knowledge
 }
 
 function titleFrom(text: string): string {
   const line = text.trim().split('\n')[0]
-  return line.length > 60 ? `${line.slice(0, 57)}…` : line || UNTITLED
+  return line.length > 60 ? `${line.slice(0, 57)}…` : line || untitledTitle(settings.language)
 }
 
 /** Starts an agent run on a thread. Throws right away if one is already running; `done` settles when it ends. */
-function startRun(threadId: string, text: string, options: { noAsk?: boolean; autoApprove?: string[] } = {}): { done: Promise<void> } {
-  if (runs.has(threadId)) throw new Error('Ya hay una ejecución en curso en esta conversación.')
+function startRun(threadId: string, text: string, options: { noAsk?: boolean; autoApprove?: string[]; unattended?: boolean } = {}): { done: Promise<void> } {
+  if (runs.has(threadId)) throw new Error(translate(settings.language, 'error.runBusy'))
   const thread = store.get(threadId)
   const agent = settings.agents.find((a) => a.id === thread.agentId) ?? settings.agents[0]
-  if (!agent) throw new Error('No hay agentes configurados.')
+  if (!agent) throw new Error(translate(settings.language, 'error.noAgents'))
   // The model chosen in the chat header answers instead of the agent's own.
   const profile = effectiveProfile(agent, thread)
   // A company agent works with its company's vault, accounts and budget.
   const company = profile.companyId ? settings.companies.find((c) => c.id === profile.companyId) : undefined
   if (company) {
     const why = companies.overBudget(company, profile.id)
-    if (why) throw new Error(`No puede trabajar: ${why}.`)
+    if (why) throw new Error(translate(settings.language, 'error.cannotWork', { why }))
   }
 
   repairDanglingToolUses(thread.messages)
   const userMessage: ChatMessage = { role: 'user', content: [{ type: 'text', text }], ts: Date.now() }
   thread.messages.push(userMessage)
-  if (thread.title === UNTITLED) thread.title = titleFrom(text)
+  if (isUntitled(thread.title)) thread.title = titleFrom(text)
   store.save(thread.id)
   broadcast({ type: 'message', scope: { threadId }, message: userMessage })
   broadcast({ type: 'thread.updated', summary: summarize(thread) })
@@ -226,6 +221,7 @@ function startRun(threadId: string, text: string, options: { noAsk?: boolean; au
 
   const done = runAgent(profile, thread.messages, {
     getSettings: () => (company ? companySettings(company) : settings),
+    language: settings.language,
     thread,
     scope: { threadId },
     signal: controller.signal,
@@ -248,6 +244,7 @@ function startRun(threadId: string, text: string, options: { noAsk?: boolean; au
     company: company ? { company, memberId: profile.id, engine: companies, noAsk: options.noAsk } : null,
     home: company ? null : home,
     autoApprove: options.autoApprove,
+    unattended: options.unattended,
     inboxDir: inboxDir(),
     sendTelegramPhoto: (jpeg, caption) => telegram.notifyPhoto(jpeg, caption),
     onUsage: company ? (usage, provider) => companies.recordUsage(company, profile.id, provider, usage) : undefined
@@ -281,7 +278,7 @@ function patchSettings(patch: Partial<Omit<Settings, 'providers'>>): void {
 
 /** Where a reminder reaches the user: the desktop and, if connected, Telegram. */
 function deliverReminder(routine: Routine): void {
-  toParent({ type: 'notify', title: 'Recordatorio', body: routine.prompt, always: true })
+  toParent({ type: 'notify', ...reminderNotice(settings.language, routine.prompt), always: true })
   void telegram.notify(`⏰ ${routine.prompt}`).catch((error: Error) => console.error('[telegram] reminder:', error.message))
 }
 
@@ -370,15 +367,13 @@ ${body}`)
 function launchHomeRule(rule: JudgmentRule, change: StateChange, thingName: string): void {
   const agentId = settings.agents.some((a) => a.id === settings.home.agentId) ? settings.home.agentId : settings.defaultAgentId
   const thread = store.create(agentId, settings.defaultWorkspace)
-  const at = new Date().toLocaleString('es', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-  thread.title = `Casa · ${rule.name} · ${at}`
+  const at = formatDateTime(settings.language, new Date(), 'dayTime')
+  thread.title = houseThreadTitle(settings.language, rule.name, at)
   store.save(thread.id)
   broadcast({ type: 'thread.updated', summary: summarize(thread) })
-  const prompt = `Se disparó tu regla de la casa «${rule.name}»: «${thingName}» (${change.entityId}) pasó de «${change.from ?? '—'}» a «${change.to ?? '—'}» a las ${at}.
-Lo que tenés que hacer: ${rule.prompt}
-Actuá ahora con las herramientas de la casa (cámaras con camera_look). Si es algo que el usuario debe saber, avisale con send_telegram; si no pasa nada relevante, no lo molestes y terminá con una línea.`
+  const prompt = houseRulePrompt({ rule: rule.name, thing: thingName, entityId: change.entityId, from: change.from, to: change.to, at: formatDateTime('en', new Date(), 'dayTime'), instructions: rule.prompt })
   // The user approved this rule's instructions when it was made, so the camera it asks for doesn't ask again.
-  startRun(thread.id, prompt, { autoApprove: ['camera_look'] }).done.catch((error: Error) => toParent({ type: 'notify', title: `La regla «${rule.name}» falló`, body: error.message, threadId: thread.id }))
+  startRun(thread.id, prompt, { autoApprove: ['camera_look'], unattended: true }).done.catch((error: Error) => toParent({ type: 'notify', ...ruleFailedNotice(settings.language, rule.name, error.message), threadId: thread.id }))
 }
 
 function createHome(): HomeService {
@@ -403,7 +398,7 @@ function createCompanies(): CompanyEngine {
       thread.title = title
       store.save(thread.id)
       broadcast({ type: 'thread.updated', summary: summarize(thread) })
-      const { done } = startRun(thread.id, prompt, options)
+      const { done } = startRun(thread.id, prompt, { ...options, unattended: true })
       return { threadId: thread.id, done: done.then(() => lastAnswer(thread.id)) }
     },
     complete: async (profile, system, prompt) => {
@@ -425,8 +420,12 @@ function createCompanies(): CompanyEngine {
     },
     writeNote: async (company, path, content) => {
       const base = vaultFor(company.vault)
-      if (!base) throw new Error('La empresa no tiene un vault.')
+      if (!base) throw new Error(translate(settings.language, 'error.companyNoVault'))
       await base.write(path, content)
+    },
+    noteExists: (company, path) => {
+      const base = vaultFor(company.vault)
+      return !!base && existsSync(join(base.root, ...path.split('/')))
     },
     notify: (title, body) => {
       toParent({ type: 'notify', title, body, always: true })
@@ -521,13 +520,13 @@ function launchRoutine(routine: Routine): { threadId?: string; done: Promise<voi
   }
   const agentId = settings.agents.some((a) => a.id === routine.agentId) ? routine.agentId : settings.defaultAgentId
   const thread = store.create(agentId, routine.workspace || settings.defaultWorkspace)
-  const when = new Date().toLocaleString('es', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-  thread.title = `Rutina · ${routine.name} · ${when}`
+  const when = formatDateTime(settings.language, new Date(), 'dayTime')
+  thread.title = routineThreadTitle(settings.language, routine.name, when)
   store.save(thread.id)
-  const { done } = startRun(thread.id, routine.prompt)
+  const { done } = startRun(thread.id, routine.prompt, { unattended: true })
   const finished = done.then(
-    () => toParent({ type: 'notify', title: `Rutina «${routine.name}» terminada`, body: thread.title, threadId: thread.id }),
-    (error: Error) => toParent({ type: 'notify', title: `La rutina «${routine.name}» falló`, body: error.message, threadId: thread.id })
+    () => toParent({ type: 'notify', ...routineNotice(settings.language, routine.name, { ok: true, threadTitle: thread.title }), threadId: thread.id }),
+    (error: Error) => toParent({ type: 'notify', ...routineNotice(settings.language, routine.name, { ok: false, message: error.message }), threadId: thread.id })
   )
   return { threadId: thread.id, done: finished }
 }
@@ -558,7 +557,7 @@ async function handle(request: CoordinatorRequest): Promise<unknown> {
     }
     case 'threads.update': {
       const thread = store.get(request.threadId)
-      if (request.title !== undefined) thread.title = request.title.trim() || UNTITLED
+      if (request.title !== undefined) thread.title = request.title.trim() || untitledTitle(settings.language)
       if (request.agentId !== undefined) thread.agentId = request.agentId
       if (request.workspace !== undefined) thread.workspace = request.workspace
       if (request.model !== undefined) {
@@ -601,7 +600,7 @@ async function handle(request: CoordinatorRequest): Promise<unknown> {
       return routines.snapshot()
     case 'routines.runNow': {
       const routine = settings.routines.find((r) => r.id === request.routineId)
-      if (!routine) throw new Error('La rutina no existe.')
+      if (!routine) throw new Error(translate(settings.language, 'error.routineMissing'))
       // Testing a reminder must not use it up: a one-off would count as already fired.
       if (routine.action === 'reminder') {
         deliverReminder(routine)
@@ -628,7 +627,7 @@ async function handle(request: CoordinatorRequest): Promise<unknown> {
     case 'vault.init': {
       await mkdir(request.path, { recursive: true })
       const visible = (await readdir(request.path)).filter((name) => !name.startsWith('.'))
-      if (visible.length === 0) await writeFile(join(request.path, 'Bienvenida.md'), WELCOME_NOTE, 'utf8')
+      if (visible.length === 0) await writeFile(join(request.path, welcomeNoteFile(settings.language)), translate(settings.language, 'vault.welcomeNote'), 'utf8')
       return null
     }
     case 'knowledge.status':
@@ -735,7 +734,7 @@ function attachClient(port: MessagePortMain): void {
     if (request?.kind !== 'request') return
     handle(request)
       .then((result) => port.postMessage({ kind: 'response', reqId: request.reqId, ok: true, result }))
-      .catch((error: Error) => port.postMessage({ kind: 'response', reqId: request.reqId, ok: false, error: error.message }))
+      .catch((error: Error) => port.postMessage({ kind: 'response', reqId: request.reqId, ok: false, error: shownError(error, settings.language) }))
   })
   port.on('close', () => clients.delete(port))
   port.start()
@@ -748,9 +747,13 @@ process.parentPort.on('message', (event) => {
       settings = message.settings
       dataDir = message.dataDir
       initAudit(dataDir, 'coordinator')
-      store = new ThreadStore(message.dataDir)
-      routines = new RoutineRunner(message.dataDir, () => settings.routines, launchRoutine, (state) =>
-        broadcast({ type: 'routines.state', state })
+      store = new ThreadStore(message.dataDir, () => settings.language)
+      routines = new RoutineRunner(
+        message.dataDir,
+        () => settings.routines,
+        launchRoutine,
+        (state) => broadcast({ type: 'routines.state', state }),
+        () => settings.language
       )
       routines.start()
       applyRetention()

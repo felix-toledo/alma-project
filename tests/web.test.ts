@@ -41,14 +41,14 @@ describe('web tools', () => {
       addresses.byName['evil.example'] = '192.168.1.5'
       const fetchMock = vi.fn()
       vi.stubGlobal('fetch', fetchMock)
-      await expect(fetchUrlTool.run({ url: 'https://evil.example/x' }, ctx)).rejects.toThrow(/red local/)
+      await expect(fetchUrlTool.run({ url: 'https://evil.example/x' }, ctx)).rejects.toThrow(/local network/)
       expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('checks every redirect before following it', async () => {
       const fetchMock = vi.fn(async () => new Response(null, { status: 302, headers: { location: 'http://127.0.0.1:8123/api' } }))
       vi.stubGlobal('fetch', fetchMock)
-      await expect(fetchUrlTool.run({ url: 'https://example.com/go' }, ctx)).rejects.toThrow(/red local/)
+      await expect(fetchUrlTool.run({ url: 'https://example.com/go' }, ctx)).rejects.toThrow(/local network/)
       expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 

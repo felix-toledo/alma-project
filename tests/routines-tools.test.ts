@@ -28,17 +28,17 @@ describe('routine tools', () => {
     const [created] = ctx.saved[0]
     expect(created).toMatchObject({ action: 'reminder', prompt: 'Llamar al dentista', schedule: { kind: 'once', at: new Date(2099, 9, 21, 10, 0).getTime() } })
     expect(result).toContain(created.id)
-    expect(await listRoutinesTool.run({}, ctx)).toContain('recordatorio · «Llamar al dentista»')
+    expect(await listRoutinesTool.run({}, ctx)).toContain('reminder · “Llamar al dentista”')
     await deleteRoutineTool.run({ id: created.id }, ctx)
     expect(ctx.settings.routines).toEqual([])
   })
 
   it('rejects dates in the past and unknown agents', async () => {
     const ctx = context()
-    await expect(createReminderTool.run({ message: 'x', when: { type: 'once', at: '2001-01-01T10:00' } }, ctx)).rejects.toThrow(/ya pasó/)
+    await expect(createReminderTool.run({ message: 'x', when: { type: 'once', at: '2001-01-01T10:00' } }, ctx)).rejects.toThrow(/already passed/)
     await expect(
       createRoutineTool.run({ name: 'Resumen', task: 'Resumí las novedades de la carpeta', when: { type: 'daily', time: '09:00' }, agent: 'nadie' }, ctx)
-    ).rejects.toThrow(/No existe el agente/)
+    ).rejects.toThrow(/agent .* does not exist/)
   })
 
   it('creates an agent routine in the conversation workspace that needs approval', async () => {

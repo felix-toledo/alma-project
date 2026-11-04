@@ -1,6 +1,6 @@
 import PptxGenJS from 'pptxgenjs'
 import type JSZip from 'jszip'
-import { notesText, shapeTexts, slideRefs, tableRows, type ParseXml, type SlideRef, type XmlNode } from '../../../shared/pptx'
+import { notesText, PresentationError, shapeTexts, slideRefs, tableRows, type ParseXml, type SlideRef, type XmlNode } from '../../../shared/pptx'
 import { ToolError } from '../types'
 import { inSpan, parseSpan } from './common'
 import { countInParagraphs, elements, openZip, parseXml, replaceInParagraphs, serializeXml, zipToBuffer, zipXml, type Document } from './xml'
@@ -12,11 +12,11 @@ export interface DeckSpec {
 
 export type PptxOp = { op: 'replace'; find: string; with: string } | { op: 'delete_slide'; index: number }
 
-const parse: ParseXml = (xml) => parseXml(xml, 'presentación') as unknown as XmlNode
+const parse: ParseXml = (xml) => parseXml(xml, 'presentation') as unknown as XmlNode
 
 const refsOf = (zip: JSZip, label: string): Promise<SlideRef[]> =>
   slideRefs(zip, parse).catch((error: Error) => {
-    throw new ToolError(`${label}: ${error.message}`)
+    throw error instanceof PresentationError ? new ToolError('tool.office.pptxInvalid', { label }) : error
   })
 
 export async function readPptx(buffer: Buffer, label: string, range?: string): Promise<string> {
@@ -30,12 +30,12 @@ export async function readPptx(buffer: Buffer, label: string, range?: string): P
     if (!file) continue
     const slide = parse(await file.async('string'))
     const lines = shapeTexts(slide).map((s) => `  [${s.name}] ${s.lines.join(' / ')}`)
-    for (const rows of tableRows(slide)) lines.push(`  [tabla]\n${rows.map((r) => `    | ${r.join(' | ')} |`).join('\n')}`)
+    for (const rows of tableRows(slide)) lines.push(`  [table]\n${rows.map((r) => `    | ${r.join(' | ')} |`).join('\n')}`)
     const notes = await notesText(zip, ref, parse)
-    if (notes) lines.push(`  [notas] ${notes.replace(/\n/g, ' / ')}`)
-    parts.push(`Diapositiva ${i + 1}:\n${lines.join('\n') || '  (sin texto)'}`)
+    if (notes) lines.push(`  [notes] ${notes.replace(/\n/g, ' / ')}`)
+    parts.push(`Slide ${i + 1}:\n${lines.join('\n') || '  (no text)'}`)
   }
-  return `Presentación de PowerPoint con ${refs.length} diapositivas.\n\n${parts.join('\n\n')}`
+  return `PowerPoint presentation with ${refs.length} slide(s).\n\n${parts.join('\n\n')}`
 }
 
 const hex = (color: string | undefined, fallback: string): string => (color ?? fallback).replace(/^#/, '').toUpperCase()
@@ -84,14 +84,14 @@ export async function editPptx(buffer: Buffer, label: string, ops: PptxOp[]): Pr
     if (op.op === 'replace') {
       const docs = [...slides.values()]
       const found = docs.reduce((n, doc) => n + countInParagraphs(elements(doc, 'a:p'), 'a:p', 'a:t', op.find), 0)
-      if (!found) throw new ToolError(`«${op.find}» no aparece en ninguna diapositiva (se busca dentro de cada párrafo). Leela con office_read y copiá el texto exacto.`)
+      if (!found) throw new ToolError('tool.office.pptxNotFound', { find: op.find })
       for (const doc of docs) replaceInParagraphs(elements(doc, 'a:p'), 'a:p', 'a:t', op.find, op.with, false)
-      changes.push(`reemplazado «${op.find}» → «${op.with}» (${found} vez${found > 1 ? 'es' : ''})`)
+      changes.push(`replaced “${op.find}” → “${op.with}” (${found} time(s))`)
     } else {
       // Indexes refer to the deck as it was read; the slide is removed from the list, the package and its content types.
       const ref = refs[op.index - 1]
-      if (!ref || deleted.has(op.index)) throw new ToolError(`No existe la diapositiva ${op.index} (hay ${refs.length}).`)
-      if (refs.length - deleted.size <= 1) throw new ToolError('No se puede borrar la única diapositiva que queda.')
+      if (!ref || deleted.has(op.index)) throw new ToolError('tool.office.pptxNoSlide', { index: op.index, count: refs.length })
+      if (refs.length - deleted.size <= 1) throw new ToolError('tool.office.pptxLastSlide')
       deleted.add(op.index)
       for (const el of elements(pres, 'p:sldId')) if (el.getAttribute('r:id') === ref.relId) el.parentNode?.removeChild(el)
       for (const el of elements(presRels, 'Relationship')) if (el.getAttribute('Id') === ref.relId) el.parentNode?.removeChild(el)

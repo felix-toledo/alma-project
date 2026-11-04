@@ -4,6 +4,8 @@ import { existsSync } from 'node:fs'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import * as z from 'zod/v4'
+import type { Language } from '../../shared/i18n/language'
+import { namesOf, resolveName } from '../../shared/i18n/names'
 import { ToolError } from '../tools/types'
 import {
   BACKGROUNDS,
@@ -65,7 +67,7 @@ const SHAPE_COLORS = ['acento', 'acento2', 'texto', 'fondo2']
 
 export const TEMPLATES: Record<string, Template> = {
   titular: {
-    description: 'título enorme a la izquierda con barra de acento',
+    description: 'huge title on the left with an accent bar',
     styles: ['vibrante', 'minimalista'],
     background: 'degradado',
     font: 'impacto',
@@ -82,7 +84,7 @@ export const TEMPLATES: Record<string, Template> = {
     ]
   },
   cita: {
-    description: 'frase o cita centrada con comillas grandes; el autor va en subtitle',
+    description: 'centered phrase or quote with large quotation marks; the author goes in subtitle',
     styles: ['elegante', 'minimalista'],
     background: 'radial',
     font: 'elegante',
@@ -99,7 +101,7 @@ export const TEMPLATES: Record<string, Template> = {
     ]
   },
   anuncio: {
-    description: 'novedad o lanzamiento: etiqueta (badge), título, subtítulo y botón (footer)',
+    description: 'news or launch: label (badge), title, subtitle and button (footer)',
     styles: ['vibrante'],
     background: 'malla',
     font: 'moderna',
@@ -116,7 +118,7 @@ export const TEMPLATES: Record<string, Template> = {
     ]
   },
   promo: {
-    description: 'oferta: sticker circular con el precio o descuento (badge) y título grande',
+    description: 'offer: circular sticker with the price or discount (badge) and a big title',
     styles: ['vibrante'],
     background: 'rayos',
     font: 'impacto',
@@ -147,7 +149,7 @@ export const TEMPLATES: Record<string, Template> = {
     ]
   },
   lista: {
-    description: 'título y una lista de puntos (una línea de text por punto)',
+    description: 'title and a list of points (one line of text per point)',
     styles: ['minimalista', 'organico'],
     background: 'solido',
     grain: true,
@@ -165,7 +167,7 @@ export const TEMPLATES: Record<string, Template> = {
     ]
   },
   consejo: {
-    description: 'tip numerado: número grande (badge, ej. "01"), título y explicación (text)',
+    description: 'numbered tip: big number (badge, e.g. "01"), title and explanation (text)',
     styles: ['minimalista', 'organico'],
     background: 'puntos',
     font: 'geometrica',
@@ -179,7 +181,7 @@ export const TEMPLATES: Record<string, Template> = {
     elements: () => [{ type: 'arco', x: 0.88, y: 0.9, size: 0.36, color: 'acento', opacity: 0.8 }]
   },
   tarjeta: {
-    description: 'tarjeta central sobre fondo con ondas y hojas; mensajes cálidos',
+    description: 'central card over a background with waves and leaves; warm messages',
     styles: ['organico'],
     background: 'ondas',
     font: 'organica',
@@ -196,7 +198,7 @@ export const TEMPLATES: Record<string, Template> = {
     ]
   },
   dividida: {
-    description: 'bloque de color a la izquierda con un motivo y texto a la derecha',
+    description: 'color block on the left with a motif and text on the right',
     styles: ['elegante', 'organico'],
     background: 'mitad',
     font: 'elegante',
@@ -210,7 +212,7 @@ export const TEMPLATES: Record<string, Template> = {
     elements: () => [{ type: 'sol', x: 0.21, y: 0.5, size: 0.3, color: 'fondo' }]
   },
   marco: {
-    description: 'clásica: marco fino doble y texto centrado; premium',
+    description: 'classic: fine double frame and centered text; premium',
     styles: ['elegante'],
     background: 'radial',
     font: 'elegante',
@@ -227,7 +229,7 @@ export const TEMPLATES: Record<string, Template> = {
     ]
   },
   abstracto: {
-    description: 'arte abstracto con formas al azar; el texto es opcional',
+    description: 'abstract art with random shapes; the text is optional',
     styles: STYLES,
     background: 'malla',
     font: 'moderna',
@@ -250,7 +252,7 @@ export const TEMPLATES: Record<string, Template> = {
       }))
   },
   minimal: {
-    description: 'mucho aire: un título breve y un solo acento',
+    description: 'lots of air: a short title and a single accent',
     styles: ['minimalista'],
     background: 'solido',
     font: 'moderna',
@@ -270,7 +272,7 @@ const TEMPLATE_NAMES = Object.keys(TEMPLATES) as [string, ...string[]]
 // ---------------------------------------------------------------------------
 // Input
 
-const Color = z.string().regex(HEX, 'Color en hex, por ejemplo #ff8800')
+const Color = z.string().regex(HEX, 'Hex color, for example #ff8800')
 
 const PaletteColors = z.object({
   background: Color,
@@ -280,49 +282,49 @@ const PaletteColors = z.object({
 })
 
 export const ComposeSchema = z.object({
-  recipe: z.string().optional().describe('Receta de biblioteca/recetas.json: un combo ya armado; lo que pases además la completa o la cambia'),
-  template: z.enum(TEMPLATE_NAMES).optional().describe('Plantilla de diseño (ver la lista en la descripción)'),
-  style: z.enum(STYLES).optional().describe('Estética; si no indicás paleta o fuente, se eligen dentro de ella'),
-  aspect_ratio: z.enum(['1:1', '4:5', '16:9', '9:16']).optional().describe('Formato; para Instagram usá 4:5 o 1:1'),
-  palette: z.string().optional().describe('Nombre de una paleta incluida o de biblioteca/paletas.json'),
-  colors: PaletteColors.optional().describe('Colores propios (por ejemplo los de marca.md); reemplazan a palette'),
-  background: z.enum(BACKGROUNDS).optional().describe('Fondo; por defecto el de la plantilla'),
-  font: z.string().optional().describe('Fuente del título: una incluida o un archivo de biblioteca/ sin extensión'),
-  body_font: z.string().optional().describe('Fuente del resto del texto'),
+  recipe: z.string().optional().describe('Recipe from biblioteca/recetas.json: a ready-made combo; whatever else you pass completes or changes it'),
+  template: z.enum(TEMPLATE_NAMES).optional().describe('Design template (see the list in the description)'),
+  style: z.enum(STYLES).optional().describe('Aesthetic; if you give no palette or font, they are chosen within it'),
+  aspect_ratio: z.enum(['1:1', '4:5', '16:9', '9:16']).optional().describe('Format; for Instagram use 4:5 or 1:1'),
+  palette: z.string().optional().describe('Name of an included palette or one from biblioteca/paletas.json'),
+  colors: PaletteColors.optional().describe('Own colors (for example the ones in marca.md); they replace palette'),
+  background: z.enum(BACKGROUNDS).optional().describe("Background; the template's by default"),
+  font: z.string().optional().describe('Title font: an included one or a file in biblioteca/ without extension'),
+  body_font: z.string().optional().describe('Font for the rest of the text'),
   title: z.string().max(140).optional(),
   subtitle: z.string().max(200).optional(),
-  text: z.string().max(600).optional().describe('Cuerpo; en la plantilla lista, una línea por punto'),
-  badge: z.string().max(32).optional().describe('Etiqueta corta: "NUEVO", "-30%", "12 NOV", "01"'),
-  footer: z.string().max(80).optional().describe('Pie: @usuario, web o llamada a la acción'),
+  text: z.string().max(600).optional().describe('Body; in the lista template, one line per point'),
+  badge: z.string().max(32).optional().describe('Short label: "NEW", "-30%", "12 NOV", "01"'),
+  footer: z.string().max(80).optional().describe('Footer: @user, web or call to action'),
   elements: z
     .array(
       z.object({
-        type: z.string().describe('Forma incluida o pieza de biblioteca/ (nombre del archivo sin extensión)'),
-        x: z.number().min(-0.5).max(1.5).optional().describe('Centro horizontal, 0 = izquierda, 1 = derecha'),
-        y: z.number().min(-0.5).max(1.5).optional().describe('Centro vertical, 0 = arriba, 1 = abajo'),
-        size: z.number().min(0.01).max(1.5).optional().describe('Tamaño relativo al lado corto (0.25 por defecto)'),
+        type: z.string().describe('Included shape or piece from biblioteca/ (file name without extension)'),
+        x: z.number().min(-0.5).max(1.5).optional().describe('Horizontal center, 0 = left, 1 = right'),
+        y: z.number().min(-0.5).max(1.5).optional().describe('Vertical center, 0 = top, 1 = bottom'),
+        size: z.number().min(0.01).max(1.5).optional().describe('Size relative to the short side (0.25 by default)'),
         color: z.string().optional().describe('acento, acento2, texto, fondo, fondo2 o un hex'),
-        color2: z.string().optional().describe('Segundo color (detalles de las piezas que lo usan)'),
+        color2: z.string().optional().describe('Second color (details of the pieces that use it)'),
         rotation: z.number().optional(),
         opacity: z.number().min(0).max(1).optional()
       })
     )
     .max(30)
     .optional()
-    .describe('Formas o piezas extra; se suman a las de la plantilla'),
-  decorations: z.boolean().optional().describe('false = sin las formas que trae la plantilla, solo las de elements'),
-  photo: z.string().optional().describe('Imagen de biblioteca/ (sin extensión) para usar de fondo'),
-  logo: z.boolean().optional().describe('Poner biblioteca/logo.* en una esquina; por defecto sí, si existe'),
-  grain: z.boolean().optional().describe('Textura de grano encima'),
-  seed: z.number().int().optional().describe('Misma semilla y mismos datos = misma imagen; cambiala para otra variante'),
+    .describe("Extra shapes or pieces; added to the template's"),
+  decorations: z.boolean().optional().describe('false = without the shapes the template brings, only those in elements'),
+  photo: z.string().optional().describe('Image from biblioteca/ (no extension) to use as background'),
+  logo: z.boolean().optional().describe('Put biblioteca/logo.* in a corner; on by default, if it exists'),
+  grain: z.boolean().optional().describe('Grain texture on top'),
+  seed: z.number().int().optional().describe('Same seed and same data = same image; change it for another variant'),
   svg_overlay: z
     .string()
     .max(20_000)
     .optional()
     .describe(
-      'SVG propio (elementos sueltos, sin <svg>) que se dibuja sobre el fondo y debajo del texto. Coordenadas en píxeles: 1080×1080 (1:1), 1080×1350 (4:5), 1920×1080 (16:9), 1080×1920 (9:16)'
+      'Own SVG (loose elements, no <svg>) drawn over the background and under the text. Coordinates in pixels: 1080×1080 (1:1), 1080×1350 (4:5), 1920×1080 (16:9), 1080×1920 (9:16)'
     ),
-  filename: z.string().optional().describe('Nombre corto para el archivo, sin extensión')
+  filename: z.string().optional().describe('Short name for the file, without extension')
 })
 export type ComposeInput = z.infer<typeof ComposeSchema>
 
@@ -330,11 +332,11 @@ export type ComposeInput = z.infer<typeof ComposeSchema>
 export function libraryGuide(): string {
   const palettes = STYLES.map((style) => `${style}: ${Object.keys(PALETTES).filter((name) => PALETTES[name].style === style).join(', ')}`)
   return [
-    `Plantillas: ${TEMPLATE_NAMES.map((name) => `${name} (${TEMPLATES[name].description})`).join('; ')}.`,
-    `Paletas — ${palettes.join(' · ')}.`,
-    `Fuentes: ${Object.entries(FONTS).map(([name, font]) => `${name} (${font.family})`).join(', ')}.`,
-    `Fondos: ${BACKGROUNDS.join(', ')}.`,
-    `Formas: ${Object.keys(SHAPES).join(', ')}.`
+    `Templates: ${TEMPLATE_NAMES.map((name) => `${name} (${TEMPLATES[name].description})`).join('; ')}.`,
+    `Palettes — ${palettes.join(' · ')}.`,
+    `Fonts: ${Object.entries(FONTS).map(([name, font]) => `${name} (${font.family})`).join(', ')}.`,
+    `Backgrounds: ${BACKGROUNDS.join(', ')}.`,
+    `Shapes: ${Object.keys(SHAPES).join(', ')}.`
   ].join('\n')
 }
 
@@ -361,7 +363,7 @@ async function readJson(path: string, label: string): Promise<Record<string, unk
   try {
     return JSON.parse(await readFile(path, 'utf8'))
   } catch (error) {
-    throw new ToolError(`biblioteca/${label} no es JSON válido: ${(error as Error).message}`)
+    throw new ToolError('tool.compose.badJson', { label, error: (error as Error).message })
   }
 }
 
@@ -382,34 +384,41 @@ function toPalette(colors: z.infer<typeof PaletteColors>): Palette {
   }
 }
 
-export async function loadLibrary(dir: string): Promise<UserLibrary> {
+/** The library folder in use: `biblioteca/` or `library/`, whichever exists; the language's own when neither does (spec 025 BR-23). */
+export function libraryPath(workspace: string, language: Language): string {
+  return join(workspace, resolveName(language, namesOf('names.libraryDir'), (name) => existsSync(join(workspace, name))))
+}
+
+export async function loadLibrary(dir: string, language: Language = 'es'): Promise<UserLibrary> {
   const library = emptyLibrary()
   if (!existsSync(dir)) return library
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
+  const entries = await readdir(dir, { withFileTypes: true })
+  // Each of the two files is read under the name that exists, the language's own when both do.
+  const fileNamed = (key: 'names.recipesFile' | 'names.palettesFile'): string =>
+    resolveName(language, namesOf(key), (name) => entries.some((entry) => entry.isFile() && entry.name.toLowerCase() === name))
+  const recipesFile = fileNamed('names.recipesFile')
+  const palettesFile = fileNamed('names.palettesFile')
+  for (const entry of entries) {
     // Symlinks are skipped: they could point outside the workspace.
     if (!entry.isFile()) continue
     const path = join(dir, entry.name)
     const ext = extname(entry.name).toLowerCase()
     const name = basename(entry.name, extname(entry.name)).toLowerCase()
-    if (entry.name.toLowerCase() === 'recetas.json') {
-      for (const [recipeName, value] of Object.entries(await readJson(path, 'recetas.json'))) {
+    if (entry.name.toLowerCase() === recipesFile) {
+      for (const [recipeName, value] of Object.entries(await readJson(path, recipesFile))) {
         const recipe = ComposeSchema.omit({ recipe: true }).safeParse(value)
         if (!recipe.success) {
-          throw new ToolError(
-            `La receta "${recipeName}" de biblioteca/recetas.json no es válida: ${recipe.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')}`
-          )
+          throw new ToolError('tool.compose.badRecipe', { name: recipeName, error: recipe.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ') })
         }
         library.recipes.set(recipeName.toLowerCase(), recipe.data)
       }
       continue
     }
-    if (entry.name.toLowerCase() === 'paletas.json') {
-      for (const [paletteName, value] of Object.entries(await readJson(path, 'paletas.json'))) {
+    if (entry.name.toLowerCase() === palettesFile) {
+      for (const [paletteName, value] of Object.entries(await readJson(path, palettesFile))) {
         const colors = PaletteColors.safeParse(value)
         if (!colors.success) {
-          throw new ToolError(
-            `La paleta "${paletteName}" de biblioteca/paletas.json no es válida. Formato: {"background": "#hex", "background2": "#hex", "text": "#hex", "accents": ["#hex"]}`
-          )
+          throw new ToolError('tool.compose.badPalette', { name: paletteName, format: '{"background": "#hex", "background2": "#hex", "text": "#hex", "accents": ["#hex"]}' })
         }
         library.palettes.set(paletteName.toLowerCase(), toPalette(colors.data))
       }
@@ -488,7 +497,7 @@ function colorOf(name: string | undefined, pal: Palette): string {
     fondo2: pal.bg2
   }
   if (named[name.toLowerCase()]) return named[name.toLowerCase()]
-  throw new ToolError(`Color desconocido "${name}". Usá un hex (#ff8800) o acento, acento2, texto, fondo, fondo2.`)
+  throw new ToolError('tool.compose.badColor', { name })
 }
 
 /** Places a user SVG at size `s`, centered; its `currentColor` becomes `color` and `var(--acento)` becomes `color2`. */
@@ -518,9 +527,8 @@ function drawElement(spec: ElementSpec, c: Canvas, library: UserLibrary): string
   } else if (SHAPES[key]) body = SHAPES[key](s, color, color2, c.rng)
   else {
     const own = [...library.pieces.keys()]
-    throw new ToolError(
-      `Elemento desconocido "${spec.type}". Formas: ${Object.keys(SHAPES).join(', ')}.${own.length ? ` Piezas de biblioteca/: ${own.join(', ')}.` : ''}`
-    )
+    const names = Object.keys(SHAPES).join(', ')
+    throw own.length ? new ToolError('tool.compose.unknownShapeOwn', { name: spec.type, names, own: own.join(', ') }) : new ToolError('tool.compose.unknownShape', { name: spec.type, names })
   }
   const x = (spec.x ?? c.rng()) * c.w
   const y = (spec.y ?? c.rng()) * c.h
@@ -594,7 +602,8 @@ function pickFont(name: string | undefined, library: UserLibrary, fallback: stri
   const font = library.fonts.get(key) ?? FONTS[key]
   if (font) return font
   const own = [...library.fonts.keys()]
-  throw new ToolError(`Fuente desconocida "${name}". Incluidas: ${Object.keys(FONTS).join(', ')}.${own.length ? ` De biblioteca/: ${own.join(', ')}.` : ''}`)
+  const names = Object.keys(FONTS).join(', ')
+  throw own.length ? new ToolError('tool.compose.unknownFontOwn', { name: String(name), names, own: own.join(', ') }) : new ToolError('tool.compose.unknownFont', { name: String(name), names })
 }
 
 export interface Composition {
@@ -610,7 +619,7 @@ function withRecipe(input: ComposeInput, library: UserLibrary): ComposeInput {
   const recipe = library.recipes.get(input.recipe.toLowerCase())
   if (!recipe) {
     const own = [...library.recipes.keys()]
-    throw new ToolError(`Receta desconocida "${input.recipe}". ${own.length ? `En biblioteca/recetas.json: ${own.join(', ')}.` : 'No hay biblioteca/recetas.json.'}`)
+    throw own.length ? new ToolError('tool.compose.unknownRecipeOwn', { name: input.recipe, own: own.join(', ') }) : new ToolError('tool.compose.unknownRecipe', { name: input.recipe })
   }
   const given = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
   return { ...recipe, ...given, elements: [...(recipe.elements ?? []), ...(input.elements ?? [])] }
@@ -641,7 +650,8 @@ export function compose(raw: ComposeInput, library: UserLibrary = emptyLibrary()
     const found = library.palettes.get(paletteName) ?? PALETTES[paletteName]
     if (!found) {
       const own = [...library.palettes.keys()]
-      throw new ToolError(`Paleta desconocida "${input.palette}". Incluidas: ${Object.keys(PALETTES).join(', ')}.${own.length ? ` De biblioteca/paletas.json: ${own.join(', ')}.` : ''}`)
+      const names = Object.keys(PALETTES).join(', ')
+      throw own.length ? new ToolError('tool.compose.unknownPaletteOwn', { name: input.palette, names, own: own.join(', ') }) : new ToolError('tool.compose.unknownPalette', { name: input.palette, names })
     }
     pal = found
   } else if (library.palettes.size) {
@@ -667,7 +677,7 @@ export function compose(raw: ComposeInput, library: UserLibrary = emptyLibrary()
   const layers: string[] = [drawBackground(background, canvas)]
   if (input.photo) {
     const photo = library.pieces.get(input.photo.toLowerCase())
-    if (!photo) throw new ToolError(`No hay una imagen "${input.photo}" en biblioteca/.`)
+    if (!photo) throw new ToolError('tool.compose.noPhoto', { name: input.photo })
     layers.push(`<image href="${photo}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/><rect width="${w}" height="${h}" fill="${pal.bg}" opacity=".5"/>`)
   }
   const decorations = input.decorations === false ? [] : template.elements(rng)
@@ -705,6 +715,6 @@ export function compose(raw: ComposeInput, library: UserLibrary = emptyLibrary()
     svg,
     width: w,
     height: h,
-    summary: `${input.recipe ? `Receta: ${input.recipe} · ` : ''}Plantilla: ${templateName} · paleta: ${paletteName} · fondo: ${input.photo ? `foto ${input.photo}` : background} · fuente: ${fontName} · semilla: ${seed} · ${w}×${h}`
+    summary: `${input.recipe ? `Recipe: ${input.recipe} · ` : ''}Template: ${templateName} · palette: ${paletteName} · background: ${input.photo ? `photo ${input.photo}` : background} · font: ${fontName} · seed: ${seed} · ${w}×${h}`
   }
 }

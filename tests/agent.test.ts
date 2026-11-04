@@ -41,6 +41,7 @@ let remembered: string[]
 function context(signal = new AbortController().signal) {
   return {
     getSettings: () => settings,
+    language: 'es' as const,
     thread,
     scope: { threadId: thread.id },
     signal,
@@ -110,7 +111,7 @@ describe('agent loop', () => {
         ? turn([toolUse('c1', 'run_command', { command: 'echo no' })])
         : turn([text(lastToolResults(request)[0].content)])
     const final = await start('corré algo')
-    expect(final).toMatch(/Rechazado por vos/)
+    expect(final).toMatch(/Rejected by the user/)
     expect(thread.toolStates.c1.status).toBe('denied')
   })
 
@@ -137,7 +138,7 @@ describe('agent loop', () => {
     }
     await start('escribí')
     expect(events.some((e) => e.type === 'approval.request')).toBe(false)
-    expect(seen).toMatchObject({ is_error: true, content: expect.stringContaining('No hay carpeta de trabajo') })
+    expect(seen).toMatchObject({ is_error: true, content: expect.stringContaining('No working folder is selected') })
   })
 
   it('rejects invalid tool input without running it', async () => {
@@ -202,7 +203,7 @@ describe('agent loop', () => {
     let active = 0
     let maxActive = 0
     script = async (request) => {
-      if (request.system.includes('Sos un subagente')) {
+      if (request.system.includes('You are a subagent')) {
         const task = (request.messages[0].content[0] as { text: string }).text
         active++
         maxActive = Math.max(maxActive, active)
@@ -231,7 +232,7 @@ describe('agent loop', () => {
   it('does not let subagents delegate further', async () => {
     let subagentTools: string[] = []
     script = (request) => {
-      if (request.system.includes('Sos un subagente')) {
+      if (request.system.includes('You are a subagent')) {
         subagentTools = request.tools.map((t) => t.name)
         return turn([text('hecho')])
       }

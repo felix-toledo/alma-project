@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { extname, isAbsolute, resolve } from 'node:path'
 import type { ProviderId, Settings, Usage } from '../shared/types'
+import { VISION_SYSTEM } from './prompts/vision'
 import { getProvider } from './providers'
 import { ToolError } from './tools/types'
 
@@ -43,8 +44,6 @@ export function imageSize(bytes: Buffer): { width: number; height: number } | nu
 const TYPES: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }
 const MAX_BYTES = 8 * 1024 * 1024
 
-const SYSTEM = `Sos los ojos de Alma, un asistente de domótica. Mirás imágenes (planos, fotos de ambientes, cámaras de seguridad) y respondés exactamente lo que se pide, en español, sin rodeos. Si no se ve bien, decilo en vez de inventar.`
-
 const ENV_KEYS: Record<ProviderId, string> = { anthropic: 'ANTHROPIC_API_KEY', xai: 'XAI_API_KEY', deepseek: 'DEEPSEEK_API_KEY', vercel: 'AI_GATEWAY_API_KEY', meta: 'META_API_KEY' }
 
 function hasKey(settings: Settings, provider: ProviderId): boolean {
@@ -65,11 +64,11 @@ export function visionModel(settings: Settings): { provider: ProviderId; model: 
 
 export function loadPicture(path: string, roots: string[]): Picture {
   const full = isAbsolute(path) ? resolve(path) : resolve(roots[0] ?? '.', path)
-  if (!roots.some((root) => full.toLowerCase().startsWith(resolve(root).toLowerCase()))) throw new ToolError('Esa imagen está fuera de las carpetas que Alma puede leer (el vault, la carpeta de trabajo y las imágenes recibidas).')
+  if (!roots.some((root) => full.toLowerCase().startsWith(resolve(root).toLowerCase()))) throw new ToolError('tool.vision.outside')
   const mediaType = TYPES[extname(full).toLowerCase()]
-  if (!mediaType) throw new ToolError('Solo se pueden mirar imágenes JPG, PNG, WebP o GIF.')
-  if (!existsSync(full)) throw new ToolError(`No existe la imagen: ${path}`)
-  if (statSync(full).size > MAX_BYTES) throw new ToolError('La imagen pesa más de 8 MB.')
+  if (!mediaType) throw new ToolError('tool.vision.format')
+  if (!existsSync(full)) throw new ToolError('tool.vision.noFile', { path })
+  if (statSync(full).size > MAX_BYTES) throw new ToolError('tool.vision.tooBig')
   const bytes = readFileSync(full)
   return { mediaType, data: bytes.toString('base64'), ...imageSize(bytes) }
 }
@@ -80,7 +79,7 @@ export async function look(settings: Settings, pictures: Picture[], question: st
   const turn = await getProvider(provider, settings).streamTurn({
     model,
     effort: 'low',
-    system: SYSTEM,
+    system: VISION_SYSTEM,
     tools: [],
     messages: [{ role: 'user', content: [...pictures.map((p) => ({ type: 'image' as const, mediaType: p.mediaType, data: p.data })), { type: 'text', text: question }], ts: Date.now() }],
     signal,
@@ -92,8 +91,3 @@ export async function look(settings: Settings, pictures: Picture[], question: st
   return { text: (final || text).trim(), usage: turn.usage }
 }
 
-/** The question that turns a floor plan picture into rooms, on a 0–100 grid. */
-export const PLAN_QUESTION = (hint: string): string =>
-  `Esta imagen es un plano, croquis o dibujo de una casa vista desde arriba. Devolvé SOLO un JSON con las habitaciones y las puertas, sin texto alrededor:
-{"rooms":[{"name":"Cocina","polygon":[[x,y],[x,y],[x,y],[x,y]]}],"doors":[{"a":[x,y],"b":[x,y]}]}
-Reglas: coordenadas en porcentaje de la imagen, de 0 a 100 (x = % del ancho hacia la derecha, y = % del alto hacia abajo), pegadas a las líneas del dibujo; cada habitación es un polígono cerrado (4 puntos si es rectangular); usá el nombre escrito en el plano, o uno razonable (Living, Dormitorio, Baño…) si no hay; las habitaciones no deben superponerse; las puertas son segmentos sobre las paredes. Si la imagen es de una sola habitación, devolvé esa única habitación como un rectángulo que ocupe casi toda la grilla.${hint ? `\nDato del usuario: ${hint}` : ''}`

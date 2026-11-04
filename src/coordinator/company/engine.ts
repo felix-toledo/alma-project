@@ -14,6 +14,15 @@ import type {
   TaskStatus,
   Usage
 } from '../../shared/types'
+import { formatDateTime } from '../../shared/i18n/format'
+import type { Language } from '../../shared/i18n/language'
+import { type MessageKey, type ParamsArg, translate } from '../../shared/i18n/messages'
+import { namesOf, resolveName } from '../../shared/i18n/names'
+import { askPrompt, MEETING_BOARD_SPOKE, MEETING_OPEN, MINUTES_SYSTEM, meetingClosePoint, meetingMemberPoint, meetingNextPoint, meetingPrepPrompt, meetingSystem, meetingTurnPrompt, minutesPrompt, reviewPrompt, taskPrompt } from '../prompts/company'
+import type { ToolText } from '../../shared/types'
+import { ToolError } from '../tools/types'
+import { companyLog, minutesNote, summaryFailed, type CompanyLog } from '../generated'
+import { companyNotice, type CompanyNotice } from '../notices'
 import type { CompanyStore } from './store'
 
 const MAX_REVISIONS = 2
@@ -28,9 +37,20 @@ export interface EngineDeps {
   /** One model call without tools (meeting turns, minutes); usage is recorded by the caller through `recordUsage`. */
   complete(profile: AgentProfile, system: string, prompt: string): Promise<{ text: string; usage?: Usage }>
   writeNote(company: Company, path: string, content: string): Promise<void>
+  /** Whether a path already exists in the company's vault; without it the minutes folder takes the language's name. */
+  noteExists?(company: Company, path: string): boolean
   /** Desktop notification + Telegram, for the board (the user). */
   notify(title: string, body: string): void
   emit(event: LiveEvent): void
+}
+
+/** `Reuniones/<date> <topic>.md` or `Meetings/…`: the folder that exists, the language's own when neither does (spec 025 BR-23). */
+export function minutesPath(language: Language, date: Date, topic: string, exists: (name: string) => boolean): string {
+  const stamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const folder = resolveName(language, namesOf('names.meetingsDir'), exists)
+  // Windows rejects these characters and every control character (a topic may hold a line break).
+  const safe = Array.from(topic, (c) => (c.charCodeAt(0) < 32 || '\\/:*?"<>|'.includes(c) ? '-' : c)).join('')
+  return `${folder}/${stamp} ${safe.slice(0, 60)}.md`
 }
 
 const actorName = (company: Company, actor: CompanyActor, settings: Settings): string => {
@@ -49,6 +69,12 @@ export class CompanyEngine {
 
   constructor(private deps: EngineDeps) {}
 
+  /** Tells the person, in the app language of the moment. */
+  private notice(notice: CompanyNotice): void {
+    const { title, body } = companyNotice(this.deps.settings().language, notice)
+    this.deps.notify(title, body)
+  }
+
   start(): void {
     this.timer = setInterval(() => this.tick(), TICK_MS)
     setTimeout(() => this.tick(), 8_000)
@@ -60,8 +86,13 @@ export class CompanyEngine {
 
   company(companyId: string): Company {
     const company = this.deps.settings().companies.find((c) => c.id === companyId)
-    if (!company) throw new Error('Esa empresa no existe.')
+    if (!company) throw new ToolError('tool.company.noCompany')
     return company
+  }
+
+  /** Text Alma writes into the company's own records: the language in effect when it is written, never rewritten. */
+  private text<K extends MessageKey>(key: K, ...params: ParamsArg<K>): string {
+    return translate(this.deps.settings().language, key, ...params)
   }
 
   private name(company: Company, actor: CompanyActor): string {
@@ -73,8 +104,8 @@ export class CompanyEngine {
     this.deps.emit({ type: 'company.changed', companyId })
   }
 
-  private log(company: Company, actor: CompanyActor, text: string, refs: { taskId?: string; meetingId?: string } = {}): void {
-    this.deps.store.log(company.id, { actor, text, ...refs })
+  private log(company: Company, actor: CompanyActor, entry: CompanyLog, refs: { taskId?: string; meetingId?: string } = {}): void {
+    this.deps.store.log(company.id, { actor, text: companyLog(this.deps.settings().language, entry), ...refs })
   }
 
   snapshot(companyId: string): CompanySnapshot {
@@ -106,8 +137,8 @@ export class CompanyEngine {
   overBudget(company: Company, memberId: string): string | null {
     const spend = this.deps.store.spend(company.id)
     const member = company.members.find((m) => m.id === memberId)
-    if (company.budgetUsd > 0 && spend.totalUsd >= company.budgetUsd) return `la empresa llegó a su presupuesto del mes (USD ${company.budgetUsd})`
-    if (member && member.budgetUsd > 0 && (spend.byMember[memberId] ?? 0) >= member.budgetUsd) return `${member.title} llegó a su presupuesto del mes (USD ${member.budgetUsd})`
+    if (company.budgetUsd > 0 && spend.totalUsd >= company.budgetUsd) return this.text('company.budgetCompany', { amount: company.budgetUsd })
+    if (member && member.budgetUsd > 0 && (spend.byMember[memberId] ?? 0) >= member.budgetUsd) return this.text('company.budgetMember', { title: member.title, amount: member.budgetUsd })
     return null
   }
 
@@ -120,10 +151,7 @@ export class CompanyEngine {
         const id = `${spend.month}:${key}:${level}`
         if (used >= cap * ratio && !data.warned.includes(id)) {
           data.warned.push(id)
-          this.deps.notify(
-            level === '100' ? `${company.name}: presupuesto agotado` : `${company.name}: 80 % del presupuesto`,
-            `${who} gastó USD ${used.toFixed(2)} de ${cap} este mes${level === '100' ? '. Se pausa hasta que lo amplíes en Configuración → Equipos.' : '.'}`
-          )
+          this.notice({ kind: 'budget', level, company: company.name, who, used, cap })
           break
         }
       }
@@ -138,7 +166,7 @@ export class CompanyEngine {
   // Tasks
 
   createTask(company: Company, input: { title: string; description: string; assignee: string; createdBy: CompanyActor; due?: string; meetingId?: string }): CompanyTask {
-    if (input.assignee !== 'user' && !company.members.some((m) => m.id === input.assignee)) throw new Error(`No hay nadie con id «${input.assignee}» en ${company.name}.`)
+    if (input.assignee !== 'user' && !company.members.some((m) => m.id === input.assignee)) throw new ToolError('tool.company.noMember', { id: input.assignee, company: company.name })
     const task: CompanyTask = {
       id: newId('t'),
       companyId: company.id,
@@ -155,7 +183,7 @@ export class CompanyEngine {
       meetingId: input.meetingId
     }
     this.deps.store.data(company.id).tasks.push(task)
-    this.log(company, input.createdBy, `asignó «${task.title}» a ${this.name(company, task.assignee)}`, { taskId: task.id })
+    this.log(company, input.createdBy, { kind: 'assigned', title: task.title, assignee: this.name(company, task.assignee) }, { taskId: task.id })
     this.changed(company.id)
     this.pump(company)
     return task
@@ -163,7 +191,7 @@ export class CompanyEngine {
 
   task(company: Company, taskId: string): CompanyTask {
     const task = this.deps.store.data(company.id).tasks.find((t) => t.id === taskId)
-    if (!task) throw new Error(`No existe la tarea ${taskId}.`)
+    if (!task) throw new ToolError('tool.company.noTask', { id: taskId })
     return task
   }
 
@@ -171,7 +199,7 @@ export class CompanyEngine {
     const task = this.task(company, taskId)
     task.comments.push({ author, text, at: Date.now() })
     task.updatedAt = Date.now()
-    this.log(company, author, `comentó en «${task.title}»`, { taskId })
+    this.log(company, author, { kind: 'commented', title: task.title }, { taskId })
     // A comment wakes the assignee (unless they wrote it): back to the queue if it was waiting or blocked.
     if (author !== task.assignee && task.assignee !== 'user' && (task.status === 'blocked' || task.status === 'review' || task.status === 'done')) task.status = 'todo'
     this.changed(company.id)
@@ -182,7 +210,7 @@ export class CompanyEngine {
     const task = this.task(company, taskId)
     task.status = status
     task.updatedAt = Date.now()
-    this.log(company, actor, `movió «${task.title}» a ${STATUS_NAMES[status]}`, { taskId })
+    this.log(company, actor, { kind: 'moved', title: task.title, status }, { taskId })
     this.changed(company.id)
     this.pump(company)
   }
@@ -194,67 +222,67 @@ export class CompanyEngine {
   }
 
   /** The assignee reports: delivered (review), finished (done when nobody else has to check), or blocked. */
-  report(company: Company, taskId: string, memberId: string, status: 'review' | 'done' | 'blocked', text: string): string {
+  report(company: Company, taskId: string, memberId: string, status: 'review' | 'done' | 'blocked', text: string): ToolText {
     const task = this.task(company, taskId)
-    if (task.assignee !== memberId) throw new Error('Esa tarea no es tuya.')
+    if (task.assignee !== memberId) throw new ToolError('tool.company.notYours')
     task.result = text
     task.updatedAt = Date.now()
     const needsReview = status !== 'blocked' && task.createdBy !== memberId
     task.status = status === 'blocked' ? 'blocked' : needsReview ? 'review' : 'done'
-    this.log(company, memberId, status === 'blocked' ? `se trabó en «${task.title}»: ${text.slice(0, 120)}` : `entregó «${task.title}»`, { taskId })
-    if (task.status === 'blocked') this.escalate(company, memberId, `Estoy trabado en «${task.title}»: ${text}`, taskId)
+    this.log(company, memberId, status === 'blocked' ? { kind: 'blocked', title: task.title, text: text.slice(0, 120) } : { kind: 'delivered', title: task.title }, { taskId })
+    if (task.status === 'blocked') this.escalate(company, memberId, this.text('company.stuck', { title: task.title, text }), taskId)
     this.changed(company.id)
     if (task.status === 'review') this.queueReview(company, task)
-    return task.status === 'review' ? `Entregada; la revisa ${this.name(company, task.createdBy)}.` : task.status === 'done' ? 'Marcada como hecha.' : 'Marcada como trabada; avisé a tu jefe.'
+    return task.status === 'review' ? { key: 'tool.company.reportReview', params: { name: this.name(company, task.createdBy) } } : task.status === 'done' ? { key: 'tool.company.reportDone' } : { key: 'tool.company.reportBlocked' }
   }
 
   /** The creator reviews: approve (done) or send back with what to change (at most twice, then it goes up). */
-  review(company: Company, taskId: string, reviewer: CompanyActor, approve: boolean, comment = ''): string {
+  review(company: Company, taskId: string, reviewer: CompanyActor, approve: boolean, comment = ''): ToolText {
     const task = this.task(company, taskId)
-    if (task.status !== 'review') throw new Error('Esa tarea no está esperando revisión.')
+    if (task.status !== 'review') throw new ToolError('tool.company.notInReview')
     if (reviewer !== 'user' && reviewer !== task.createdBy && !chainOfCommand(company, task.assignee).some((m) => m.id === reviewer))
-      throw new Error('Solo quien la pidió o un jefe de quien la hizo puede revisarla.')
+      throw new ToolError('tool.company.cannotReview')
     if (comment) task.comments.push({ author: reviewer, text: comment, at: Date.now() })
     task.updatedAt = Date.now()
     if (approve) {
       task.status = 'done'
-      this.log(company, reviewer, `aprobó «${task.title}»`, { taskId })
+      this.log(company, reviewer, { kind: 'approved', title: task.title }, { taskId })
       this.changed(company.id)
-      return 'Aprobada.'
+      return { key: 'tool.company.reviewApproved' }
     }
     task.revisions++
     if (task.revisions > MAX_REVISIONS) {
       task.status = 'blocked'
-      this.log(company, reviewer, `devolvió «${task.title}» por ${task.revisions}ª vez: pasa al Directorio`, { taskId })
-      this.deps.notify(`${company.name}: una tarea no sale`, `«${task.title}» volvió ${task.revisions} veces de revisión. Miralo en el tablero.`)
+      this.log(company, reviewer, { kind: 'returnedToBoard', title: task.title, revisions: task.revisions }, { taskId })
+      this.notice({ kind: 'stuck', company: company.name, title: task.title, revisions: task.revisions })
       this.changed(company.id)
-      return 'Ya volvió demasiadas veces: quedó trabada y le avisé al Directorio.'
+      return { key: 'tool.company.reviewTooMany' }
     }
     task.status = 'todo'
-    this.log(company, reviewer, `pidió cambios en «${task.title}»`, { taskId })
+    this.log(company, reviewer, { kind: 'changesRequested', title: task.title }, { taskId })
     this.changed(company.id)
     this.pump(company)
-    return 'Devuelta con tus comentarios.'
+    return { key: 'tool.company.reviewChanges' }
   }
 
   /** Something for the boss (or the board): a comment on the task, or a new task for them. */
-  escalate(company: Company, memberId: string, message: string, taskId?: string): string {
+  escalate(company: Company, memberId: string, message: string, taskId?: string): ToolText {
     const boss = company.members.find((m) => m.id === company.members.find((x) => x.id === memberId)?.reportsTo)
     if (!boss) {
-      this.log(company, memberId, `le escribió al Directorio: ${message.slice(0, 140)}`, { taskId })
+      this.log(company, memberId, { kind: 'escalated', message: message.slice(0, 140) }, { taskId })
       this.deps.notify(`${company.name}: ${this.name(company, memberId)}`, message)
       this.changed(company.id)
-      return 'Le avisé al Directorio (el usuario).'
+      return { key: 'tool.company.escalatedBoard' }
     }
-    this.createTask(company, { title: `Consulta de ${this.name(company, memberId)}`, description: message + (taskId ? `\n\n(Sobre la tarea ${taskId})` : ''), assignee: boss.id, createdBy: memberId })
-    return `Se lo pasé a ${this.name(company, boss.id)}.`
+    this.createTask(company, { title: this.text('company.title.ask', { name: this.name(company, memberId) }), description: message + (taskId ? `\n\n${this.text('company.aboutTask', { id: taskId })}` : ''), assignee: boss.id, createdBy: memberId })
+    return { key: 'tool.company.escalatedTo', params: { name: this.name(company, boss.id) } }
   }
 
   private reviewing = new Set<string>()
 
   private queueReview(company: Company, task: CompanyTask): void {
     if (task.createdBy === 'user') {
-      this.deps.notify(`${company.name}: entrega para revisar`, `«${task.title}» de ${this.name(company, task.assignee)}`)
+      this.notice({ kind: 'delivery', company: company.name, title: task.title, who: this.name(company, task.assignee) })
       return
     }
     if (task.createdBy === 'system' || !company.members.some((m) => m.id === task.createdBy)) return
@@ -266,21 +294,19 @@ export class CompanyEngine {
       const why = this.overBudget(company, reviewer)
       if (why) {
         this.reviewing.delete(task.id)
-        return void this.comment(company, task.id, 'system', `No se pudo revisar: ${why}.`)
+        return void this.comment(company, task.id, 'system', this.text('company.reviewSkipped', { why }))
       }
       this.setWorking(company.id, reviewer, true)
       this.changed(company.id)
-      const prompt = [
-        `Revisá esta entrega de tu equipo y decidí con review_task (approve, o changes con qué corregir).`,
-        `Tarea ${task.id}: ${task.title}`,
-        task.description && `Pedido:\n${task.description}`,
-        `Entrega de ${this.name(company, task.assignee)}:\n${task.result ?? '(sin texto)'}`,
-        task.comments.length ? `Comentarios:\n${task.comments.map((c) => `- ${this.name(company, c.author)}: ${c.text}`).join('\n')}` : '',
-        'Controlá que cumpla el pedido y el objetivo de la empresa, que los datos tengan fuente y que no haya nada inventado. Si está bien, aprobala sin vueltas.'
-      ]
-        .filter(Boolean)
-        .join('\n\n')
-      const { done } = this.deps.runMember(company, reviewer, `Revisión · ${task.title}`, prompt)
+      const prompt = reviewPrompt({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        assignee: this.name(company, task.assignee),
+        result: task.result,
+        comments: task.comments.map((c) => ({ author: this.name(company, c.author), text: c.text }))
+      })
+      const { done } = this.deps.runMember(company, reviewer, this.text('company.title.review', { title: task.title }), prompt)
       void done
         .catch(() => '')
         .finally(() => {
@@ -315,30 +341,28 @@ export class CompanyEngine {
     task.status = 'in_progress'
     task.updatedAt = Date.now()
     this.setWorking(company.id, task.assignee, true)
-    this.log(company, task.assignee, `empezó «${task.title}»`, { taskId: task.id })
-    const prompt = [
-      `Tenés esta tarea del tablero de ${company.name}:`,
-      `Tarea ${task.id}: ${task.title}`,
-      task.description,
-      task.due ? `Para: ${task.due}` : '',
-      `La pidió ${this.name(company, task.createdBy)}.`,
-      task.result ? `Tu entrega anterior:\n${task.result}` : '',
-      task.comments.length ? `Comentarios (lo último manda):\n${task.comments.map((c) => `- ${this.name(company, c.author)}: ${c.text}`).join('\n')}` : '',
-      'Hacela de punta a punta con tus herramientas. Al terminar, llamá a update_task con status "review" (o "done" si te la asignaste vos) y en result un resumen de lo que hiciste y dónde quedó (rutas del vault). Si no podés avanzar, update_task con status "blocked" y por qué.'
-    ]
-      .filter(Boolean)
-      .join('\n\n')
-    const { threadId, done } = this.deps.runMember(company, task.assignee, `Tarea · ${task.title}`, prompt)
+    this.log(company, task.assignee, { kind: 'started', title: task.title }, { taskId: task.id })
+    const prompt = taskPrompt({
+      company: company.name,
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      due: task.due,
+      askedBy: this.name(company, task.createdBy),
+      previousResult: task.result,
+      comments: task.comments.map((c) => ({ author: this.name(company, c.author), text: c.text }))
+    })
+    const { threadId, done } = this.deps.runMember(company, task.assignee, this.text('company.title.task', { title: task.title }), prompt)
     task.threadId = threadId
     this.changed(company.id)
     void done
       .then((answer) => {
         // The agent finished without reporting: what it said is the delivery.
-        if (task.status === 'in_progress') this.report(company, task.id, task.assignee, 'review', answer || '(terminó sin un resumen)')
+        if (task.status === 'in_progress') this.report(company, task.id, task.assignee, 'review', answer || this.text('company.noSummary'))
       })
       .catch((error: Error) => {
         task.status = 'blocked'
-        task.comments.push({ author: 'system', text: `Falló: ${error.message}`, at: Date.now() })
+        task.comments.push({ author: 'system', text: this.text('company.failed', { error: error.message }), at: Date.now() })
       })
       .finally(() => {
         this.setWorking(company.id, task.assignee, false)
@@ -350,12 +374,12 @@ export class CompanyEngine {
   /** ask_colleague: one run of the colleague, answered right away (they can't ask anyone else in turn). */
   async ask(company: Company, from: string, to: string, question: string): Promise<string> {
     if (!colleagues(company, from).some((m) => m.id === to) && !subordinates(company, from).some((m) => m.id === to)) {
-      throw new Error('Solo podés consultar a tu jefe, a tu equipo y a tus colegas de línea punteada.')
+      throw new ToolError('tool.company.cannotAsk')
     }
     const why = this.overBudget(company, to)
-    if (why) throw new Error(`No puede responder: ${why}.`)
-    const { done } = this.deps.runMember(company, to, `Consulta de ${this.name(company, from)}`, `${this.name(company, from)} te pregunta:\n\n${question}\n\nRespondé concreto y con fuentes si das datos.`, { noAsk: true })
-    this.log(company, from, `le consultó a ${this.name(company, to)}`)
+    if (why) throw new ToolError('tool.company.cannotAnswer', { why })
+    const { done } = this.deps.runMember(company, to, this.text('company.title.ask', { name: this.name(company, from) }), askPrompt(this.name(company, from), question), { noAsk: true })
+    this.log(company, from, { kind: 'consulted', to: this.name(company, to) })
     this.changed(company.id)
     return done
   }
@@ -365,23 +389,23 @@ export class CompanyEngine {
 
   createMeeting(company: Company, input: Omit<Meeting, 'id' | 'companyId' | 'status' | 'prep' | 'transcript'>): Meeting {
     const participants = [...new Set([input.chair, ...input.participants])].filter((id) => company.members.some((m) => m.id === id))
-    if (!participants.includes(input.chair)) throw new Error('Quien modera tiene que ser de la empresa.')
+    if (!participants.includes(input.chair)) throw new ToolError('tool.company.chair')
     const meeting: Meeting = { ...input, participants, id: newId('m'), companyId: company.id, status: 'scheduled', prep: {}, transcript: [] }
     this.deps.store.data(company.id).meetings.push(meeting)
-    this.log(company, input.createdBy, `convocó la reunión «${meeting.topic}» para el ${new Date(meeting.at).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}`, { meetingId: meeting.id })
+    this.log(company, input.createdBy, { kind: 'meetingScheduled', topic: meeting.topic, date: formatDateTime(this.deps.settings().language, meeting.at, 'short') }, { meetingId: meeting.id })
     this.changed(company.id)
     return meeting
   }
 
   meeting(company: Company, meetingId: string): Meeting {
     const meeting = this.deps.store.data(company.id).meetings.find((m) => m.id === meetingId)
-    if (!meeting) throw new Error('Esa reunión no existe.')
+    if (!meeting) throw new ToolError('tool.company.noMeeting')
     return meeting
   }
 
   say(company: Company, meetingId: string, text: string): void {
     const meeting = this.meeting(company, meetingId)
-    if (meeting.status !== 'live') throw new Error('La reunión no está en curso.')
+    if (meeting.status !== 'live') throw new ToolError('tool.company.notLive')
     const inbox = this.meetingInbox.get(meetingId) ?? []
     inbox.push(text)
     this.meetingInbox.set(meetingId, inbox)
@@ -396,7 +420,7 @@ export class CompanyEngine {
     if (meeting.status === 'done') return
     meeting.status = 'cancelled'
     this.ending.add(meetingId)
-    this.log(company, 'user', `canceló la reunión «${meeting.topic}»`, { meetingId })
+    this.log(company, 'user', { kind: 'meetingCancelled', topic: meeting.topic }, { meetingId })
     this.changed(company.id)
   }
 
@@ -424,28 +448,29 @@ export class CompanyEngine {
   private async prepare(company: Company, meeting: Meeting): Promise<void> {
     if (meeting.status !== 'scheduled') return
     meeting.status = 'preparing'
-    this.log(company, 'system', `los participantes preparan «${meeting.topic}»`, { meetingId: meeting.id })
+    this.log(company, 'system', { kind: 'meetingPreparing', topic: meeting.topic }, { meetingId: meeting.id })
     this.changed(company.id)
     for (const memberId of meeting.participants) {
       if (meeting.prep[memberId] || this.ending.has(meeting.id)) continue
       const why = this.overBudget(company, memberId)
       if (why) {
-        meeting.prep[memberId] = `(No preparó: ${why}.)`
+        meeting.prep[memberId] = this.text('company.prepSkipped', { why })
         continue
       }
       this.setWorking(company.id, memberId, true)
       this.changed(company.id)
-      const prompt = [
-        `El ${new Date(meeting.at).toLocaleString('es', { dateStyle: 'full', timeStyle: 'short' })} hay reunión de ${company.name}: «${meeting.topic}».`,
-        `Orden del día:\n${meeting.agenda.map((a, i) => `${i + 1}. ${a}`).join('\n')}`,
-        `Participan: ${meeting.participants.map((id) => this.name(company, id)).join(', ')}.`,
-        'Prepará tu parte: averiguá con tus herramientas lo que necesites (tareas, datos, vault, web) y respondé con tus puntos para la reunión en no más de 12 líneas: avances, datos con su fuente, problemas y propuestas concretas. No hace falta que hagas el trabajo ahora.'
-      ].join('\n\n')
+      const prompt = meetingPrepPrompt({
+        when: formatDateTime('en', meeting.at, 'long'),
+        company: company.name,
+        topic: meeting.topic,
+        agenda: meeting.agenda,
+        participants: meeting.participants.map((id) => this.name(company, id))
+      })
       try {
-        const { done } = this.deps.runMember(company, memberId, `Preparación · ${meeting.topic}`, prompt, { noAsk: true })
-        meeting.prep[memberId] = (await done) || '(sin notas)'
+        const { done } = this.deps.runMember(company, memberId, this.text('company.title.prep', { title: meeting.topic }), prompt, { noAsk: true })
+        meeting.prep[memberId] = (await done) || this.text('company.noNotes')
       } catch (error) {
-        meeting.prep[memberId] = `(No pudo preparar: ${(error as Error).message})`
+        meeting.prep[memberId] = this.text('company.prepFailed', { error: (error as Error).message })
       } finally {
         this.setWorking(company.id, memberId, false)
         this.changed(company.id)
@@ -463,9 +488,9 @@ export class CompanyEngine {
   private async live(company: Company, meeting: Meeting): Promise<void> {
     if (meeting.status !== 'scheduled') return
     meeting.status = 'live'
-    this.log(company, 'system', `empezó la reunión «${meeting.topic}»`, { meetingId: meeting.id })
+    this.log(company, 'system', { kind: 'meetingStarted', topic: meeting.topic }, { meetingId: meeting.id })
     this.changed(company.id)
-    this.deps.notify(`${company.name}: empezó la reunión`, `«${meeting.topic}». Podés entrar desde Empresas → Reuniones.`)
+    this.notice({ kind: 'meeting', company: company.name, topic: meeting.topic })
     const others = meeting.participants.filter((id) => id !== meeting.chair)
     const maxTurns = Math.min(60, meeting.agenda.length * (others.length + 1) + 6)
     let turns = 0
@@ -474,15 +499,8 @@ export class CompanyEngine {
       const profile = this.deps.settings().agents.find((a) => a.id === memberId)
       if (!profile || this.overBudget(company, memberId)) return
       const transcript = meeting.transcript.map((t) => `${this.name(company, t.speaker)}: ${t.text}`).join('\n\n')
-      const system = `${profile.systemPrompt}\n\nEstás en una reunión de ${company.name} como ${this.name(company, memberId)}. Hablás en primera persona, breve (máximo 120 palabras), sin repetir lo que ya se dijo y sin saludos de cortesía. Si el Directorio (el usuario) habló, respondele primero.`
-      const prompt = [
-        `Reunión: «${meeting.topic}». Orden del día:\n${meeting.agenda.map((a, i) => `${i + 1}. ${a}`).join('\n')}`,
-        meeting.prep[memberId] ? `Lo que preparaste:\n${meeting.prep[memberId]}` : '',
-        transcript ? `Lo dicho hasta ahora:\n${transcript}` : '',
-        instruction
-      ]
-        .filter(Boolean)
-        .join('\n\n')
+      const system = meetingSystem(profile.systemPrompt, company.name, this.name(company, memberId), this.deps.settings().language)
+      const prompt = meetingTurnPrompt({ topic: meeting.topic, agenda: meeting.agenda, prepared: meeting.prep[memberId], transcript, instruction })
       this.setWorking(company.id, memberId, true)
       this.changed(company.id)
       try {
@@ -490,7 +508,7 @@ export class CompanyEngine {
         if (usage) this.recordUsage(company, memberId, profile.provider, usage)
         if (text.trim()) meeting.transcript.push({ speaker: memberId, text: text.trim(), at: Date.now() })
       } catch (error) {
-        meeting.transcript.push({ speaker: 'system', text: `${this.name(company, memberId)} no pudo hablar: ${(error as Error).message}`, at: Date.now() })
+        meeting.transcript.push({ speaker: 'system', text: this.text('company.speakFailed', { name: this.name(company, memberId), error: (error as Error).message }), at: Date.now() })
       } finally {
         this.setWorking(company.id, memberId, false)
         turns++
@@ -504,22 +522,22 @@ export class CompanyEngine {
       while (inbox?.length && !this.ending.has(meeting.id)) {
         meeting.transcript.push({ speaker: 'user', text: inbox.shift()!, at: Date.now() })
         this.changed(company.id)
-        await speak(meeting.chair, 'El Directorio acaba de hablar: respondele y, si cambia algo de la reunión, decilo.')
+        await speak(meeting.chair, MEETING_BOARD_SPOKE)
       }
     }
 
     const stop = (): boolean => this.ending.has(meeting.id) || turns >= maxTurns
     try {
-      await speak(meeting.chair, 'Abrí la reunión: objetivo en una frase y arrancá con el primer punto.')
+      await speak(meeting.chair, MEETING_OPEN)
       for (let i = 0; i < meeting.agenda.length && !stop(); i++) {
-        if (i > 0) await speak(meeting.chair, `Pasá al punto ${i + 1}: «${meeting.agenda[i]}».`)
+        if (i > 0) await speak(meeting.chair, meetingNextPoint(i + 1, meeting.agenda[i]))
         for (const memberId of others) {
           await hearUser()
           if (stop()) break
-          await speak(memberId, `Punto ${i + 1}: «${meeting.agenda[i]}». Aportá lo tuyo.`)
+          await speak(memberId, meetingMemberPoint(i + 1, meeting.agenda[i]))
         }
         await hearUser()
-        if (!stop()) await speak(meeting.chair, `Cerrá el punto ${i + 1}: qué se decide y quién hace qué.`)
+        if (!stop()) await speak(meeting.chair, meetingClosePoint(i + 1))
       }
       await hearUser()
     } finally {
@@ -539,35 +557,29 @@ export class CompanyEngine {
       try {
         const { text, usage } = await this.deps.complete(
           chair,
-          'Escribís el acta de una reunión. Respondé SOLO con JSON válido, sin texto alrededor.',
-          `Reunión «${meeting.topic}» de ${company.name}.\nParticipantes (id = nombre):\n${roster}\n\nTranscripción:\n${transcript}\n\nDevolvé {"summary": "3-5 frases", "decisions": ["…"], "actions": [{"owner": "id de un participante", "title": "…", "description": "qué hacer exactamente", "due": "fecha o vacío"}]}. Solo acciones que se acordaron.`
+          MINUTES_SYSTEM,
+          minutesPrompt({ topic: meeting.topic, company: company.name, roster, transcript })
         )
         if (usage) this.recordUsage(company, chair.id, chair.provider, usage)
         parsed = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1))
       } catch (error) {
-        parsed = { summary: `No se pudo resumir: ${(error as Error).message}` }
+        parsed = { summary: summaryFailed(this.deps.settings().language, (error as Error).message) }
       }
     }
     meeting.decisions = parsed.decisions ?? []
     const actions = (parsed.actions ?? []).filter((a) => meeting.participants.includes(a.owner) && a.title)
     const date = new Date(meeting.at)
-    const stamp = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-    const path = `Reuniones/${stamp} ${meeting.topic.replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)}.md`
-    const note = [
-      `# ${meeting.topic}`,
-      `${date.toLocaleString('es', { dateStyle: 'full', timeStyle: 'short' })} · Modera: ${this.name(company, meeting.chair)}`,
-      `Participantes: ${meeting.participants.map((id) => this.name(company, id)).join(', ')}`,
-      '## Resumen',
-      parsed.summary ?? '',
-      '## Decisiones',
-      ...(meeting.decisions.length ? meeting.decisions.map((d) => `- ${d}`) : ['- (ninguna)']),
-      '## Tareas',
-      ...(actions.length ? actions.map((a) => `- [ ] ${a.title} — ${this.name(company, a.owner)}${a.due ? ` (para ${a.due})` : ''}`) : ['- (ninguna)']),
-      '## Preparación',
-      ...meeting.participants.map((id) => `### ${this.name(company, id)}\n${meeting.prep[id] ?? '(no preparó)'}`),
-      '## Transcripción',
-      ...meeting.transcript.map((t) => `**${this.name(company, t.speaker)}:** ${t.text}`)
-    ].join('\n\n')
+    const path = minutesPath(this.deps.settings().language, date, meeting.topic, (name) => this.deps.noteExists?.(company, name) ?? false)
+    const note = minutesNote(this.deps.settings().language, {
+      topic: meeting.topic,
+      date: formatDateTime(this.deps.settings().language, date, 'long'),
+      chair: this.name(company, meeting.chair),
+      participants: meeting.participants.map((id) => ({ name: this.name(company, id), prep: meeting.prep[id] })),
+      summary: parsed.summary ?? '',
+      decisions: meeting.decisions,
+      actions: actions.map((a) => ({ title: a.title, owner: this.name(company, a.owner), due: a.due })),
+      transcript: meeting.transcript.map((t) => ({ speaker: this.name(company, t.speaker), text: t.text }))
+    })
     try {
       await this.deps.writeNote(company, path, note)
       meeting.minutesPath = path
@@ -575,7 +587,7 @@ export class CompanyEngine {
       console.error('[company] minutes:', error)
     }
     meeting.status = 'done'
-    this.log(company, meeting.chair, `cerró «${meeting.topic}»: ${meeting.decisions.length} decisiones, ${actions.length} tareas`, { meetingId: meeting.id })
+    this.log(company, meeting.chair, { kind: 'meetingClosed', topic: meeting.topic, decisions: meeting.decisions.length, actions: actions.length }, { meetingId: meeting.id })
     this.changed(company.id)
     for (const action of actions) {
       this.createTask(company, { title: action.title, description: action.description ?? action.title, assignee: action.owner, createdBy: meeting.chair, due: action.due || undefined, meetingId: meeting.id })
@@ -588,4 +600,4 @@ export class CompanyEngine {
   }
 }
 
-export const STATUS_NAMES: Record<TaskStatus, string> = { todo: 'Por hacer', in_progress: 'En curso', review: 'En revisión', done: 'Hecho', blocked: 'Trabada' }
+
