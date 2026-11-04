@@ -54,7 +54,7 @@ jobs:
       # Includes tests/architecture.test.ts and tests/specs.test.ts, plus the coverage ratchet in vitest.config.mts.
       - run: pnpm run test:coverage
       - run: pnpm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
