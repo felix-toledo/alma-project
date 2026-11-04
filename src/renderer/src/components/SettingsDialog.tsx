@@ -243,8 +243,8 @@ function newAgent(): AgentProfile {
     name: 'Nuevo agente',
     description: 'Describí cuándo conviene usar este agente.',
     systemPrompt: 'Sos un agente que ayuda al usuario.',
-    provider: 'anthropic',
-    model: CLAUDE_MODELS[0],
+    provider: 'meta',
+    model: '',
     effort: 'medium',
     tools: ['read_file', 'list_dir', 'search_files'],
     allowMcp: false,
@@ -270,6 +270,17 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
 
   if (!draft) return <p>No hay agentes.</p>
   return (
+    <>
+    <label className="field">
+      <span>Agente por defecto (el de las conversaciones nuevas y los canales sin agente propio)</span>
+      <select value={settings.defaultAgentId} onChange={(e) => void onChange({ defaultAgentId: e.target.value })}>
+        {settings.agents.filter((a) => !a.companyId).map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name} · {PROVIDER_NAMES[a.provider]}
+          </option>
+        ))}
+      </select>
+    </label>
     <div className="split">
       <div className="split-list">
         {settings.agents.filter((a) => !a.companyId).map((agent) => (
@@ -311,11 +322,11 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
                 setDraft({ ...draft, provider, model: provider === 'anthropic' ? CLAUDE_MODELS[0] : '' })
               }}
             >
+              <option value="meta">Meta (Muse)</option>
               <option value="anthropic">Anthropic (Claude)</option>
               <option value="xai">xAI (Grok)</option>
               <option value="deepseek">DeepSeek</option>
               <option value="vercel">Vercel AI Gateway</option>
-              <option value="meta">Meta (Muse)</option>
             </select>
           </label>
           <label className="field grow">
@@ -427,6 +438,7 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
         </div>
       </div>
     </div>
+    </>
   )
 }
 
@@ -462,6 +474,7 @@ function ApprovalsTab({ settings, onChange }: Props): React.JSX.Element {
           <label className="field">
             <span>Proveedor del revisor</span>
             <select value={review.provider} onChange={(e) => setReview({ ...review, provider: e.target.value as ProviderId, model: e.target.value === 'anthropic' ? CLAUDE_MODELS[0] : '' })}>
+              <option value="meta">Meta (Muse)</option>
               <option value="anthropic">Anthropic (Claude)</option>
               <option value="xai">xAI (Grok)</option>
               <option value="deepseek">DeepSeek</option>
@@ -470,7 +483,7 @@ function ApprovalsTab({ settings, onChange }: Props): React.JSX.Element {
           </label>
           <label className="field grow">
             <span>Modelo</span>
-            <input list="review-models" value={review.model} placeholder={review.provider === 'xai' ? 'vacío = el Grok más nuevo' : review.provider === 'deepseek' ? 'vacío = deepseek-v4-pro' : review.provider === 'vercel' ? 'lab/modelo; vacío = Claude Sonnet' : ''} onChange={(e) => setReview({ ...review, model: e.target.value })} />
+            <input list="review-models" value={review.model} placeholder={review.provider === 'xai' ? 'vacío = el Grok más nuevo' : review.provider === 'deepseek' ? 'vacío = deepseek-v4-pro' : review.provider === 'vercel' ? 'lab/modelo; vacío = Claude Sonnet' : review.provider === 'meta' ? 'vacío = muse-spark-1.3' : ''} onChange={(e) => setReview({ ...review, model: e.target.value })} />
             <datalist id="review-models">
               {(review.provider === 'anthropic' ? CLAUDE_MODELS : []).map((m) => (
                 <option key={m} value={m} />
@@ -827,9 +840,9 @@ function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
               void onChange({ images: { provider: e.target.value as ImageProviderId, model: '' } })
             }}
           >
+            <option value="meta">Meta (Muse Image){hasKey('meta') ? '' : ' · falta la key'}</option>
             <option value="xai">xAI (Grok){hasKey('xai') ? '' : ' · falta la key'}</option>
             <option value="openai">OpenAI{hasKey('openai') ? '' : ' · falta la key'}</option>
-            <option value="meta">Meta (Muse Image){hasKey('meta') ? '' : ' · falta la key'}</option>
           </select>
         </label>
         <label className="field grow">
@@ -1303,6 +1316,16 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
             />
           </label>
         </div>
+        <label className="field">
+          <span>Pausa antes de enviar lo que dijiste (para poder cancelar con la ✕ o Esc si se activó sola)</span>
+          <select value={voice.sendDelayMs} onChange={(e) => void patch({ sendDelayMs: Number(e.target.value) })}>
+            <option value={0}>Ninguna: se envía enseguida</option>
+            <option value={1000}>1 segundo</option>
+            <option value={1500}>1,5 segundos</option>
+            <option value={2500}>2,5 segundos</option>
+            <option value={4000}>4 segundos</option>
+          </select>
+        </label>
         <label className="field">
           <span>Atajo de teclado (funciona desde cualquier programa; también corta a Alma cuando habla)</span>
           <input value={voice.hotkey} placeholder="Control+Alt+Space" onChange={(e) => void patch({ hotkey: e.target.value })} />

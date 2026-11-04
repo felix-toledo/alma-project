@@ -6,6 +6,7 @@ import { request } from '../lib/coordinator'
 import { APPROVAL_MODES, folderName, threadTitle } from '../lib/format'
 import type { Draft } from '../lib/state'
 import { MessageList } from './MessageList'
+import { ModelPicker } from './ModelPicker'
 import { CornerDownLeft, Folder, ImageIcon, Paperclip, Square, X } from 'lucide-react'
 import { Icon } from '../umbra/Icon'
 
@@ -120,21 +121,13 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
           </h2>
         )}
         <div className="header-controls">
-          <label className="control">
-            <span>Agente</span>
-            <select
-              value={thread.agentId}
-              disabled={running}
-              onChange={(e) => void request({ method: 'threads.update', threadId: thread.id, agentId: e.target.value })}
-            >
-              {settings.agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.companyId ? `${settings.companies.find((co) => co.id === a.companyId)?.name ?? 'Empresa'} · ` : ''}
-                  {a.name} · {PROVIDER_NAMES[a.provider]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ModelPicker
+            settings={settings}
+            agent={agent}
+            value={thread.model}
+            disabled={running}
+            onChange={(model) => void request({ method: 'threads.update', threadId: thread.id, model })}
+          />
           <button
             className={`chip${thread.workspace ? '' : ' chip-warn'}`}
             onClick={() => void pickWorkspace()}
@@ -257,7 +250,18 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
               ))}
             </select>
           </label>
-          <span className="muted small grow">{agent ? `${agent.model || 'modelo automático'} · esfuerzo ${agent.effort}` : ''}</span>
+          <label className="control">
+            <span>Agente</span>
+            <select value={thread.agentId} disabled={running} onChange={(e) => void request({ method: 'threads.update', threadId: thread.id, agentId: e.target.value })}>
+              {settings.agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.companyId ? `${settings.companies.find((co) => co.id === a.companyId)?.name ?? 'Empresa'} · ` : ''}
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="muted small grow ellipsis">{agent ? `${thread.model ? `${PROVIDER_NAMES[thread.model.provider]} · ${thread.model.model}` : agent.model || 'modelo automático'} · esfuerzo ${agent.effort}` : ''}</span>
           {running ? (
             <button className="danger" onClick={() => void request({ method: 'chat.stop', threadId: thread.id })}>
               <Icon icon={Square} size="sm" /> Detener
