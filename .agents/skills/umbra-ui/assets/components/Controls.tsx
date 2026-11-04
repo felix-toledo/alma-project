@@ -176,7 +176,7 @@ export function Select<T extends string>({ value, onChange, options, label }: { 
   )
 }
 
-/** Fila etiqueta + control, para listas de ajustes. */
+/** A label + control row, for settings lists. */
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div className="flex min-h-14 items-center justify-between gap-6">

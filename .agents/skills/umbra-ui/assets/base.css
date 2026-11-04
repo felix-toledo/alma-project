@@ -42,7 +42,7 @@ body {
   opacity: var(--op-disabled);
   cursor: not-allowed;
 }
-/* los vecinos del elemento enfocado se atenúan */
+/* the neighbors of the focused element are dimmed */
 .dim-group:has([data-focusable]:focus) > [data-focusable]:not(:focus):not(:hover) {
   opacity: var(--op-dim);
 }

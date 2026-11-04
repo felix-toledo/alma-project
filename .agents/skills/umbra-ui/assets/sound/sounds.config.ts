@@ -13,11 +13,11 @@ export type UISoundEvent =
   | 'page-transition'
 
 export interface SoundDef {
-  /** Ruta al audio (ej. '/sounds/select.ogg'). Vacío = no suena. */
+  /** Path to the audio (e.g. '/sounds/select.ogg'). Empty = silent. */
   src: string
-  /** 0..1, se multiplica por el volumen global */
+  /** 0..1, multiplied by the global volume */
   volume: number
-  /** ms mínimos entre dos reproducciones del mismo evento */
+  /** minimum ms between two plays of the same event */
   cooldown: number
 }
 

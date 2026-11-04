@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-/** Fondo reutilizable: degradado, haz de luz y bokeh ámbar. `reduceMotion` lo congela. */
+/** Reusable background: gradient, beam of light and amber bokeh. `reduceMotion` freezes it. */
 export function Backdrop({ particles = 26, reduceMotion = false }: { particles?: number; reduceMotion?: boolean }) {
   const dots = useMemo(
     () =>

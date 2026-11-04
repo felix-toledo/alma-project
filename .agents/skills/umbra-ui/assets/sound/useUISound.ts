@@ -3,9 +3,9 @@ import { SOUNDS, type UISoundEvent } from './sounds.config'
 
 // Sonido de interfaz de Umbra.
 // - Si un evento tiene `src` en sounds.config.ts, reproduce ese archivo.
-// - Si `src` está vacío, usa un tono sintetizado con Web Audio (sin archivos ni licencias).
-// - Música ambiental sintetizada (pads lentos + campanitas con eco), apagable.
-// Nada suena hasta la primera interacción del usuario.
+// - If `src` is empty, it uses a tone synthesized with Web Audio (no files or licenses).
+// - Synthesized ambient music (slow pads + little bells with echo), can be turned off.
+// Nothing plays until the first user interaction.
 
 const KEY = 'umbra.prefs'
 type Prefs = { muted: boolean; volume: number; music: boolean; motion: boolean }
@@ -38,13 +38,13 @@ function setPrefs(p: Partial<Prefs>): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(prefs))
   } catch {
-    /* sin storage: dura la sesión */
+    /* no storage: it lasts the session */
   }
   apply()
   listeners.forEach((l) => l())
 }
 
-// ---------- tonos sintetizados por evento: [notas MIDI, duración s, volumen] ----------
+// ---------- synthesized tones per event: [MIDI notes, duration s, volume] ----------
 const SYNTH: Record<UISoundEvent, [number[], number, number]> = {
   hover: [[93], 0.06, 0.02],
   'focus-move': [[91], 0.05, 0.02],
@@ -79,7 +79,7 @@ function tones(notes: number[], duration: number, volume: number): void {
   })
 }
 
-/** Disparable desde cualquier lado (también fuera de React). */
+/** Can be fired from anywhere (also outside React). */
 export function playUISound(event: UISoundEvent): void {
   if (!ctx || prefs.muted) return
   const def = SOUNDS[event]
@@ -98,10 +98,10 @@ export function playUISound(event: UISoundEvent): void {
   }
 }
 
-// ---------- música ambiental ----------
-// Tema original con el carácter de los menús de consola: pads cálidos de ataque lento, campanitas de
-// vidrio (FM) en frases cortas, bajo suave, un soplido de aire y mucha reverb. Armonía lidia en Re,
-// acordes con 9nas y #11 que nunca "resuelven", para que se sienta calmo y suspendido.
+// ---------- ambient music ----------
+// An original theme with the character of console menus: warm slow-attack pads, little
+// glass bells (FM) in short phrases, a soft bass, a breath of air and plenty of reverb. Lydian harmony in D,
+// chords with 9ths and #11 that never "resolve", so that it feels calm and suspended.
 type Chord = { bass: number; pad: number[]; bells: number[] }
 const CHORDS: Chord[] = [
   { bass: 38, pad: [57, 61, 64, 66], bells: [73, 76, 78, 81, 85, 88] }, // Dmaj9
@@ -114,7 +114,7 @@ const MUSIC_VOLUME = 0.32
 type Bus = { out: GainNode; dry: GainNode; reverb: ConvolverNode; delay: DelayNode; timer: number; chord: number }
 let music: Bus | undefined
 
-/** Respuesta de reverb generada: ruido estéreo con caída exponencial (~5 s), sin archivos. */
+/** Generated reverb response: stereo noise with an exponential decay (~5 s), no files. */
 function impulse(ac: AudioContext, seconds: number): AudioBuffer {
   const len = Math.floor(ac.sampleRate * seconds)
   const buf = ac.createBuffer(2, len, ac.sampleRate)
@@ -143,7 +143,7 @@ function musicBus(ac: AudioContext): Bus {
   wet.gain.value = 0.9
   reverb.connect(wet).connect(out)
 
-  // Eco ping-pong suave (izq/der) que alimenta la reverb.
+  // A soft ping-pong echo (left/right) that feeds the reverb.
   const delay = ac.createDelay(2)
   delay.delayTime.value = 0.75
   const fb = ac.createGain()
@@ -172,7 +172,7 @@ function pad(bus: Bus, chord: Chord, at: number): void {
   const filter = ac.createBiquadFilter()
   filter.type = 'lowpass'
   filter.Q.value = 0.5
-  // El filtro se abre y se cierra en cada acorde: "respira".
+  // The filter opens and closes on each chord: it "breathes".
   filter.frequency.setValueAtTime(500, at)
   filter.frequency.linearRampToValueAtTime(1600, at + CHORD_SECONDS * 0.55)
   filter.frequency.linearRampToValueAtTime(700, end)
@@ -197,7 +197,7 @@ function pad(bus: Bus, chord: Chord, at: number): void {
       osc.stop(end + 0.1)
     }
   })
-  // Bajo: seno + su octava (para que se escuche también en parlantes chicos).
+  // Bass: a sine + its octave (so that it is also heard on small speakers).
   const bass = ac.createGain()
   bass.gain.setValueAtTime(0, at)
   bass.gain.linearRampToValueAtTime(0.07, at + 3)
@@ -215,7 +215,7 @@ function pad(bus: Bus, chord: Chord, at: number): void {
   }
 }
 
-/** Campanita de vidrio: FM con relación inarmónica, brillo que se apaga rápido. */
+/** Glass bell: FM with an inharmonic ratio, brightness that fades fast. */
 function bell(bus: Bus, note: number, when: number, level: number): void {
   const ac = ctx!
   const f = midi(note)
@@ -243,7 +243,7 @@ function bell(bus: Bus, note: number, when: number, level: number): void {
   mod.stop(when + 4.1)
 }
 
-/** Frases cortas de 3 a 5 notas, ascendentes o descendentes, separadas por silencios. */
+/** Short phrases of 3 to 5 notes, ascending or descending, separated by silences. */
 function bells(bus: Bus, chord: Chord, at: number): void {
   let t = at + 1.5 + Math.random() * 1.5
   while (t < at + CHORD_SECONDS - 1.5) {
@@ -259,7 +259,7 @@ function bells(bus: Bus, chord: Chord, at: number): void {
   }
 }
 
-/** Soplido de aire filtrado, muy bajo, que sube y baja con el acorde. */
+/** A filtered breath of air, very low, that rises and falls with the chord. */
 function air(bus: Bus, at: number): void {
   const ac = ctx!
   const len = ac.sampleRate * 2
@@ -292,7 +292,7 @@ function playChord(bus: Bus): void {
   bus.chord++
 }
 
-/** Suena solo si la música está activa, la ventana visible y el usuario ya interactuó. */
+/** It plays only if the music is on, the window visible and the user has already interacted. */
 function syncMusic(): void {
   if (!ctx || ctx.state !== 'running') return
   const shouldPlay = prefs.music && !prefs.muted && !document.hidden
@@ -303,7 +303,7 @@ function syncMusic(): void {
     playChord(music)
     music.timer = window.setInterval(() => playChord(music!), CHORD_SECONDS * 1000)
   } else if (shouldPlay && music?.timer) {
-    // Cambio de volumen mientras suena: se ajusta en vivo, sin cortes.
+    // Volume change while playing: it adjusts live, with no cuts.
     music.out.gain.setTargetAtTime(MUSIC_VOLUME * (prefs.volume / 0.7), ctx.currentTime, 0.15)
   } else if (!shouldPlay && music?.timer) {
     window.clearInterval(music.timer)

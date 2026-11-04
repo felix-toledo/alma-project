@@ -34,7 +34,7 @@ export function Tabs({ tabs, value, onChange }: { tabs: { id: string; label: str
   )
 }
 
-/* ---------- MenuList: ícono + label, activo con fondo translúcido ---------- */
+/* ---------- MenuList: icon + label, active with a translucent background ---------- */
 export interface MenuItem { id: string; label: string; icon: LucideIcon; disabled?: boolean }
 export function MenuList({ items, value, onSelect, label }: { items: MenuItem[]; value?: string; onSelect: (id: string) => void; label: string }) {
   return (
