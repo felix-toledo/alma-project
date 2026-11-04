@@ -1,10 +1,16 @@
 import { app, safeStorage } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import * as z from 'zod/v4'
 import { applyMetaDefault, DEFAULT_AGENTS, defaultSettings, looksLikeApiKey, OFFICE_TOOLS } from '../shared/defaults'
+import { type Language, parseLanguage, resolveLanguage } from '../shared/i18n/language'
+import { migrateDefaults } from '../shared/migrate'
+import { mainError } from './messages'
 import type { PublicSettings, SecretProviderId, Settings } from '../shared/types'
 
 const ENC_PREFIX = 'enc:'
+
+const languageSchema = z.enum(['es', 'en'])
 
 function settingsPath(): string {
   return join(app.getPath('userData'), 'settings.json')
@@ -28,7 +34,7 @@ export function encrypt(secret: string): string {
   if (process.env.ALMA_ALLOW_PLAINTEXT_SECRETS === '1') return secret
   if (!warnedUnsealed) {
     warnedUnsealed = true
-    console.error('[settings] el sistema no ofrece almacén seguro: las claves no se guardan en disco (solo viven en esta sesión).')
+    console.error('[settings] the system has no secure storage: keys are not saved to disk (they only live in this session).')
   }
   return ''
 }
@@ -47,9 +53,12 @@ export class SettingsStore {
   private settings: Settings
   /** A secret was found unsealed on disk (older versions, or a machine without a keychain): rewrite sealed. */
   private legacyPlaintext = false
+  /** Set only when the person chose a language; without it `language` keeps following the system (spec 025 D3). */
+  private explicitLanguage: Language | undefined
 
-  constructor() {
+  constructor(private readonly systemLocales: readonly string[]) {
     this.settings = this.load()
+    this.settings.language = resolveLanguage(this.explicitLanguage, this.systemLocales)
     // A key pasted into the image model field would be sent as a model name and sit unencrypted on disk.
     const pastedKey = looksLikeApiKey(this.settings.images.model)
     if (pastedKey) this.settings.images = { ...this.settings.images, model: '' }
@@ -67,10 +76,13 @@ export class SettingsStore {
   }
 
   private load(): Settings {
-    const base = defaultSettings()
+    // What a fresh install ships is written in the language in effect: the chosen one, or the system's.
+    let base = defaultSettings(resolveLanguage(this.explicitLanguage, this.systemLocales))
     if (!existsSync(settingsPath())) return base
     try {
       const stored = JSON.parse(readFileSync(settingsPath(), 'utf8')) as Partial<Settings>
+      this.explicitLanguage = parseLanguage(stored.language)
+      base = defaultSettings(resolveLanguage(this.explicitLanguage, this.systemLocales))
       const merged: Settings = {
         ...base,
         ...stored,
@@ -104,7 +116,7 @@ export class SettingsStore {
         routines: stored.routines ?? []
       }
       if (!merged.agents?.length) merged.agents = base.agents
-      // Only «Hola Alma» ships now; older saves may still name hey_jarvis, alexa or hey_mycroft.
+      // Only «Ey Alma» ships now (its id stays hola_alma); older saves may still name hey_jarvis, alexa or hey_mycroft.
       if (merged.voice.wakeWord !== 'off') merged.voice.wakeWord = 'hola_alma'
       // Agents saved before the Office tools existed: readers get office_read, writers all three. Once.
       if (!stored.officeToolsAdded) {
@@ -141,8 +153,10 @@ export class SettingsStore {
   private save(): void {
     const dir = app.getPath('userData')
     mkdirSync(dir, { recursive: true })
-    const onDisk: Settings = {
-      ...this.settings,
+    const { language: _resolved, ...saved } = this.settings
+    const onDisk: Omit<Settings, 'language'> & { language?: Language } = {
+      ...saved,
+      ...(this.explicitLanguage ? { language: this.explicitLanguage } : {}),
       providers: {
         anthropic: { apiKey: encrypt(this.settings.providers.anthropic.apiKey) },
         xai: { ...this.settings.providers.xai, apiKey: encrypt(this.settings.providers.xai.apiKey) },
@@ -186,8 +200,19 @@ export class SettingsStore {
 
   /** Applies a partial update from the renderer. Provider secrets are changed only through setApiKey. */
   update(patch: Partial<PublicSettings>): Settings {
-    const { providers, companyPasswords: _derived, ...rest } = patch
+    const { providers, companyPasswords: _derived, language, ...rest } = patch
+    // Validated before anything changes, so a bad value leaves the settings untouched.
+    const parsed = language === undefined ? undefined : languageSchema.safeParse(language)
+    if (parsed && !parsed.success) throw new Error(mainError(this.settings.language, 'invalid-language'))
+    const chosen = parsed?.data
+    const previous = this.settings.language
     this.settings = { ...this.settings, ...rest }
+    if (chosen) {
+      this.explicitLanguage = chosen
+      this.settings.language = chosen
+      // The shipped words nobody edited follow the language; what the person wrote stays as it is (AC-8.2, AC-4.1).
+      if (chosen !== previous) this.settings = migrateDefaults(this.settings, previous, chosen)
+    }
     if (providers?.xai?.baseUrl !== undefined) {
       this.settings.providers.xai.baseUrl = providers.xai.baseUrl.trim() || defaultSettings().providers.xai.baseUrl
     }

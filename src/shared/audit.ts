@@ -63,7 +63,7 @@ export function initAudit(dataDir: string, who: AuditSource, now = new Date()): 
     const lines = newest ? readFileSync(join(dir, newest), 'utf8').trimEnd().split('\n') : []
     if (lines.length && lines.at(-1)) last = sha256(lines.at(-1)!)
   } catch (error) {
-    console.error('[audit] no se pudo abrir el registro:', error)
+    console.error('[audit] could not open the log:', error)
     dir = ''
   }
 }
@@ -83,7 +83,7 @@ export function audit(event: AuditEvent, now = new Date()): void {
     appendFileSync(join(dir, `${source}-${monthOf(now)}.jsonl`), line + '\n', { encoding: 'utf8', mode: 0o600 })
     last = sha256(line)
   } catch (error) {
-    console.error('[audit] no se pudo escribir:', error)
+    console.error('[audit] could not write:', error)
   }
 }
 

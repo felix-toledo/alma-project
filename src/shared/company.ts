@@ -1,5 +1,8 @@
 // Companies: pure helpers shared by the coordinator (who may talk to whom, spend) and the window (org chart, templates).
 import { DEFAULT_META_MODEL } from './defaults'
+import { AGENT_NAMES } from './agentNames'
+import { defaultTexts } from './i18n/defaultTexts'
+import type { Language } from './i18n/language'
 import type { AgentProfile, Company, CompanyMember, ProviderId, Usage } from './types'
 
 export const BOARD = 'user'
@@ -73,7 +76,7 @@ export const PRICES: Record<ProviderId, { input: number; output: number; cacheRe
   deepseek: { input: 0.3, output: 1.2, cacheRead: 0.03 },
   // The gateway bills each model at its own price; this is a Sonnet-class guess.
   vercel: { input: 3, output: 15, cacheRead: 0.3 },
-  // Muse Spark 1.3 (standard); Wonder cuesta más.
+  // Muse Spark 1.3 (standard); Wonder costs more.
   meta: { input: 1.25, output: 4.25, cacheRead: 0.15 }
 }
 
@@ -112,160 +115,75 @@ export interface CompanyTemplate {
 const OFFICE = ['office_read', 'office_create', 'office_edit']
 const FILES = ['read_file', 'list_dir', 'search_files', 'write_file', 'edit_file']
 
-const CEO = (what: string): MemberTemplate => ({
-  key: 'ceo',
-  title: 'Director/a general',
-  reportsTo: null,
-  description: `Dirige la empresa: ${what}. Reparte el trabajo, revisa entregas y le reporta al Directorio (el usuario).`,
-  instructions: `Sos quien dirige la empresa. Convertís los objetivos en tareas concretas para tu equipo (assign_task), revisás lo que entregan (review_task) y decidís.
-Antes de un plan grande o de algo que cueste plata o comprometa a la empresa, pedile el visto bueno al Directorio con escalate.
-No hagas vos el trabajo de tu equipo: delegá en quien corresponde y controlá el resultado contra el objetivo.`,
-  tools: [...FILES, ...OFFICE],
-  canDelegate: true
+/** The shape of a template: who reports to whom and what each position can do. The words come from the language's texts. */
+type MemberStructure = Omit<MemberTemplate, 'title' | 'description' | 'instructions'>
+const member = (key: string, reportsTo: string | null, tools: string[], canDelegate: boolean, autoApprove?: string[]): MemberStructure => ({
+  key,
+  reportsTo,
+  tools,
+  canDelegate,
+  ...(autoApprove ? { autoApprove } : {})
 })
+const STAFF = [...FILES, ...OFFICE]
+const CEO_SEAT = (): MemberStructure => member('ceo', null, STAFF, true)
 
-export const COMPANY_TEMPLATES: CompanyTemplate[] = [
+const TEMPLATE_STRUCTURE: { id: string; color: string; members: MemberStructure[] }[] = [
   {
     id: 'marketing',
-    name: 'Agencia de marketing',
-    mission: 'Agencia que crea y publica contenido para redes y campañas por mail, y mide los resultados.',
-    goals: 'Publicar 3 posteos por semana en Instagram\nResponder consultas en menos de 24 h\nInforme mensual de métricas',
     color: '#8b5cf6',
     members: [
-      CEO('una agencia de marketing'),
-      {
-        key: 'estratega',
-        title: 'Estratega de contenidos',
-        reportsTo: 'ceo',
-        description: 'Arma el calendario de contenidos, define mensajes y públicos, y briefea al community manager y al redactor.',
-        instructions: 'Planificás qué se publica, cuándo y para quién. Investigá tendencias y competencia en la web. Dejá el calendario y los briefs en el vault (Marketing/Calendario.md). Asigná las piezas al community manager y al redactor.',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: true
-      },
-      {
-        key: 'community',
-        title: 'Community manager',
-        reportsTo: 'estratega',
-        description: 'Crea y publica los posteos de Instagram (imagen + texto) y responde mensajes.',
-        instructions: 'Creás posteos para Instagram: una imagen (generate_image o compose_image) y un texto con gancho, cuerpo breve, llamada a la acción y hashtags. Publicás con instagram_publish (se aprueba antes). Registrá cada publicación en Marketing/Publicaciones.md.',
-        tools: [...FILES, 'generate_image', 'compose_image', 'instagram_publish'],
-        canDelegate: false,
-        autoApprove: ['generate_image', 'compose_image', 'write_file', 'edit_file']
-      },
-      {
-        key: 'redactor',
-        title: 'Redactor/a',
-        reportsTo: 'estratega',
-        description: 'Escribe textos: newsletters, mails a clientes, artículos y propuestas.',
-        instructions: 'Escribís textos claros en la voz de la marca. Para mails usá email_send (se aprueba antes de salir). Las propuestas y documentos, en Word (office_create) dentro del vault.',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: false
-      },
-      {
-        key: 'metricas',
-        title: 'Analista de métricas',
-        reportsTo: 'ceo',
-        description: 'Mide resultados (alcance, interacción, ventas), arma tableros en Excel e informes.',
-        instructions: 'Trabajás con datos: siempre citá de dónde sale cada número y no inventes valores. Planillas en Excel con fórmulas (no números calculados a mano). Informe mensual en Informes/ del vault.',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: false
-      }
+      CEO_SEAT(),
+      member('estratega', 'ceo', STAFF, true),
+      member('community', 'estratega', [...FILES, 'generate_image', 'compose_image', 'instagram_publish'], false, ['generate_image', 'compose_image', 'write_file', 'edit_file']),
+      member('redactor', 'estratega', STAFF, false),
+      member('metricas', 'ceo', STAFF, false)
     ]
   },
   {
     id: 'ecommerce',
-    name: 'Ecommerce / tienda',
-    mission: 'Tienda online: catálogo, precios, ventas, atención al cliente y logística.',
-    goals: 'Catálogo y precios al día\nResponder a clientes en el día\nControlar stock semanalmente',
     color: '#10b981',
     members: [
-      CEO('una tienda online'),
-      {
-        key: 'catalogo',
-        title: 'Catálogo y precios',
-        reportsTo: 'ceo',
-        description: 'Mantiene el catálogo de productos y la lista de precios (Excel), compara con la competencia.',
-        instructions: 'Llevás Catalogo.xlsx en el vault: producto, costo, precio, margen (con fórmulas), stock. Investigá precios de la competencia en la web y proponé cambios al director antes de aplicarlos.',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: false
-      },
-      {
-        key: 'marketing',
-        title: 'Marketing',
-        reportsTo: 'ceo',
-        description: 'Promociones, posteos de productos en Instagram y mails a clientes.',
-        instructions: 'Armás promociones y posteos de productos (imagen + texto) y campañas por mail. Todo lo que sale hacia afuera se aprueba antes.',
-        tools: [...FILES, 'generate_image', 'compose_image', 'instagram_publish'],
-        canDelegate: false,
-        autoApprove: ['generate_image', 'compose_image']
-      },
-      {
-        key: 'atencion',
-        title: 'Atención al cliente',
-        reportsTo: 'ceo',
-        description: 'Responde consultas por WhatsApp y mail, registra reclamos y pedidos.',
-        instructions: 'Respondés con amabilidad y precisión, solo con información verificada del catálogo y las políticas del vault. Registrá cada reclamo en Atencion/Reclamos.md. Lo que no sepas, escalalo.',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: false
-      },
-      {
-        key: 'logistica',
-        title: 'Logística y stock',
-        reportsTo: 'ceo',
-        description: 'Controla stock, envíos y proveedores.',
-        instructions: 'Controlás el stock contra el catálogo, avisás faltantes y armás pedidos a proveedores (borradores en Word/Excel en el vault).',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: false
-      },
-      {
-        key: 'finanzas',
-        title: 'Finanzas',
-        reportsTo: 'ceo',
-        description: 'Ventas, costos, márgenes y flujo de caja en Excel.',
-        instructions: 'Llevás Finanzas.xlsx con fórmulas: ventas, costos, márgenes y caja. Citá siempre la fuente de cada dato y marcá lo estimado.',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: false
-      }
+      CEO_SEAT(),
+      member('catalogo', 'ceo', STAFF, false),
+      member('marketing', 'ceo', [...FILES, 'generate_image', 'compose_image', 'instagram_publish'], false, ['generate_image', 'compose_image']),
+      member('atencion', 'ceo', STAFF, false),
+      member('logistica', 'ceo', STAFF, false),
+      member('finanzas', 'ceo', STAFF, false)
     ]
   },
   {
     id: 'administracion',
-    name: 'Administración / estudio',
-    mission: 'Estudio que lleva la administración: facturas, pagos, documentos, mails y agenda.',
-    goals: 'Facturas cargadas en el día\nVencimientos sin atrasos\nDocumentos ordenados en el vault',
     color: '#0ea5e9',
-    members: [
-      CEO('un estudio administrativo'),
-      {
-        key: 'contable',
-        title: 'Contable',
-        reportsTo: 'ceo',
-        description: 'Facturas, pagos y vencimientos: lee PDFs, carga planillas y controla saldos.',
-        instructions: 'Leés facturas y comprobantes (PDF), los cargás en Contabilidad.xlsx con fórmulas y controlás vencimientos. Nunca inventes montos: si un dato no está, preguntá.',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: false
-      },
-      {
-        key: 'administrativo',
-        title: 'Administrativo/a',
-        reportsTo: 'ceo',
-        description: 'Mails, documentos en Word, notas y archivo del vault.',
-        instructions: 'Redactás mails (email_send, se aprueban antes) y documentos en Word con el formato del estudio, y mantenés ordenado el vault.',
-        tools: [...FILES, ...OFFICE],
-        canDelegate: false
-      },
-      {
-        key: 'agenda',
-        title: 'Agenda y recordatorios',
-        reportsTo: 'ceo',
-        description: 'Turnos, vencimientos y recordatorios para el equipo y el Directorio.',
-        instructions: 'Llevás la agenda en Agenda.md del vault y programás recordatorios (create_reminder) para vencimientos y reuniones.',
-        tools: [...FILES],
-        canDelegate: false
-      }
-    ]
+    members: [CEO_SEAT(), member('contable', 'ceo', STAFF, false), member('administrativo', 'ceo', STAFF, false), member('agenda', 'ceo', [...FILES], false)]
   }
 ]
+
+/** The company templates, written in the language in effect when they are offered (BR-16). */
+export function companyTemplates(language: Language = 'es'): CompanyTemplate[] {
+  const texts = defaultTexts(language).templates
+  return TEMPLATE_STRUCTURE.map(({ id, color, members }) => ({
+    id,
+    name: texts[id].name,
+    mission: texts[id].mission,
+    goals: texts[id].goals,
+    color,
+    members: members.map((structure) => {
+      const words = texts[id].members[structure.key]
+      return {
+        key: structure.key,
+        title: words.title,
+        reportsTo: structure.reportsTo,
+        description: words.description,
+        instructions: words.instructions,
+        tools: [...structure.tools],
+        canDelegate: structure.canDelegate,
+        ...(structure.autoApprove ? { autoApprove: [...structure.autoApprove] } : {})
+      }
+    })
+  }))
+}
+
+export const COMPANY_TEMPLATES: CompanyTemplate[] = companyTemplates('es')
 
 /** Agent profile for a position: the template's instructions on top of the company's model choice. */
 export function memberAgent(company: Company, member: CompanyMember, template: Pick<MemberTemplate, 'description' | 'instructions' | 'tools' | 'canDelegate' | 'autoApprove'>, name: string): AgentProfile {
@@ -286,7 +204,6 @@ export function memberAgent(company: Company, member: CompanyMember, template: P
 }
 
 /** First names for new agents, so the org chart reads like a team ("Sofía · Community manager"). */
-export const AGENT_NAMES = ['Sofía', 'Martín', 'Lucía', 'Tomás', 'Valentina', 'Joaquín', 'Camila', 'Mateo', 'Julieta', 'Bruno', 'Florencia', 'Nicolás', 'Paula', 'Diego', 'Abril', 'Franco']
 
 export function pickName(taken: string[], offset = 0): string {
   const free = AGENT_NAMES.filter((n) => !taken.includes(n))

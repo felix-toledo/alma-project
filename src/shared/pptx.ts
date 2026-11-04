@@ -45,11 +45,18 @@ export interface SlideRef {
   notesPath?: string
 }
 
+/** Not a PowerPoint file (the callers say so in their language). */
+export class PresentationError extends Error {
+  constructor() {
+    super('Not a valid PowerPoint presentation.')
+  }
+}
+
 /** Slides in presentation order (sldIdLst), not file-name order. */
 export async function slideRefs(zip: JSZip, parse: ParseXml): Promise<SlideRef[]> {
   const pres = await xml(zip, 'ppt/presentation.xml', parse)
   const rels = await xml(zip, 'ppt/_rels/presentation.xml.rels', parse)
-  if (!pres || !rels) throw new Error('No es una presentación de PowerPoint válida.')
+  if (!pres || !rels) throw new PresentationError()
   const targets = new Map(elementsOf(rels, 'Relationship').map((r) => [r.getAttribute('Id'), r.getAttribute('Target') ?? '']))
   const refs: SlideRef[] = []
   for (const id of elementsOf(pres, 'p:sldId')) {

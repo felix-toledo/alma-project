@@ -35,7 +35,7 @@ export async function renderSvgToPng(request: Extract<HostRequest, { action: 'im
     try {
       dataUrl = await win.webContents.executeJavaScript(`(${RASTERIZE})(${JSON.stringify(svg)}, ${width}, ${height})`)
     } catch {
-      return { ok: false, message: 'el SVG no es válido (si usaste svg_overlay, revisá que esté bien formado)' }
+      return { ok: false, message: 'the SVG is not valid (if you used svg_overlay, check that it is well formed)' }
     }
     await writeFile(outPath, Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64'))
     return { ok: true, message: outPath }

@@ -1,6 +1,8 @@
-// Domótica: the vocabulary shared by the coordinator (Home Assistant client, plan, tools) and the "Casa" window.
+// Home automation: the vocabulary shared by the coordinator (Home Assistant client, plan, tools) and the "Casa" window.
 // Home Assistant (HA) owns devices, areas, scenes and automations; Alma owns the floor plan and the judgment rules.
 import type { DrawingElement } from './excalidraw'
+import type { Language } from './i18n/language'
+import { translate } from './i18n/messages'
 
 export interface HomeSettings {
   enabled: boolean
@@ -118,20 +120,14 @@ export interface HomeSnapshot {
   automations: HomeAutomation[]
 }
 
-/** Integrations that make sense to offer first; the rest of HA's catalog is searchable. */
-export const POPULAR_INTEGRATIONS: { domain: string; name: string; hint: string }[] = [
-  { domain: 'tuya', name: 'Tuya / Smart Life (Moes y otras)', hint: 'Con el QR de la app Smart Life o Tuya Smart.' },
-  { domain: 'sonoff', name: 'Sonoff / eWeLink', hint: 'Con tu cuenta de eWeLink (mejor una segunda cuenta con los dispositivos compartidos).' },
-  { domain: 'onvif', name: 'Cámara ONVIF (Tapo, Hikvision, Reolink…)', hint: 'IP de la cámara y la «cuenta de cámara» que creaste en su app.' },
-  { domain: 'tplink', name: 'TP-Link / Kasa / Tapo (enchufes y focos)', hint: 'Se descubren en la red; pide la cuenta de TP-Link.' },
-  { domain: 'hue', name: 'Philips Hue', hint: 'Apretar el botón del puente.' },
-  { domain: 'cast', name: 'Chromecast / Google Nest', hint: 'Se descubren solos en la red.' },
-  { domain: 'wiz', name: 'WiZ', hint: 'Se descubren solos en la red.' },
-  { domain: 'shelly', name: 'Shelly', hint: 'Se descubren solos en la red.' },
-  { domain: 'esphome', name: 'ESPHome', hint: 'IP del dispositivo.' },
-  { domain: 'xiaomi_miio', name: 'Xiaomi Miio', hint: 'Cuenta Xiaomi o IP y token.' },
-  { domain: 'zha', name: 'Zigbee (ZHA)', hint: 'Necesita un adaptador Zigbee USB.' }
-]
+const POPULAR_DOMAINS = ['tuya', 'sonoff', 'onvif', 'tplink', 'hue', 'cast', 'wiz', 'shelly', 'esphome', 'xiaomi_miio', 'zha'] as const
+
+/** Integrations that make sense to offer first; the rest of HA's catalog is searchable. Names and hints follow the language. */
+export function popularIntegrations(language: Language = 'es'): { domain: string; name: string; hint: string }[] {
+  return POPULAR_DOMAINS.map((domain) => ({ domain, name: translate(language, `integration.${domain}.name`), hint: translate(language, `integration.${domain}.hint`) }))
+}
+
+export const POPULAR_INTEGRATIONS = popularIntegrations('es')
 
 // ---------------------------------------------------------------------------
 // Config flows: HA asks for data step by step (a form per step). The window renders any of them.
@@ -226,8 +222,8 @@ export interface HomePlan {
   updatedAt: number
 }
 
-export function emptyPlan(): HomePlan {
-  return { floors: [{ id: 'piso-1', name: 'Planta baja', rooms: [], doors: [], items: [] }], updatedAt: Date.now() }
+export function emptyPlan(language: Language = 'es'): HomePlan {
+  return { floors: [{ id: 'piso-1', name: translate(language, 'plan.groundFloor'), rooms: [], doors: [], items: [] }], updatedAt: Date.now() }
 }
 
 export const newId = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 8)}`
@@ -339,7 +335,7 @@ export function normalizeFloor(rooms: PlanRoom[], doors: PlanDoor[], target = 12
  * Rooms from an Excalidraw drawing: every rectangle (or closed line) is a room, named by the text inside it.
  * A big outline that contains other rooms is the house's wall, not a room. Scale is fitted to `target` cm.
  */
-export function planFromDrawing(elements: DrawingElement[], target = 1200): { rooms: PlanRoom[]; doors: PlanDoor[] } {
+export function planFromDrawing(elements: DrawingElement[], language: Language = 'es', target = 1200): { rooms: PlanRoom[]; doors: PlanDoor[] } {
   const live = elements.filter((e) => !e.isDeleted)
   const byId = new Map(live.map((e) => [e.id, e]))
   const shapes: { id: string; polygon: Point[]; box: ReturnType<typeof bbox>; color?: string }[] = []
@@ -375,7 +371,7 @@ export function planFromDrawing(elements: DrawingElement[], target = 1200): { ro
   let unnamed = 0
   const planRooms: PlanRoom[] = rooms.map((shape) => ({
     id: newId('room'),
-    name: labelOf(shape) || `Habitación ${++unnamed}`,
+    name: labelOf(shape) || translate(language, 'plan.roomN', { n: ++unnamed }),
     areaId: null,
     polygon: shape.polygon.map((p) => [p[0], p[1]] as Point),
     ...(shape.color ? { color: shape.color } : {})
@@ -400,7 +396,7 @@ export function extractJson(text: string): unknown {
       }
     }
   }
-  throw new Error('La respuesta no trae JSON.')
+  throw new Error('The answer has no JSON.')
 }
 
 /** What a vision model returns when it reads a floor plan photo, on a 0–100 grid (x to the right, y down). */
@@ -410,15 +406,15 @@ export interface VisionPlan {
 }
 
 /** `aspect` is the picture's width / height: the model answers in percent of each side, so x is stretched by it. */
-export function planFromVision(data: unknown, aspect = 1, target = 1200): { rooms: PlanRoom[]; doors: PlanDoor[] } {
+export function planFromVision(data: unknown, aspect = 1, language: Language = 'es', target = 1200): { rooms: PlanRoom[]; doors: PlanDoor[] } {
   const raw = data as Partial<VisionPlan> | null
   const stretch = (p: Point): Point => [p[0] * aspect, p[1]]
   const rooms: PlanRoom[] = []
   for (const room of raw?.rooms ?? []) {
     const polygon = cleanPolygon(room?.polygon)?.map(stretch)
-    if (polygon) rooms.push({ id: newId('room'), name: String(room.name ?? '').trim() || `Habitación ${rooms.length + 1}`, areaId: null, polygon })
+    if (polygon) rooms.push({ id: newId('room'), name: String(room.name ?? '').trim() || translate(language, 'plan.roomN', { n: rooms.length + 1 }), areaId: null, polygon })
   }
-  if (!rooms.length) throw new Error('No se reconoció ninguna habitación en la imagen.')
+  if (!rooms.length) throw new Error('No room was recognized in the image.')
   const doors: PlanDoor[] = []
   for (const door of raw?.doors ?? []) {
     if (Array.isArray(door?.a) && Array.isArray(door?.b) && [...door.a, ...door.b].every(Number.isFinite)) doors.push({ id: newId('door'), a: stretch(door.a), b: stretch(door.b) })

@@ -103,9 +103,9 @@ export function describeDrawing(elements: DrawingElement[], only?: Set<string>):
     const box = `(${Math.round(e.x)},${Math.round(e.y)} ${Math.round(e.width)}×${Math.round(e.height)})`
     const links =
       e.type === 'arrow' || e.type === 'line'
-        ? [e.startBinding && `desde ${e.startBinding.elementId}`, e.endBinding && `hasta ${e.endBinding.elementId}`].filter(Boolean).join(' ')
+        ? [e.startBinding && `from ${e.startBinding.elementId}`, e.endBinding && `to ${e.endBinding.elementId}`].filter(Boolean).join(' ')
         : ''
     lines.push(`- ${e.id} ${e.type}${label(e)} ${box}${links ? ` ${links}` : ''}`)
   }
-  return lines.join('\n') || '(dibujo vacío)'
+  return lines.join('\n') || '(empty drawing)'
 }

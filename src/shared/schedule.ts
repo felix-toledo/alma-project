@@ -1,3 +1,6 @@
+import { formatDateTime } from './i18n/format'
+import type { Language } from './i18n/language'
+import { translate } from './i18n/messages'
 import type { Routine } from './types'
 
 const MINUTE = 60_000
@@ -51,19 +54,20 @@ export function nextRun(routine: Routine, lastRunAt: number | undefined, now: Da
   return undefined
 }
 
-const DAY_NAMES = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+const DAYS = [0, 1, 2, 3, 4, 5, 6] as const
 
-export function describeSchedule(routine: Routine): string {
+/** "lun, mar a las 10:00", "cada 3 h": the language defaults to Spanish for callers that do not pass one. */
+export function describeSchedule(routine: Routine, language: Language = 'es'): string {
   const { schedule } = routine
-  if (schedule.kind === 'once') {
-    return `una vez, el ${new Date(schedule.at).toLocaleString('es', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
-  }
+  if (schedule.kind === 'once') return translate(language, 'schedule.once', { when: formatDateTime(language, schedule.at, 'weekday') })
   if (schedule.kind === 'interval') {
-    return schedule.minutes % 60 === 0 ? `cada ${schedule.minutes / 60} h` : `cada ${schedule.minutes} min`
+    return schedule.minutes % 60 === 0
+      ? translate(language, 'schedule.everyHours', { n: schedule.minutes / 60 })
+      : translate(language, 'schedule.everyMinutes', { n: schedule.minutes })
   }
   const days =
     schedule.days.length === 0 || schedule.days.length === 7
-      ? 'todos los días'
-      : [...schedule.days].sort().map((d) => DAY_NAMES[d]).join(', ')
-  return `${days} a las ${schedule.time}`
+      ? translate(language, 'schedule.everyDay')
+      : [...schedule.days].sort().map((d) => translate(language, `schedule.day.${DAYS[d]}`)).join(', ')
+  return translate(language, 'schedule.at', { days, time: schedule.time })
 }

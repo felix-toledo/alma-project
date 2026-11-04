@@ -1,5 +1,8 @@
 // Types shared by the main process, the coordinator utility process and the renderer.
-import type { FlowStep, HomeEngineStatus, HomePlan, HomeSettings, HomeSnapshot, JudgmentRule, CameraWatch, HomeAutomation } from './home'
+import type { Language } from './i18n/language'
+export type { Language }
+import type { MessageKey } from './i18n/messages'
+import type { FlowStep,HomeEngineStatus, HomePlan, HomeSettings, HomeSnapshot, JudgmentRule, CameraWatch, HomeAutomation } from './home'
 
 export type ProviderId = 'anthropic' | 'xai' | 'deepseek' | 'vercel' | 'meta'
 
@@ -31,7 +34,7 @@ export interface AgentProfile {
 export type ImageProviderId = 'xai' | 'openai' | 'meta'
 
 export type RoutineSchedule =
-  | { kind: 'daily'; time: string; /** 0 = domingo … 6 = sábado; vacío = todos los días */ days: number[] }
+  | { kind: 'daily'; time: string; /** 0 = Sunday … 6 = Saturday; empty = every day */ days: number[] }
   | { kind: 'interval'; minutes: number }
   /** Fires once at this moment (epoch ms); if the app was closed then, as soon as it opens. */
   | { kind: 'once'; at: number }
@@ -83,7 +86,7 @@ export interface ProviderSecrets {
   deepseek: { apiKey: string }
   /** Vercel AI Gateway: one key, models from many labs (`anthropic/claude-sonnet-4.5`, `openai/gpt-5`…). */
   vercel: { apiKey: string }
-  /** Meta Model API: Muse Spark/Wonder (texto), Muse Image (imágenes) y Muse Voice Transcribe (voz a texto) con una sola key. */
+  /** Meta Model API: Muse Spark/Wonder (text), Muse Image (images) and Muse Voice Transcribe (speech to text) with a single key. */
   meta: { apiKey: string }
   /** Only used for image generation (and optionally speech-to-text). */
   openai: { apiKey: string }
@@ -142,7 +145,7 @@ export interface VoiceStatus {
 export type VoicePlayback =
   | { kind: 'pcm'; samples: Float32Array; sampleRate: number }
   | { kind: 'encoded'; data: ArrayBuffer; mime: string }
-  | { kind: 'system'; text: string; voice: string }
+  | { kind: 'system'; text: string; voice: string; /** The language of the text: the window picks a system voice that speaks it. */ language?: Language }
 
 export interface TelegramSettings {
   enabled: boolean
@@ -183,6 +186,8 @@ export interface WhatsAppStatus {
 }
 
 export interface Settings {
+  /** The app language, always resolved: what the person chose, or else the system language (spec 025). */
+  language: Language
   home: HomeSettings
   providers: ProviderSecrets
   defaultAgentId: string
@@ -382,13 +387,20 @@ export interface HomeRulesView {
 // ---------------------------------------------------------------------------
 // Conversation model (provider-neutral)
 
+/** Text Alma wrote for a tool result or error: a dictionary key, so a card can show it in the language of the moment. */
+export interface ToolText {
+  key: MessageKey
+  params?: Record<string, string | number>
+}
+
 export type Block =
   | { type: 'text'; text: string }
   /** A picture for the model (vision): base64 data without the data: prefix. */
   | { type: 'image'; mediaType: string; data: string }
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
+  /** `content` is what the model read (English); `i18n` is the same text as a key for display, absent in older threads. */
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean; i18n?: ToolText }
 
 export interface Usage {
   inputTokens: number
@@ -501,9 +513,11 @@ export interface KnowledgeStatus {
 }
 
 export interface KnowledgeOverview {
-  /** One line each, from Alma/Recuerdos.md. */
+  /** One line each, from the memory file. */
   memories: string[]
-  /** Notes Alma wrote in Alma/Conocimientos, newest first. */
+  /** The vault path of the memory file (`Alma/Recuerdos.md` or `Alma/Memories.md`). */
+  memoryFile: string
+  /** Notes Alma wrote in its knowledge folder, newest first. */
   notes: { path: string; title: string; mtime: number }[]
 }
 
@@ -517,6 +531,8 @@ export interface PendingApproval {
   /** Auto-review flagged this call as potentially dangerous. */
   flagged: boolean
   reason?: string
+  /** The reason in the person's language, when it arrives after the card (a translation of the reviewer's English). */
+  reasonShown?: string
   /** False for actions that must be approved every time, like publishing. */
   allowAlways: boolean
   /** What will be published, so the user approves the actual post. */
@@ -599,7 +615,7 @@ export type CoordinatorRequest =
   | { method: 'voice.testSpeaker'; sample: ArrayBuffer }
   | { method: 'voice.say'; text: string }
   | { method: 'voice.elevenVoices' }
-  // Domótica (Casa)
+  // Home automation (Casa)
   | { method: 'home.status' }
   | { method: 'home.install' }
   | { method: 'home.start' }
@@ -660,6 +676,7 @@ export type LiveEvent =
   | { type: 'subagent.finished'; threadId: string; subagentId: string; status: SubagentRun['status'] }
   | { type: 'approval.request'; approval: PendingApproval }
   | { type: 'approval.resolved'; approvalId: string }
+  | { type: 'approval.reason'; approvalId: string; reasonShown: string }
   | { type: 'thread.updated'; summary: ThreadSummary }
   | { type: 'mcp.status'; servers: McpServerStatus[] }
   | { type: 'routines.state'; state: Record<string, RoutineState> }

@@ -2,28 +2,17 @@
 // The password is typed by the user into Instagram's own page; the app only keeps the session cookies,
 // in a partition separate from the rest of the app.
 import { app, BrowserWindow, session, type Debugger } from 'electron'
+import type { Language } from '../shared/i18n/language'
 import type { InstagramStatus } from '../shared/types'
+import { instagramLabels } from './instagram-labels'
+import { instagramTitle } from './messages'
+
+/** A step of the page driver that failed; its message goes into the result the model reads. */
+class StepError extends Error {}
 
 export const INSTAGRAM_PARTITION = 'persist:instagram'
 // Overridable only to test the automation against a local stand-in page.
 const BASE_URL = (process.env.ALMA_INSTAGRAM_URL ?? 'https://www.instagram.com').replace(/\/$/, '')
-
-// Instagram's interface strings in the languages the user is likely to have (en, es, pt).
-const CREATE_LABELS = ['New post', 'Create', 'Nueva publicación', 'Crear', 'Nova publicação', 'Criar']
-const POST_LABELS = ['Post', 'Publicación', 'Publicar', 'Publicação']
-const NEXT_LABELS = ['Next', 'Siguiente', 'Avançar']
-const SHARE_LABELS = ['Share', 'Compartir', 'Compartilhar']
-const DISMISS_LABELS = ['Not Now', 'Not now', 'Ahora no', 'Agora não', 'OK']
-const SUCCESS_TEXTS = [
-  'your post has been shared',
-  'post shared',
-  'se compartió tu publicación',
-  'se ha compartido tu publicación',
-  'tu publicación se ha compartido',
-  'publicación compartida',
-  'seu post foi compartilhado',
-  'publicação compartilhada'
-]
 
 function instagramSession(): Electron.Session {
   const ses = session.fromPartition(INSTAGRAM_PARTITION)
@@ -49,8 +38,8 @@ function browserWindow(title: string, width: number, height: number, parent?: Br
 }
 
 /** Opens Instagram's login page; the window closes by itself once the session exists. */
-export function connectInstagram(parent?: BrowserWindow): Promise<InstagramStatus> {
-  const win = browserWindow('Conectar Instagram', 520, 780, parent)
+export function connectInstagram(language: Language, parent?: BrowserWindow): Promise<InstagramStatus> {
+  const win = browserWindow(instagramTitle(language, 'connect'), 520, 780, parent)
   void win.loadURL(`${BASE_URL}/accounts/login/`)
   const timer = setInterval(async () => {
     if (win.isDestroyed()) return
@@ -127,7 +116,10 @@ true
 `
 
 class PageDriver {
-  constructor(private dbg: Debugger) {}
+  constructor(
+    private dbg: Debugger,
+    private language: Language
+  ) {}
 
   async evaluate<T>(expression: string): Promise<T> {
     const result = (await this.dbg.sendCommand('Runtime.evaluate', {
@@ -151,7 +143,7 @@ class PageDriver {
       if (value) return value
       await sleep(500)
     }
-    throw new Error(`no apareció ${what}`)
+    throw new StepError(`${what} did not appear`)
   }
 
   async clickAt(point: { x: number; y: number }): Promise<void> {
@@ -188,20 +180,20 @@ class PageDriver {
       const advanced = await this.waitFor(
         async () => (await this.evaluate<string>('window.__ma.screenText()')) !== before,
         6_000,
-        'un cambio en la pantalla'
+        'a change on the screen'
       ).then(
         () => true,
         () => false
       )
       if (advanced) return
     }
-    throw new Error(`${what} no respondió`)
+    throw new StepError(`${what} did not respond`)
   }
 
   async dismissPopups(): Promise<void> {
     for (let i = 0; i < 2; i++) {
       await this.ensureHelpers()
-      const point = await this.find('byText', DISMISS_LABELS, true)
+      const point = await this.find('byText', instagramLabels('dismiss', this.language), true)
       if (!point) return
       await this.clickAt(point)
       await sleep(600)
@@ -220,7 +212,7 @@ class PageDriver {
         return nodeId || null
       },
       timeoutMs,
-      'el selector de archivos'
+      'the file picker'
     )
     await this.dbg.sendCommand('DOM.setFileInputFiles', { nodeId, files: [path] })
   }
@@ -237,38 +229,38 @@ export interface PublishRequest {
  * Publishes one post through the Instagram website in a visible window, so the user can watch it.
  * On failure the window stays open at the step that failed, so the user can finish by hand.
  */
-export async function publishToInstagram(request: PublishRequest): Promise<{ ok: boolean; message: string }> {
+export async function publishToInstagram(request: PublishRequest, language: Language): Promise<{ ok: boolean; message: string }> {
   if (!(await instagramStatus()).connected) {
-    return { ok: false, message: 'No hay una sesión de Instagram. Conectala en Configuración → Instagram.' }
+    return { ok: false, message: 'There is no Instagram session. Connect it in Settings → Instagram.' }
   }
-  const win = browserWindow(request.testMode ? 'Instagram · modo de prueba' : 'Instagram · publicando…', 1180, 900)
+  const win = browserWindow(instagramTitle(language, request.testMode ? 'test' : 'publishing'), 1180, 900)
   const dbg = win.webContents.debugger
-  let step = 'abrir Instagram'
+  let step = 'open Instagram'
   let keepOpen = true
   try {
     await win.loadURL(`${BASE_URL}/`)
     dbg.attach('1.3')
-    const page = new PageDriver(dbg)
+    const page = new PageDriver(dbg, language)
 
-    step = 'encontrar el botón «Crear»'
-    await page.waitFor(() => page.evaluate<boolean>('document.readyState === "complete"'), 30_000, 'la página')
+    step = 'find the “Create” button'
+    await page.waitFor(() => page.evaluate<boolean>('document.readyState === "complete"'), 30_000, 'the page')
     await page.dismissPopups()
-    await page.clickAndAdvance('byLabel', CREATE_LABELS, 30_000, 'el botón «Crear»')
+    await page.clickAndAdvance('byLabel', instagramLabels('create', language), 30_000, 'the “Create” button')
     await sleep(600)
     // Newer layouts open a small menu (Post / Live / …) before the upload dialog.
-    if (await page.find('byText', POST_LABELS)) await page.clickAndAdvance('byText', POST_LABELS, 5_000, 'la opción «Publicación»')
+    if (await page.find('byText', instagramLabels('post', language))) await page.clickAndAdvance('byText', instagramLabels('post', language), 5_000, 'the “Post” option')
 
-    step = 'subir la imagen'
+    step = 'upload the image'
     await page.uploadFile(request.imagePath, 20_000)
 
-    step = 'avanzar al texto'
-    for (const stage of ['recorte', 'filtros']) {
-      await page.clickAndAdvance('byText', NEXT_LABELS, 30_000, `el botón «Siguiente» (${stage})`, true)
+    step = 'move on to the text'
+    for (const stage of ['crop', 'filters']) {
+      await page.clickAndAdvance('byText', instagramLabels('next', language), 30_000, `the “Next” button (${stage})`, true)
       await sleep(800)
     }
 
-    step = 'escribir el texto'
-    const box = await page.waitFor(() => page.evaluate<{ x: number; y: number } | null>('window.__ma.caption()'), 20_000, 'el cuadro de texto')
+    step = 'write the text'
+    const box = await page.waitFor(() => page.evaluate<{ x: number; y: number } | null>('window.__ma.caption()'), 20_000, 'the text box')
     await page.clickAt(box)
     await dbg.sendCommand('Input.insertText', { text: request.caption })
     await sleep(800)
@@ -277,23 +269,23 @@ export async function publishToInstagram(request: PublishRequest): Promise<{ ok:
       return {
         ok: true,
         message:
-          'Modo de prueba: dejé el post completo en la ventana de Instagram sin compartirlo. Revisalo; si está bien, podés tocar «Compartir» vos mismo o cerrar la ventana. Para publicar automáticamente, desactivá el modo de prueba en Configuración → Instagram.'
+          'Test mode: I left the complete post in the Instagram window without sharing it. Review it; if it is fine, you can click “Share” yourself or close the window. To publish automatically, turn off test mode in Settings → Instagram.'
       }
     }
 
-    step = 'tocar «Compartir»'
+    step = 'click “Share”'
     // A single click: retrying here could publish the post twice if Instagram is just slow.
-    await page.clickAt(await page.stablePoint('byText', SHARE_LABELS, true, 20_000, 'el botón «Compartir»'))
+    await page.clickAt(await page.stablePoint('byText', instagramLabels('share', language), true, 20_000, 'the “Share” button'))
 
-    step = 'confirmar que se publicó'
-    await page.waitFor(() => page.evaluate<boolean>(`window.__ma.succeeded(${JSON.stringify(SUCCESS_TEXTS)})`), 180_000, 'la confirmación de Instagram')
+    step = 'confirm it was published'
+    await page.waitFor(() => page.evaluate<boolean>(`window.__ma.succeeded(${JSON.stringify(instagramLabels('success', language))})`), 180_000, "Instagram's confirmation")
     keepOpen = false
-    return { ok: true, message: 'Publicado en Instagram.' }
+    return { ok: true, message: 'Published on Instagram.' }
   } catch (error) {
-    const reason = win.isDestroyed() ? 'se cerró la ventana' : (error as Error).message
+    const reason = win.isDestroyed() ? 'the window was closed' : (error as Error).message
     return {
       ok: false,
-      message: `No pude ${step}: ${reason}. ${win.isDestroyed() ? '' : 'La ventana de Instagram quedó abierta para que termines a mano. '}Instagram puede haber cambiado su página.`
+      message: `I could not ${step}: ${reason}. ${win.isDestroyed() ? '' : 'The Instagram window was left open so you can finish by hand. '}Instagram may have changed its page.`
     }
   } finally {
     if (!win.isDestroyed()) {

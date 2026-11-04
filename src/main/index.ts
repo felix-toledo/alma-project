@@ -31,6 +31,7 @@ import type {
 import { audit, initAudit } from '../shared/audit'
 import { newCommands } from './guard'
 import { connectInstagram, disconnectInstagram, instagramStatus, publishToInstagram } from './instagram'
+import { mainError, securityDialog, trayMenu } from './messages'
 import { renderSvgToPng } from './render'
 import { decrypt, encrypt, SettingsStore } from './settings'
 
@@ -47,7 +48,7 @@ if (!process.env.ALMA_USER_DATA && existsSync(legacyProfile) && !existsSync(join
       filter: (path) => !/^(lockfile|Singleton\w*|Cache|Code Cache|GPUCache|DawnCache|Crashpad)$/.test(basename(path))
     })
   } catch (error) {
-    console.error('[main] no se pudieron copiar los datos de MultiAgente:', error)
+    console.error('[main] could not copy the MultiAgente data:', error)
   }
 }
 
@@ -89,9 +90,9 @@ function applyVoiceHotkey(current: Settings): void {
   if (!wanted) return
   try {
     if (globalShortcut.register(wanted, () => postToCoordinator({ type: 'voice.trigger' }))) voiceHotkey = wanted
-    else console.error(`[main] el atajo ${wanted} ya lo usa otra app`)
+    else console.error(`[main] the shortcut ${wanted} is already used by another app`)
   } catch (error) {
-    console.error(`[main] atajo inválido ${wanted}:`, error)
+    console.error(`[main] invalid shortcut ${wanted}:`, error)
   }
 }
 
@@ -121,7 +122,7 @@ function notify(title: string, body: string, threadId?: string, always = false):
 async function handleHostRequest(request: HostRequest): Promise<{ ok: boolean; message: string }> {
   switch (request.action) {
     case 'instagram.publish':
-      return publishToInstagram(request).then((result) => {
+      return publishToInstagram(request, settings.get().language).then((result) => {
         audit({ action: 'instagram.publish', actor: 'agent', outcome: result.ok ? 'ok' : 'error' })
         return result
       })
@@ -271,13 +272,21 @@ function createWindow(): void {
 function applyBackgroundSettings(current: Settings): void {
   if (current.background.runInTray && !tray) {
     tray = new Tray(join(RESOURCES, 'tray.png'))
-    tray.setToolTip('Alma')
+    tray.on('click', showWindow)
+  } else if (!current.background.runInTray && tray) {
+    tray.destroy()
+    tray = null
+  }
+  // Rebuilt on every push, so a change of language shows in the tray at once (spec 025 AC-1.7).
+  if (tray) {
+    const text = trayMenu(current.language)
+    tray.setToolTip(text.tooltip)
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: 'Abrir Alma', click: showWindow },
+        { label: text.open, click: showWindow },
         { type: 'separator' },
         {
-          label: 'Salir',
+          label: text.quit,
           click: () => {
             quitting = true
             app.quit()
@@ -285,10 +294,6 @@ function applyBackgroundSettings(current: Settings): void {
         }
       ])
     )
-    tray.on('click', showWindow)
-  } else if (!current.background.runInTray && tray) {
-    tray.destroy()
-    tray = null
   }
   const openAtLogin = current.background.launchAtLogin
   if (app.getLoginItemSettings().openAtLogin !== openAtLogin) {
@@ -315,7 +320,7 @@ function handle<A extends unknown[], R>(channel: string, fn: (event: IpcMainInvo
   ipcMain.handle(channel, (event, ...args) => {
     if (!isTrusted(event)) {
       audit({ action: 'ipc.rejected', actor: 'system', target: channel, outcome: 'denied', throttle: true })
-      throw new Error('Origen no autorizado')
+      throw new Error(mainError(settings.get().language, 'rejected-origin'))
     }
     return fn(event, ...(args as A))
   })
@@ -358,18 +363,19 @@ function registerIpc(): void {
     const commands = patch.mcpServers ? newCommands(settings.get().mcpServers, patch.mcpServers) : []
     const unlocking = patch.approvalMode === 'always-allow' && settings.get().approvalMode !== 'always-allow'
     if (commands.length || unlocking) {
+      const text = securityDialog(settings.get().language, commands.length ? 'mcp' : 'always-allow', commands)
       const answer = dialog.showMessageBoxSync(mainWindow!, {
         type: 'warning',
-        buttons: ['Permitir', 'Cancelar'],
+        buttons: [text.allow, text.cancel],
         defaultId: 1,
         cancelId: 1,
-        title: 'Confirmar cambio de seguridad',
-        message: commands.length ? 'Alma va a ejecutar estos programas en tu computadora:' : 'Los agentes van a ejecutar todo sin pedirte aprobación.',
-        detail: commands.length ? commands.join('\n') : 'Es el modo «Siempre permitir». Las publicaciones siguen pidiendo aprobación.'
+        title: text.title,
+        message: text.message,
+        detail: text.detail
       })
       if (answer !== 0) {
         audit({ action: 'settings.update', actor: 'user', target: commands.length ? 'mcpServers' : 'approvalMode', outcome: 'denied' })
-        throw new Error('Cambio cancelado.')
+        throw new Error(mainError(settings.get().language, 'cancelled'))
       }
     }
     const changed = changedKeys(patch as Record<string, unknown>)
@@ -382,14 +388,14 @@ function registerIpc(): void {
   })
 
   handle('settings:setApiKey', (_event, provider: SecretProviderId, apiKey: string): PublicSettings => {
-    if (!['anthropic', 'xai', 'deepseek', 'vercel', 'meta', 'openai', 'telegram', 'elevenlabs', 'email'].includes(provider)) throw new Error('Proveedor desconocido')
+    if (!['anthropic', 'xai', 'deepseek', 'vercel', 'meta', 'openai', 'telegram', 'elevenlabs', 'email'].includes(provider)) throw new Error(mainError(settings.get().language, 'unknown-provider'))
     pushSettings(settings.setApiKey(provider, apiKey))
     audit({ action: apiKey ? 'secret.set' : 'secret.clear', actor: 'user', target: provider, outcome: 'ok' })
     return settings.getPublic()
   })
 
   handle('settings:setCompanySecret', (_event, companyId: string, secret: string): PublicSettings => {
-    if (typeof companyId !== 'string' || !settings.get().companies.some((c) => c.id === companyId)) throw new Error('Empresa desconocida')
+    if (typeof companyId !== 'string' || !settings.get().companies.some((c) => c.id === companyId)) throw new Error(mainError(settings.get().language, 'unknown-company'))
     pushSettings(settings.setCompanySecret(companyId, String(secret ?? '')))
     audit({ action: secret ? 'secret.set' : 'secret.clear', actor: 'user', target: `company:${companyId}`, outcome: 'ok' })
     return settings.getPublic()
@@ -398,7 +404,7 @@ function registerIpc(): void {
   handle('instagram:status', () => instagramStatus())
   handle('instagram:connect', () => {
     audit({ action: 'instagram.connect', actor: 'user', outcome: 'ok' })
-    return connectInstagram(mainWindow ?? undefined)
+    return connectInstagram(settings.get().language, mainWindow ?? undefined)
   })
   handle('instagram:disconnect', () => {
     audit({ action: 'instagram.disconnect', actor: 'user', outcome: 'ok' })
@@ -412,10 +418,10 @@ function registerIpc(): void {
 
   // Opening a file hands it to the OS, which would run a program: only folders and documents.
   handle('shell:openPath', (_event, path: string): string | Promise<string> => {
-    if (typeof path !== 'string' || !isAbsolute(path) || !existsSync(path)) return 'La ruta no existe.'
+    if (typeof path !== 'string' || !isAbsolute(path) || !existsSync(path)) return mainError(settings.get().language, 'path-missing')
     if (statSync(path).isFile() && EXECUTABLE.test(path)) {
       audit({ action: 'shell.openPath', actor: 'user', target: basename(path), outcome: 'denied' })
-      return 'Alma no abre programas ni scripts.'
+      return mainError(settings.get().language, 'no-programs')
     }
     return shell.openPath(path)
   })
@@ -428,7 +434,7 @@ app.on('second-instance', showWindow)
 app.whenReady().then(() => {
   // Windows shows notifications only for apps with an identity.
   app.setAppUserModelId('com.alma.app')
-  settings = new SettingsStore()
+  settings = new SettingsStore(app.getPreferredSystemLanguages())
   initAudit(app.getPath('userData'), 'main')
   audit({ action: 'app.start', actor: 'system', outcome: 'ok', detail: { version: app.getVersion(), packaged: app.isPackaged } })
   lockDownPermissions()

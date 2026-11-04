@@ -1,0 +1,21 @@
+import { ambience } from './es/ambience'
+import { channels } from './es/channels'
+import { chat } from './es/chat'
+import { companies } from './es/companies'
+import { common } from './es/common'
+import { coordinator } from './es/coordinator'
+import { format } from './es/format'
+import { general } from './es/general'
+import { home } from './es/home'
+import { languages } from './es/languages'
+import { main } from './es/main'
+import { settings } from './es/settings'
+import { shell } from './es/shell'
+import { routines } from './es/routines'
+import { tools } from './es/tools'
+import { vault } from './es/vault'
+import { voice } from './es/voice'
+import type { Message } from './messages'
+
+// es.ts is the source of the keys: `en` must define exactly the same ones.
+export const es = { ...ambience, ...channels, ...chat, ...companies, ...common, ...coordinator, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice } satisfies Record<string, Message>

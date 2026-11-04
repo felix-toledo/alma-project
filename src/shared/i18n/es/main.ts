@@ -1,0 +1,21 @@
+export const main = {
+  'tray.open': 'Abrir Alma',
+  'tray.quit': 'Salir',
+  'tray.tooltip': 'Alma',
+  'main.security.title': 'Confirmar cambio de seguridad',
+  'main.security.allow': 'Permitir',
+  'main.security.cancel': 'Cancelar',
+  'main.security.mcp': 'Alma va a ejecutar estos programas en tu computadora:',
+  'main.security.alwaysAllow': 'Los agentes van a ejecutar todo sin pedirte aprobación.',
+  'main.security.alwaysAllowDetail': 'Es el modo «Siempre permitir». Las publicaciones siguen pidiendo aprobación.',
+  'main.error.rejectedOrigin': 'Origen no autorizado',
+  'main.error.cancelled': 'Cambio cancelado.',
+  'main.error.unknownProvider': 'Proveedor desconocido',
+  'main.error.unknownCompany': 'Empresa desconocida',
+  'main.error.pathMissing': 'La ruta no existe.',
+  'main.error.noPrograms': 'Alma no abre programas ni scripts.',
+  'main.error.invalidLanguage': 'Idioma no válido',
+  'main.instagram.connect': 'Conectar Instagram',
+  'main.instagram.test': 'Instagram · modo de prueba',
+  'main.instagram.publishing': 'Instagram · publicando…'
+} as const

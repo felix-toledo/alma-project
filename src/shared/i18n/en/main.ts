@@ -1,0 +1,21 @@
+export const main = {
+  'tray.open': 'Open Alma',
+  'tray.quit': 'Quit',
+  'tray.tooltip': 'Alma',
+  'main.security.title': 'Confirm security change',
+  'main.security.allow': 'Allow',
+  'main.security.cancel': 'Cancel',
+  'main.security.mcp': 'Alma is going to run these programs on your computer:',
+  'main.security.alwaysAllow': 'Agents are going to run everything without asking you for approval.',
+  'main.security.alwaysAllowDetail': 'This is the “Always allow” mode. Publishing still asks for approval.',
+  'main.error.rejectedOrigin': 'Unauthorized origin',
+  'main.error.cancelled': 'Change cancelled.',
+  'main.error.unknownProvider': 'Unknown provider',
+  'main.error.unknownCompany': 'Unknown company',
+  'main.error.pathMissing': 'The path does not exist.',
+  'main.error.noPrograms': 'Alma does not open programs or scripts.',
+  'main.error.invalidLanguage': 'Invalid language',
+  'main.instagram.connect': 'Connect Instagram',
+  'main.instagram.test': 'Instagram · test mode',
+  'main.instagram.publishing': 'Instagram · publishing…'
+} as const
