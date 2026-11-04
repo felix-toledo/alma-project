@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_AGENTS, defaultSettings, looksLikeApiKey, OFFICE_TOOLS } from '../shared/defaults'
+import { applyMetaDefault, DEFAULT_AGENTS, defaultSettings, looksLikeApiKey, OFFICE_TOOLS } from '../shared/defaults'
 import type { PublicSettings, SecretProviderId, Settings } from '../shared/types'
 
 const ENC_PREFIX = 'enc:'
@@ -53,8 +53,12 @@ export class SettingsStore {
     // A key pasted into the image model field would be sent as a model name and sit unencrypted on disk.
     const pastedKey = looksLikeApiKey(this.settings.images.model)
     if (pastedKey) this.settings.images = { ...this.settings.images, model: '' }
+    // Meta is the default provider now: saves from before move over once, if there is a Meta key (spec 024).
+    const migrated = applyMetaDefault(this.settings, !!(this.settings.providers.meta.apiKey || process.env.META_API_KEY))
+    const movedToMeta = migrated !== this.settings
+    this.settings = migrated
     // Resealing without a keychain would blank the keys on disk, so only when they can be sealed.
-    if (pastedKey || (this.legacyPlaintext && secretsProtected())) this.save()
+    if (pastedKey || ((this.legacyPlaintext || movedToMeta) && secretsProtected())) this.save()
   }
 
   private open(stored: string | undefined): string {

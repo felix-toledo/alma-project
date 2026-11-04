@@ -3,6 +3,7 @@ import { chainOfCommand, colleagues, directReports } from '../shared/company'
 import { audit } from '../shared/audit'
 import type { AgentProfile, Block, ChatMessage, EventScope, LiveEvent, ProviderId, Routine, Settings, SubagentRun, Thread, ToolState, Usage } from '../shared/types'
 import { authorize, type ApprovalBroker } from './approval'
+import { compactHistory } from './context'
 import type { KnowledgeBase } from './knowledge/base'
 import { knowledgeTools } from './knowledge/tools'
 import type { McpManager } from './mcp'
@@ -16,6 +17,7 @@ import { OFFICE_GUIDE } from './tools/office'
 import { routineTools } from './tools/routines'
 import { emailConfigured, emailTools } from './tools/email'
 import { sendTelegramTool } from './tools/telegram'
+import { endVoiceConversationTool } from './tools/voice'
 import { webTools } from './tools/web'
 import { whatsAppTools } from './tools/whatsapp'
 import { jsonSchemaOf, ToolError, truncateMiddle, type Host, type ToolContext, type ToolDefinition } from './tools/types'
@@ -69,7 +71,8 @@ function appTools(ctx: RunContext): ToolDefinition[] {
     ...(ctx.home && !ctx.company && ctx.getSettings().home.enabled ? homeTools : []),
     ...(emailConfigured(ctx.getSettings()) ? emailTools : []),
     ...(ctx.whatsapp ? whatsAppTools : []),
-    ...(ctx.company ? companyTools : [])
+    ...(ctx.company ? companyTools : []),
+    ...(ctx.depth === 0 && ctx.thread.channel === 'voice' ? [endVoiceConversationTool] : [])
   ]
 }
 
@@ -192,7 +195,8 @@ const CHANNEL_GUIDES: Record<NonNullable<Thread['channel']>, string> = {
 - Nada de markdown, listas, tablas, emojis, URLs ni código: todo se lee en voz alta.
 - Antes de usar herramientas para algo que tarda, decí en una frase qué vas a hacer ("dejame buscar en tus notas").
 - Si el resultado es largo (código, tablas, listas), dejalo en un archivo o nota y decí en voz que quedó en la pantalla.
-- Es una charla de ida y vuelta: cuando terminás, el micrófono queda abierto unos segundos para que el usuario siga, y más tiempo si terminaste con una pregunta. Preguntá solo cuando de verdad necesites su respuesta; no cierres con "¿algo más?" ni "¿te ayudo con otra cosa?".
+- Es una charla de ida y vuelta: si no terminás la conversación, el micrófono queda abierto unos segundos para que el usuario siga, y más tiempo si terminaste con una pregunta. Preguntá solo cuando de verdad necesites su respuesta; no cierres con "¿algo más?" ni "¿te ayudo con otra cosa?".
+- Vos decidís cuándo termina: si tu respuesta no espera nada del usuario (hiciste lo pedido, diste el dato, te agradeció o se despidió), llamá a end_voice_conversation en esa misma respuesta, así el micrófono no queda esperando. Solo la dejás abierta si le hiciste una pregunta o el tema sigue.
 - El usuario puede interrumpirte hablando: lo que no llegaste a decir no lo escuchó.`,
   company: `Esta conversación la abrió la empresa (una tarea, una revisión o una preparación): trabajás solo, sin el usuario mirando. Terminá con un resultado claro.`,
   whatsapp: `Esta conversación es por WhatsApp, en el chat «Mensajes para mí» del usuario: respondé breve y claro, sin tablas ni bloques de código largos. Los audios llegan transcritos. Para escribirle a otra persona usá send_whatsapp (el usuario aprueba cada envío).`,
@@ -277,7 +281,7 @@ export async function runAgent(profile: AgentProfile, messages: ChatMessage[], c
       effort: ctx.depth === 0 && ctx.thread.channel === 'voice' ? 'low' : profile.effort,
       system,
       tools,
-      messages,
+      messages: compactHistory(messages),
       signal: ctx.signal,
       onText: (text) => ctx.emit({ type: 'stream.text', scope: ctx.scope, text }),
       onThinking: (text) => ctx.emit({ type: 'stream.thinking', scope: ctx.scope, text }),

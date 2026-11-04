@@ -82,7 +82,7 @@ export function jsonSchemaOf(schema: z.ZodType): Record<string, unknown> {
   return rest
 }
 
-const MAX_RESULT_CHARS = 60_000
+const MAX_RESULT_CHARS = 24_000
 
 /** Keeps the start and end of long outputs, which is where errors and summaries usually are. */
 export function truncateMiddle(text: string, max = MAX_RESULT_CHARS): string {

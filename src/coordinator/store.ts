@@ -97,6 +97,7 @@ export function summarize(thread: Thread): ThreadSummary {
     id: thread.id,
     title: thread.title,
     agentId: thread.agentId,
+    ...(thread.model ? { model: thread.model } : {}),
     workspace: thread.workspace,
     updatedAt: thread.updatedAt,
     ...(thread.channel ? { channel: thread.channel } : {})

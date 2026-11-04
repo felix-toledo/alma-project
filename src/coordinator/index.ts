@@ -1,6 +1,7 @@
 // Agent coordinator: runs in an Electron utilityProcess and talks to renderers over MessagePorts.
 import type { MessagePortMain } from 'electron'
 import { audit, initAudit } from '../shared/audit'
+import { effectiveProfile } from '../shared/defaults'
 import type { JudgmentRule } from '../shared/home'
 import type {
   AudioEnvelope,
@@ -33,6 +34,7 @@ import { HomeService } from './home'
 import { look } from './vision'
 import { testEmail } from './tools/email'
 import { VoiceAssistant } from './voice/assistant'
+import { conversationEnded } from './voice/speech'
 import { KnowledgeBase } from './knowledge/base'
 import { WorkerEmbedder } from './knowledge/embedder'
 import { McpManager } from './mcp'
@@ -199,8 +201,10 @@ function titleFrom(text: string): string {
 function startRun(threadId: string, text: string, options: { noAsk?: boolean; autoApprove?: string[] } = {}): { done: Promise<void> } {
   if (runs.has(threadId)) throw new Error('Ya hay una ejecución en curso en esta conversación.')
   const thread = store.get(threadId)
-  const profile = settings.agents.find((a) => a.id === thread.agentId) ?? settings.agents[0]
-  if (!profile) throw new Error('No hay agentes configurados.')
+  const agent = settings.agents.find((a) => a.id === thread.agentId) ?? settings.agents[0]
+  if (!agent) throw new Error('No hay agentes configurados.')
+  // The model chosen in the chat header answers instead of the agent's own.
+  const profile = effectiveProfile(agent, thread)
   // A company agent works with its company's vault, accounts and budget.
   const company = profile.companyId ? settings.companies.find((c) => c.id === profile.companyId) : undefined
   if (company) {
@@ -503,6 +507,7 @@ function createVoice(): VoiceAssistant {
     ask: (threadId, text) => startRun(threadId, text).done,
     stop: (threadId) => runs.get(threadId)?.abort(),
     lastAnswer,
+    conversationEnded: (threadId) => conversationEnded(store.get(threadId).messages),
     onEvent,
     respondApproval: (approvalId, decision) => approvals.respond(approvalId, decision),
     emit: broadcast
@@ -556,6 +561,10 @@ async function handle(request: CoordinatorRequest): Promise<unknown> {
       if (request.title !== undefined) thread.title = request.title.trim() || UNTITLED
       if (request.agentId !== undefined) thread.agentId = request.agentId
       if (request.workspace !== undefined) thread.workspace = request.workspace
+      if (request.model !== undefined) {
+        if (request.model) thread.model = request.model
+        else delete thread.model
+      }
       store.save(thread.id)
       broadcast({ type: 'thread.updated', summary: summarize(thread) })
       return summarize(thread)
@@ -693,6 +702,9 @@ async function handle(request: CoordinatorRequest): Promise<unknown> {
       return voice.currentStatus()
     case 'voice.trigger':
       voice.trigger()
+      return null
+    case 'voice.cancel':
+      voice.cancel()
       return null
     case 'voice.played':
       voice.played()

@@ -315,3 +315,33 @@ describe('repairDanglingToolUses', () => {
     expect(repairDanglingToolUses(messages)).toBe(false)
   })
 })
+
+describe('voice conversation tool (spec 024)', () => {
+  const offered = async (channel: Thread['channel'], depth = 0): Promise<string[]> => {
+    thread.channel = channel
+    let names: string[] = []
+    script = (request) => {
+      names = request.tools.map((t) => t.name)
+      return turn([text('ok')])
+    }
+    thread.messages.push({ role: 'user', content: [text('hola')], ts: 0 })
+    await runAgent(settings.agents.find((a) => a.id === 'general')!, thread.messages, { ...context(), depth })
+    return names
+  }
+
+  it('AC-2.1 is offered in a voice conversation, not in other channels or to subagents', async () => {
+    expect(await offered('voice')).toContain('end_voice_conversation')
+    expect(await offered(undefined)).not.toContain('end_voice_conversation')
+    expect(await offered('telegram')).not.toContain('end_voice_conversation')
+    expect(await offered('voice', 1)).not.toContain('end_voice_conversation')
+  })
+
+  it('AC-2.1 runs without asking and tells the model to say goodbye briefly', async () => {
+    thread.channel = 'voice'
+    script = (request) =>
+      lastToolResults(request).length === 0 ? turn([toolUse('e1', 'end_voice_conversation', {})]) : turn([text('Chau.')])
+    await start('gracias, nada más')
+    expect(events.some((e) => e.type === 'approval.request')).toBe(false)
+    expect(thread.toolStates.e1.status).toBe('done')
+  })
+})
