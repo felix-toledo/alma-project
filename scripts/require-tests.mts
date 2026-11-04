@@ -17,6 +17,13 @@ export function testGap(changed: string[], messages: string): string | null {
 if (import.meta.main) {
   const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim()
   const base = process.argv[2] ?? 'origin/main'
+  try {
+    git('rev-parse', '--verify', '--quiet', base)
+  } catch {
+    // First push: the remote has no main yet, so there is nothing to compare against.
+    console.log(`require-tests: ${base} does not exist yet, skipping the gate`)
+    process.exit(0)
+  }
   const changed = git('diff', '--name-only', `${base}...HEAD`).split('\n').filter(Boolean)
   const messages = `${git('log', `${base}..HEAD`, '--format=%B')}\n${process.env.PR_BODY ?? ''}`
   const gap = testGap(changed, messages)
