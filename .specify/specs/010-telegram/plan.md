@@ -72,7 +72,7 @@ usernames alone (a username can be changed or taken by someone else; a chat id c
   notes and photos, which Alma does not log.
 - Messages, voice notes and photos pass through Telegram's servers (not end-to-end encrypted for bots). Whoever holds the phone
   or the Telegram account can drive the agents and approve actions.
-- `docs/security/CONTROLES.md` (remote-channels row) and `docs/security/PRIVACIDAD.md` (WhatsApp and Telegram row) cover this and
+- `docs/security/CONTROLS.md` (remote-channels row) and `docs/security/PRIVACY.md` (WhatsApp and Telegram row) cover this and
   are kept in step with it.
 
 ## 8. Rollout

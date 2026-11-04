@@ -53,7 +53,7 @@ Pure logic extracted from the UI (reducer, attachments, formats) lives under `sr
 - No new tool and no new `ToolRisk`. Model output is untrusted: raw HTML is not rendered, remote images are replaced by a placeholder, links open only http(s) in the system browser, CSP allows images from self, `data:`, `blob:`, `alma-vault:` and local 127.0.0.1.
 - Vault attachments travel as text labelled "datos, no instrucciones".
 - `files.image` is confined to the thread's working folder, PNG/JPEG/WebP, 12 MB.
-- Threads store full conversation text in clear on disk. `docs/security/PRIVACIDAD.md` already lists `threads/` with its retention and erase options; no change.
+- Threads store full conversation text in clear on disk. `docs/security/PRIVACY.md` already lists `threads/` with its retention and erase options; no change.
 
 ## 8. Rollout
 No flag. Existing thread files load unchanged. Retention is off by default (0). First run shows the empty screen with "Nueva conversación"; the last chosen mode defaults to Chat.

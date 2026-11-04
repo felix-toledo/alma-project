@@ -54,7 +54,7 @@ The tool receives `ToolContext.host` (`request`), `ToolContext.settings` and the
 - `instagram_publish` is `publish`: asks on every call whatever the approval mode, rules or per-agent list; no "Siempre"; boss review first inside a company; only "solo lectura" blocks it. The approval shows the real image and caption.
 - Alma never sees the password. Cookies stay in a separate partition on this machine; disconnecting clears it. Image and caption leave the machine only when a post is published, to Instagram (Meta).
 - The window is sandboxed (`contextIsolation`, `sandbox`, no Node); injected helpers only read the DOM. Audit records actions without caption or image content.
-- `docs/security/PRIVACIDAD.md` lists Instagram under "Publicaciones, siempre con aprobación" (the post leaves the machine only after approval).
+- `docs/security/PRIVACY.md` lists Instagram under "Publicaciones, siempre con aprobación" (the post leaves the machine only after approval).
 
 ## 8. Rollout
 Test mode is on by default, so the first publishes stop before "Compartir". Instagram is not connected until the person presses "Conectar Instagram"; with no session the tool fails with a message pointing to Configuración → Instagram. The "Post diario de Instagram" routine is only a template: nothing is scheduled until the person saves it.

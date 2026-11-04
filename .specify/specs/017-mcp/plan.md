@@ -58,7 +58,7 @@ stdio server, `tests/fixtures/echo-mcp-server.mjs` (tools `echo`, `fail`), launc
 - Native confirmation (main process) before a new, changed or re-enabled stdio command runs; remote servers are not confirmed.
 - A stdio child gets the SDK default environment plus the configured `env`; Alma's provider keys are never passed.
 - Company agents are created with `allowMcp` off; per-agent switch for the rest. Tool output is untrusted text for the model.
-- Docs: `docs/security/RIESGOS.md` (R-12, arbitrary code) and `docs/security/CONTROLES.md` (confirmation, minimal environment).
+- Docs: `docs/security/RISKS.md` (R-12, arbitrary code) and `docs/security/CONTROLS.md` (confirmation, minimal environment).
 
 ## 8. Rollout
 No flag: with no servers configured nothing starts (`mcpServers: {}`). Seeded agents carry their own `allowMcp` defaults; a new

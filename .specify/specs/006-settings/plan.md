@@ -47,7 +47,7 @@ The store reaches `safeStorage` and the file path through small helpers in `src/
 | AC-8.4 | `tests/integrations.test.ts` → `guesses the mail servers from the address` | unknown domain, no `@` |
 
 ## 7. Security and privacy impact
-No new tool. Secrets exist in clear only in main and coordinator memory; the window gets booleans; audit entries (`secret.set`, `secret.clear`, `settings.update`, `always-allow.add`, `ipc.rejected`) never carry a value. A patch that adds or re-enables a stdio MCP command, or moves to `always-allow`, needs a native confirmation, and only the top frame of the app's own window may call IPC. Affected: `docs/security/CONTROLES.md` (secrets at rest, native confirmation, audit rows).
+No new tool. Secrets exist in clear only in main and coordinator memory; the window gets booleans; audit entries (`secret.set`, `secret.clear`, `settings.update`, `always-allow.add`, `ipc.rejected`) never carry a value. A patch that adds or re-enables a stdio MCP command, or moves to `always-allow`, needs a native confirmation, and only the top frame of the app's own window may call IPC. Affected: `docs/security/CONTROLS.md` (secrets at rest, native confirmation, audit rows).
 
 ## 8. Rollout
 No flag; the file is created on first run with defaults (9 default agents, `needs-approval`, tray on, launch at login off, retention off, Telegram enabled but without token, voice / WhatsApp / house off). A person with a `MultiAgente` profile and no `settings.json` gets it copied on first start. The dialog opens on Proveedores.

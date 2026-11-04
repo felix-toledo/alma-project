@@ -59,7 +59,7 @@ The loop receives `getSettings()` and obtains clients through `getProvider`; tes
 | AC-8.1, 8.2, 9.1, 9.2 | [gap] | stream without usage, no agent with a key |
 
 ## 7. Security and privacy impact
-No tool is added. Everything an agent reads in a turn goes to its provider; during auto-review the action and request (truncated to 4 000 / 8 000 characters) go to the reviewer's provider. Keys live in coordinator memory in clear and are never sent to the window; errors name the provider, never the key. The xAI base URL is free text, so that key is sent wherever the person points it. New third parties: Meta (`api.meta.ai`) and the Vercel gateway. `docs/security/PRIVACIDAD.md` already lists provider data flows; no new file is affected.
+No tool is added. Everything an agent reads in a turn goes to its provider; during auto-review the action and request (truncated to 4 000 / 8 000 characters) go to the reviewer's provider. Keys live in coordinator memory in clear and are never sent to the window; errors name the provider, never the key. The xAI base URL is free text, so that key is sent wherever the person points it. New third parties: Meta (`api.meta.ai`) and the Vercel gateway. `docs/security/PRIVACY.md` already lists provider data flows; no new file is affected.
 
 ## 8. Rollout
 No flag. A new profile starts on the first Claude model; Grok, DeepSeek, Vercel and Meta agents ship with an empty model, so the provider picks the newest suitable one on first run. A missing key fails the run with a Spanish message pointing at Configuración → Proveedores; the review model defaults to Anthropic `claude-opus-5-5`.

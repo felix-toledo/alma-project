@@ -32,5 +32,5 @@ None decided yet: the packager, code signing, the update channel and the version
 
 ## 7. Constraints and risks
 - Layers touched: none in `src/`; build config, `.github/workflows/`, `package.json`.
-- Security: the installer and any update channel are supply-chain surface; signing and update verification need an entry in `docs/security/CONTROLES.md` (§4 desarrollo seguro y cambios).
+- Security: the installer and any update channel are supply-chain surface; signing and update verification need an entry in `docs/security/CONTROLS.md` (§4 desarrollo seguro y cambios).
 - Platform: native/ML modules (`onnxruntime-node`, `sqlite-vec`, `baileys`) and the bundled workers (`embedWorker`, `voiceWorker`) must be unpacked from any archive; `libsignal` is a git dependency (R-01).

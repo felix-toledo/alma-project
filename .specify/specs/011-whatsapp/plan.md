@@ -51,7 +51,7 @@ No new arrow breaks the layer rules: the channel receives everything through `Wh
 ## 7. Security and privacy impact
 - `send_whatsapp` is `publish`: asks on every call whatever the approval mode, no "Siempre" option, boss review first inside a company; only the "blocked" mode denies it outright. There is no rate limit or allowlist; the per-message approval is the guard.
 - `whatsapp_recent` is `read` and needs no approval: third parties' text (groups included) goes to the model provider and is untrusted input, labelled as external data in the output.
-- Alma handles no password; the session is plain files (R-04), the unofficial protocol can get the number suspended (R-05), prompt injection through messages is R-11 — all in `docs/security/RIESGOS.md`.
+- Alma handles no password; the session is plain files (R-04), the unofficial protocol can get the number suspended (R-05), prompt injection through messages is R-11 — all in `docs/security/RISKS.md`.
 - The channel never writes unprompted, never answers non-owner chats and ignores synced history.
 
 ## 8. Rollout

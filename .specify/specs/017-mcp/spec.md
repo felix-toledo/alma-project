@@ -116,7 +116,7 @@ confirmation for stdio commands (`src/main/guard.ts` + `settings:update` in `src
 - **BR-4** The description given to the model is `[MCP <server>] <description>` cut to 1024 characters. (src/coordinator/mcp.ts)
 - **BR-5** Connecting waits at most 30 s; a tool call at most 300 s. (src/coordinator/mcp.ts)
 - **BR-6** The client identifies itself as `alma` version `0.1.0`. (src/coordinator/mcp.ts)
-- **BR-7** A stdio server's environment is the SDK default environment plus the configured `env`; Alma's provider keys are not passed. (src/coordinator/mcp.ts; `docs/security/CONTROLES.md`)
+- **BR-7** A stdio server's environment is the SDK default environment plus the configured `env`; Alma's provider keys are not passed. (src/coordinator/mcp.ts; `docs/security/CONTROLS.md`)
 - **BR-8** Only `connected` servers contribute tools; `disabled`, `connecting` and `error` servers contribute none. (src/coordinator/mcp.ts)
 - **BR-9** Servers are reconciled by comparing the whole serialized entry: new or changed entries (re)connect, removed ones close, unchanged ones are kept. "Reconectar" forces all. (src/coordinator/mcp.ts)
 - **BR-10** There is no automatic reconnection after a connection drops or an attempt fails. (src/coordinator/mcp.ts)
@@ -131,6 +131,6 @@ confirmation for stdio commands (`src/main/guard.ts` + `settings:update` in `src
 - **Layers touched:** `shared` (`types.ts`, `mcp-import.ts`, `defaults.ts`), `coordinator` (`mcp.ts`, `agent.ts`, `index.ts`), `main` (`guard.ts`, `index.ts` for `settings:update`), `renderer` (`SettingsDialog.tsx` McpTab, `Sidebar.tsx`, `lib/format.ts`, `lib/state.ts`).
 - **Messages:** requests `mcp.status` and `mcp.reconnect`; event `mcp.status` (list of `McpServerStatus`: `name`, `state` ∈ disabled / connecting / connected / error, `error?`, `tools`). The renderer asks for status at start and then follows events.
 - **Persistence:** `mcpServers` lives in `settings.json` in the user data folder, written by the main process. `env` values and `headers` (which may carry tokens) are stored there in plain text and sent to the renderer with the public settings; only provider API keys are encrypted.
-- **Security:** a stdio server is arbitrary code with the user's permissions (R-12 in `docs/security/RIESGOS.md`). Controls: native confirmation (BR-15), allow-list, minimal environment, per-agent switch, approval policy. Remote servers see whatever the agent sends in tool arguments. Tool output from a server is untrusted text given to the model.
+- **Security:** a stdio server is arbitrary code with the user's permissions (R-12 in `docs/security/RISKS.md`). Controls: native confirmation (BR-15), allow-list, minimal environment, per-agent switch, approval policy. Remote servers see whatever the agent sends in tool arguments. Tool output from a server is untrusted text given to the model.
 - **Platform:** `StdioClientTransport` spawns the command directly (no shell); `npx` shortcuts need Node on the PATH. Server stderr is piped and not shown. Large servers should use the allow-list (the type comment cites ~200 tools).
 - **Tests:** `tests/mcp.test.ts` uses the stdio fixture `tests/fixtures/echo-mcp-server.mjs` (tools `echo` and `fail`); no test uses an http server.

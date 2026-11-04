@@ -15,4 +15,4 @@
 - [x] **T13** (AC-7.1, AC-7.2, AC-7.3, AC-7.5) Wire the MCP tab and the `mcp.json` import box in `src/renderer/src/components/SettingsDialog.tsx` — [manual]: add a stdio and an http server, import valid and invalid JSON (the parser test is T3)
 - [x] **T14** (AC-8.1, AC-8.2, AC-8.3, AC-8.5, AC-8.6, AC-8.7, AC-8.8, AC-8.9) Wire the Telegram, WhatsApp, Mail, Voz, Imágenes, Instagram, Casa and Equipos tabs in `src/renderer/src/components/SettingsDialog.tsx` and `src/renderer/src/home/HomeSettings.tsx` — [manual]: walk each tab as written in its criterion
 - [x] **T15** (AC-9.1, AC-9.2, AC-9.3, AC-9.4, AC-9.5) Wire General and Sonido y ambiente in `src/renderer/src/components/SettingsDialog.tsx` and `src/renderer/src/umbra/AmbienceControls.tsx` — [manual]: pick a folder and cancel, toggle the tray and login item, set retention, reload to confirm sound preferences, press Esc
-- [x] **T16** (BR-6, BR-7) Update the secrets, native-confirmation and audit rows in `docs/security/CONTROLES.md`
+- [x] **T16** (BR-6, BR-7) Update the secrets, native-confirmation and audit rows in `docs/security/CONTROLS.md`

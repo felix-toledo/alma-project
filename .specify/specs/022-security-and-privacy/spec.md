@@ -104,7 +104,7 @@ Agents run with the person's rights on their computer and read untrusted content
 
 ### Never logged / what leaves
 - **AC-9.1** (US-3) Given the audit entries and desktop notifications, then they carry identifiers, names of arguments and outcomes, not message content or secrets (exception: the text of `run_command` commands, masked and cut at 300 characters, and the decision note, which for auto-review includes the reviewer's one-line reason). [gap]
-- **AC-9.2** (US-8) [manual] The inventory of what leaves the machine, in BR-9 and `docs/security/PRIVACIDAD.md`, matches the hosts the code calls. Checked by reading the table against `grep` for outbound hosts when an integration is added.
+- **AC-9.2** (US-8) [manual] The inventory of what leaves the machine, in BR-9 and `docs/security/PRIVACY.md`, matches the hosts the code calls. Checked by reading the table against `grep` for outbound hosts when an integration is added.
 
 ## 6. Business rules
 - **BR-1** Secrets are sealed with `safeStorage` (`enc:` prefix + base64). Without a secure store they are not persisted, unless `ALMA_ALLOW_PLAINTEXT_SECRETS=1`. On Linux the `basic_text` backend counts as no store. (src/main/settings.ts)
@@ -131,6 +131,6 @@ Agents run with the person's rights on their computer and read untrusted content
 ## 7. Constraints and risks
 - Layers touched: `main` (`settings.ts`, `guard.ts`, `index.ts`), `shared` (`audit.ts`), `coordinator` (`privacy.ts`, `tools/web.ts`, `tools/paths.ts`, `tools/shell.ts`, `index.ts`), `renderer` (Markdown image blocking, Privacidad settings card, `index.html` CSP).
 - Persistence: `<userData>/settings.json` (0600, sealed secrets), `<userData>/audit/*.jsonl`, `<userData>/threads/`, `<userData>/inbox/`, `voice-profile.json`, `routines-state.json`, `companies/`.
-- Third parties: see BR-9. A new outbound host needs a row in `docs/security/PRIVACIDAD.md`.
+- Third parties: see BR-9. A new outbound host needs a row in `docs/security/PRIVACY.md`.
 - Platform: DPAPI on Windows; file mode 0600 has little effect on Windows (access is by ACL); `shell.trashItem` for vault deletes.
-- The mapping to SOC 2 / ISO 27001 / 27701 and the open risks live in `docs/security/CONTROLES.md` and `RIESGOS.md`; this spec does not replace them.
+- The mapping to SOC 2 / ISO 27001 / 27701 and the open risks live in `docs/security/CONTROLS.md` and `RISKS.md`; this spec does not replace them.

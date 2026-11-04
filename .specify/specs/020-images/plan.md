@@ -54,7 +54,7 @@ No new arrow breaks `docs/architecture.md`: `compose/` imports nothing from `mai
 
 ## 7. Security and privacy impact
 - `generate_image` and `compose_image` are `write` (they create files); the default Multimedia and Community Manager agents auto-approve them, publishing (`instagram_publish`, `publish`) still asks. `look_at_image` is `read`.
-- The prompt leaves the machine to the chosen image service; a picture given to `look_at_image` leaves to the vision provider. Both are listed in `docs/security/PRIVACIDAD.md`.
+- The prompt leaves the machine to the chosen image service; a picture given to `look_at_image` leaves to the vision provider. Both are listed in `docs/security/PRIVACY.md`.
 - Model-written SVG is sanitized and rendered in a window with network blocked; fonts are bundled, so composing needs no network. Paths from the model are confined (workspace for generation and preview; inbox, vault and workspace for vision). Keys are read from settings or the environment and never logged.
 - No change to `docs/security/` was needed beyond the existing outbound-hosts table.
 

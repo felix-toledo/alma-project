@@ -64,7 +64,7 @@ The plan, cameras, scenes and rules (`plan.ts`, `triggers.ts`, `FloorPlan.tsx`, 
 - `home_call_service` is a general back door: it refuses the lock, alarm and siren domains but nothing else.
 - The HA token and the owner password are sealed with the OS keychain (`safeStorage`, [ADR 0013](../../../docs/adr/0013-secrets-with-safestorage.md)); the owner password is shown in clear only on "Abrir Home Assistant (avanzado)". Brand credentials go from the person to HA.
 - HA listens on `0.0.0.0` inside WSL; crane and SonoffLAN come from GitHub, the image from `ghcr.io`, pinned by checksum or version.
-- `docs/security/`: `RIESGOS.md` (R-02, R-07) and `PRIVACIDAD.md` (house devices) must cover the engine, the downloads and the stored owner credentials.
+- `docs/security/`: `RISKS.md` (R-02, R-07) and `PRIVACY.md` (house devices) must cover the engine, the downloads and the stored owner credentials.
 
 ## 8. Rollout
 Off by default (`enabled: false`, `mode: 'managed'`). "Activar la domótica" in Casa or Settings shows the engine card with "Instalar el motor" (about 1.2 GB download, about 3 GB on disk, about 10 minutes; 6.5 GB must be free). Turning the feature off stops the engine. Other platforms, or Windows without WSL2, report `unsupported` and offer the external mode.

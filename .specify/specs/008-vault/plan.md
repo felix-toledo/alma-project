@@ -70,7 +70,7 @@ pure and sit where a renderer-free test can import them.
 - `trash` is re-checked in main (inside the active vault, never the root) and audited as `vault.trash`.
 - "Abrir con la app del sistema" refuses programs and scripts (`EXECUTABLE`) and audits the denial.
 - Vault content leaves the machine only as search results, context or attachments sent to a model provider.
-- `docs/security/CONTROLES.md` (file-opening row) and `docs/security/PRIVACIDAD.md` (vault row) already describe this; they are
+- `docs/security/CONTROLS.md` (file-opening row) and `docs/security/PRIVACY.md` (vault row) already describe this; they are
   checked, not extended, unless a rule above changes.
 
 ## 8. Rollout

@@ -23,15 +23,15 @@ language change ([ADR 0019](../../../docs/adr/0019-names-follow-language-existin
 | D6 | The reviewer's and boss's free-text reason is shown translated by one lazy, cached, low-effort translation call to the same provider that produced it, only when `language` is `es`, using one fixed English prompt; the card shows the English reason first and swaps when the translation arrives; on failure it stays English | the reason is free text, so it cannot be a key; no per-language reviewer prompt, so AC-4.3 holds |
 | D7 | Default English Kokoro voice `af_heart`, the English picker also offers `am_adam`; the pair of defaults lives in one constant, `DEFAULT_VOICES` in `src/shared/defaults.ts`, and the per-language lists in `src/shared/voices.ts` | smallest reasonable default (Kokoro's own default voice); the human can change one line. The task verifies both voice files exist in the pinned Kokoro repo |
 | D8 | English names for BR-23: `Alma/Memories.md`, `Alma/Knowledge/`, `Meetings/`, `library/`, `palettes.json`, `recipes.json`, new notes `Untitled`, drawings `Drawing`, welcome `Welcome.md`; the knowledge frontmatter siblings follow the same rule (`origin: ai`, `type: knowledge`, `created`, `updated`, `conversation`) | all are entries in `names.*`, changeable in one place. Extending BR-23 to the sibling frontmatter keys is a plan call, flagged in the report |
-| D9 | Wake phrase id `hey_alma`; the worker asks a pure `wakeModelFile(wakeWord, exists)` which returns the new model file when it exists in `resources/wakewords/`, otherwise the previous `hola_alma_v0.1.onnx`, so voice never breaks before the asset arrives | AC-6.10; the asset is its own task flagged "needs human/asset" |
+| D9 | Wake phrase: only the displayed text changes to "Ey Alma", one dictionary key (`voice.wakePhrase`) with the same value in `es` and `en`; the id `hola_alma`, the model file and saved settings are untouched, so there is no migration and no asset | AC-6.5; BR-19 after the human's correction |
 | D10 | Whisper keeps `whisper-base`/`small`; the task passes the language to the worker and first confirms the ids are the multilingual builds (they carry no `.en` suffix) | AC-6.1 |
 
 ## 2. Layers touched
 | Layer | Files (new / changed) | Why it lives there |
 |---|---|---|
-| shared | new `src/shared/i18n/{language,messages,format,names,vocab,es,en}.ts`, `i18n/es/*.ts`, `i18n/en/*.ts`; new `src/shared/voices.ts`; changed `types.ts` (`Language`, `Settings.language`, `PublicSettings.language`, `WakeWord`, `ToolText`, tool-result `i18n`), `defaults.ts` (`defaultSettings(language)`, per-language agents, `DEFAULT_VOICES`), `company.ts` (templates per language), `schedule.ts` (date text) | pure data and functions used by renderer, main and coordinator; shared stays a leaf |
+| shared | new `src/shared/i18n/{language,messages,format,names,vocab,es,en}.ts`, `i18n/es/*.ts`, `i18n/en/*.ts`; new `src/shared/voices.ts`; changed `types.ts` (`Language`, `Settings.language`, `PublicSettings.language`, `ToolText`, tool-result `i18n`), `defaults.ts` (`defaultSettings(language)`, per-language agents, `DEFAULT_VOICES`), `company.ts` (templates per language), `schedule.ts` (date text) | pure data and functions used by renderer, main and coordinator; shared stays a leaf |
 | renderer | new `src/renderer/src/i18n/{I18nProvider,useT}.tsx`; every component and `lib/format.ts`, `lib/attachments.ts`, `vault/vaultLib.ts`, `voice/audio.ts`; `index.html` | text and the hook; formats via shared helpers |
-| main | new `src/main/messages.ts` (pure message builders, no electron import); changed `index.ts` (tray, dialogs, notifications, IPC errors, live apply), `settings.ts` (explicit language, system locale injected, wake-word and defaults migrations), `guard.ts` text, `instagram.ts` (label sets) | window-level text and settings store |
+| main | new `src/main/messages.ts` (pure message builders, no electron import); changed `index.ts` (tray, dialogs, notifications, IPC errors, live apply), `settings.ts` (explicit language, system locale injected, defaults migration), `guard.ts` text, `instagram.ts` (label sets) | window-level text and settings store |
 | coordinator | new `src/coordinator/prompts/*.ts` (English); changed `agent.ts`, `context.ts`, `vision.ts`, `approval.ts`, `index.ts`, `tools/**`, `channels/*`, `company/*`, `voice/*`, `knowledge/base.ts`, `compose/*`, `home/*` | everything that composes text for a run, a channel or the voice |
 | tests / scripts | new `tests/i18n*.test.ts`, `tests/support/i18n.ts`; renamed-doc link checks | gates |
 | docs, skills, config | renamed and translated `docs/**`, `README.md`, `CLAUDE.md`, `.claude/skills/{console-ui,umbra-ui}`, `.github/*`, constitution links only | BR-5, BR-6 |
@@ -71,7 +71,7 @@ export function isCancel(text: string): boolean
 // src/shared/types.ts
 export interface ToolText { key: MessageKey; params?: Record<string, string | number> }
 // tool-result block gains: i18n?: ToolText
-// Settings.language: Language (resolved) ; PublicSettings.language: Language ; WakeWord = 'hey_alma'
+// Settings.language: Language (resolved) ; PublicSettings.language: Language
 
 // src/coordinator/tools/types.ts
 export class ToolError extends Error { constructor(key: MessageKey, params?: Record<string, string | number>) }   // message = translate('en', key, params)
@@ -82,7 +82,6 @@ export function trayMenu(language: Language): { open: string; quit: string; tool
 export function securityDialog(language: Language, kind: 'mcp' | 'always-allow', programs: string[]): { title: string; message: string; allow: string; cancel: string }
 
 // src/coordinator/voice/voice-worker protocol: transcribe and tts requests gain `language: Language`
-export function wakeModelFile(wakeWord: 'hey_alma', exists: (file: string) => boolean): string
 export function sttLanguage(language: Language): { whisper: 'spanish' | 'english'; openai: 'es' | 'en'; meta: 'es' | 'en' }
 export function phonemizerVoice(language: Language): 'es-419' | 'en-us'
 export function reviewerReasonForDisplay(reason: string, language: Language, provider: Provider): Promise<string>   // D6
@@ -91,23 +90,23 @@ export function reviewerReasonForDisplay(reason: string, language: Language, pro
 IPC: no new channel. `settings:update` accepts `language` (validated by Zod at the boundary, AC-1.3); the existing `settings` message already carries it to the coordinator.
 
 ## 4. Data and persistence
-- `settings.json`: `language` only when chosen (D3); `voice.wakeWord` `hola_alma` becomes `hey_alma` on load (`off` stays); saved default agents, company templates and auto-review instructions identical to the shipped defaults of the other language are rewritten on a language change, edited ones untouched, and a deleted default stays deleted.
+- `settings.json`: `language` only when chosen (D3); `voice.wakeWord` is untouched (id `hola_alma`); saved default agents, company templates and auto-review instructions identical to the shipped defaults of the other language are rewritten on a language change, edited ones untouched, and a deleted default stays deleted.
 - Threads: unchanged files. New tool-result blocks carry `i18n`; old blocks have plain text and render as stored. The attachments heading is English for new messages; the renderer folds both the English heading and the legacy Spanish one.
 - Vault and working-folder names: BR-23 and D8, read under either language's name first; nothing renamed.
 - Generated text (routine thread titles, memories, knowledge notes, minutes, task logs) uses the language of the run that writes it.
 - Docs: renamed files (rename map in task G1), no data.
-- Models: English voice files download on first use; the new wake-word file is a repository asset.
+- Models: English voice files download on first use; the wake-word model is unchanged.
 
 ## 5. Dependency injection
 - `resolveLanguage` gets `systemLocales` from the caller; `SettingsStore` receives it in its constructor; tests pass arrays.
 - `RunContext.language`, a `language` argument on prompt, message and notification builders; no module reads global language state.
-- `resolveName` and `wakeModelFile` receive `exists`; tests fake the file system.
+- `resolveName` receives `exists`; tests fake the file system.
 - `reviewerReasonForDisplay` receives the `Provider`; tests use the fake provider of `tests/agent.test.ts`.
 - Dates: builders receive the instant; tests pass fixed dates.
 - Tests fake: `electron` (`vi.mock`) for `SettingsStore`, the voice worker, `fetch`, `Host`.
 
 ## 6. Test strategy
-New files: `tests/i18n.test.ts` (shared pure), `tests/i18n-ratchet.test.ts`, `tests/i18n-runtime.test.ts` (settings, run context, main and coordinator messages, channels, generated text), `tests/i18n-model.test.ts` (prompts, tool text, defaults, reply rule), `tests/i18n-voice.test.ts`, `tests/i18n-services.test.ts` (web, HA, Instagram labels, names), `tests/i18n-docs.test.ts` (links, docs language, Estilo lines). Existing tests keep their Spanish assertions except where BR-25 allows (English tool errors/results, old wake phrase).
+New files: `tests/i18n.test.ts` (shared pure), `tests/i18n-ratchet.test.ts`, `tests/i18n-runtime.test.ts` (settings, run context, main and coordinator messages, channels, generated text), `tests/i18n-model.test.ts` (prompts, tool text, defaults, reply rule), `tests/i18n-voice.test.ts`, `tests/i18n-services.test.ts` (web, HA, Instagram labels, names), `tests/i18n-docs.test.ts` (links, docs language, Estilo lines). Existing tests keep their Spanish assertions except where BR-25 allows (English tool errors/results).
 
 | AC | Test file → name | Adversarial cases |
 |---|---|---|
@@ -149,12 +148,10 @@ New files: `tests/i18n.test.ts` (shared pure), `tests/i18n-ratchet.test.ts`, `te
 | AC-6.2 | `tests/i18n-voice.test.ts` → `AC-6.2 …` | fillers, approval prompt, test sentence, errors, link and code phrases |
 | AC-6.3 | `tests/i18n-voice.test.ts` → `AC-6.3 …` | download fails offline |
 | AC-6.4 | [manual] end-to-end in English | |
-| AC-6.5 | `tests/i18n-voice.test.ts` → `AC-6.5 …` (only `hey_alma` accepted) + [manual] once the asset exists | |
+| AC-6.5 | `tests/i18n-voice.test.ts` → `AC-6.5 …` (the displayed phrase key `voice.wakePhrase` is "Ey Alma" and equal in `es` and `en`; the wake-word id stays `hola_alma`) + [manual] check the Voz tab and overlay | no per-language variant |
 | AC-6.6 | `tests/i18n-voice.test.ts` → `AC-6.6 …` | mixed-language phrases, closing plus request |
 | AC-6.7 | `tests/i18n-voice.test.ts` → `AC-6.7 …` | |
 | AC-6.8 | `tests/i18n-voice.test.ts` → `AC-6.8 …` | chosen voice kept on switch; unknown voice |
-| AC-6.9 | `tests/i18n-voice.test.ts` → `AC-6.9 …` | `hola_alma`, `off`, junk |
-| AC-6.10 | `tests/i18n-voice.test.ts` → `AC-6.10 …` | new file absent, then present |
 | AC-8.1 | `tests/i18n-model.test.ts` → `AC-8.1 …` | `defaultSettings('es')` equals today's defaults |
 | AC-8.2 | `tests/i18n-model.test.ts` → `AC-8.2 …` | edited, deleted and custom agents |
 | AC-9.1 | `tests/i18n-runtime.test.ts` → `AC-9.1 …` | no thread file touched by a switch |
@@ -178,4 +175,10 @@ Pure logic extracted from UI goes to `src/shared` and is tested there; the rende
 - BR-23 changes which files Alma opens inside the vault and the working folder, always under the same confinement checks as before (spec 009 and 015 path rules apply to either name).
 
 ## 8. Rollout
-No flag. Default is the system language; a Spanish system gives `es`, which is today's behavior, so existing users see the same text, plus a language selector in General. A non-Spanish, non-English system starts in English. Voice: the setting reads "Hey Alma" immediately, but until a person adds the trained model the previous model still wakes on "Hola Alma" (AC-6.10). Docs renames land in one PR with their link updates (task G1). ADR 0018 and ADR 0019 become `accepted` when the code lands (task H3).
+No flag. Default is the system language; a Spanish system gives `es`, which is today's behavior, so existing users see the same text, plus a language selector in General. A non-Spanish, non-English system starts in English. Voice: only the displayed wake phrase changes to "Ey Alma"; the model, id and saved settings are untouched. Docs renames land in one PR with their link updates (task G1). ADR 0018 and ADR 0019 become `accepted` when the code lands (task H3).
+
+## Spike results
+
+- **E1 (D10), Whisper builds:** `onnx-community/whisper-base` and `onnx-community/whisper-small` (the ids `voice-worker.ts` loads) are the multilingual builds: their `config.json` names `openai/whisper-base` and `openai/whisper-small` with `vocab_size` 51865 (the English-only builds are `.en` with 51864). No change of ids is needed; the worker now passes the language to Whisper.
+- **E1, Meta:** Meta takes the language as the word in `languageBias` ("Spanish", today's value, or "English"), so `sttLanguage` returns `meta: 'Spanish' | 'English'` rather than the `es`/`en` codes the interface sketch showed.
+- **E3 (D7), Kokoro voices:** `voices/af_heart.bin`, `voices/am_adam.bin` and `voices/ef_dora.bin` all exist in the pinned `onnx-community/Kokoro-82M-v1.0-ONNX` repo (HTTP 200, 522240 bytes each).

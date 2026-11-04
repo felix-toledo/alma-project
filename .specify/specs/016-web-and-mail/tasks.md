@@ -14,4 +14,4 @@
 - [x] **T12** (AC-6.5, AC-6.8, BR-9, BR-12) `testEmail` and the `email.test` request in `src/coordinator/tools/email.ts` and `src/coordinator/index.ts`; sealing of the password in `src/main/settings.ts` and `settings:setApiKey` in `src/main/index.ts` — [gap]: no automated test yet
 - [x] **T13** (AC-6.6, AC-6.7, BR-13) Mail tab, company mailbox fields and chat labels in `src/renderer/src/components/SettingsDialog.tsx`, `src/renderer/src/companies/TeamsSettings.tsx`, `src/renderer/src/lib/format.ts` — [manual]: type an address, check the servers fill in, save and delete the password, press "Probar conexión"
 - [x] **T14** (BR-1) Register `webTools` and `emailTools` as `standalone` app tools in `src/coordinator/agent.ts`; typecheck and lint
-- [x] **T15** Update `docs/security/CONTROLES.md`, `docs/security/RIESGOS.md` and `docs/security/PRIVACIDAD.md` for the SSRF check, DuckDuckGo and the mailbox
+- [x] **T15** Update `docs/security/CONTROLS.md`, `docs/security/RISKS.md` and `docs/security/PRIVACY.md` for the SSRF check, DuckDuckGo and the mailbox

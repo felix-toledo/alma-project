@@ -148,7 +148,7 @@ fixtures) and Biome's `noImportCycles`.
 ## V. Security and Privacy by Construction
 
 Alma holds API keys, messages, notes, camera feeds and can run commands.
-Controls are documented in [`docs/security/`](../../docs/security/CONTROLES.md).
+Controls are documented in [`docs/security/`](../../docs/security/CONTROLS.md).
 
 - **Every tool declares a `ToolRisk`** (`read | write | exec | memory | publish | home`)
   and goes through the approval policy accordingly. A tool that acts on the
@@ -163,8 +163,8 @@ Controls are documented in [`docs/security/`](../../docs/security/CONTROLES.md).
 - **Local network and private hosts stay off-limits to web tools** unless a
   spec explicitly opens them.
 - A change that adds attack surface, a data flow to a new third party, or a
-  new category of stored personal data updates `docs/security/CONTROLES.md`,
-  `RIESGOS.md` or `PRIVACIDAD.md` **in the same PR**.
+  new category of stored personal data updates `docs/security/CONTROLS.md`,
+  `RISKS.md` or `PRIVACY.md` **in the same PR**.
 
 **Why**: a bug in a chat app is annoying; a bug in an agent with keys, a
 shell and a camera is an incident.

@@ -17,4 +17,4 @@
 - [x] **T15** (AC-7.7, AC-7.9–7.13, BR-3, BR-12, BR-15) Error reporting, unavailable tools, approval preview, audit events, fresh settings after approval, concurrent calls with ordered results, 80-turn limit, company auto-approve of file writes in `src/coordinator/agent.ts` — [gap]: no automated test yet
 - [x] **T16** (BR-1, BR-2) Register the six tools in `builtinTools` (`src/coordinator/tools/index.ts`), declare each `ToolRisk`, and set default profiles in `src/shared/defaults.ts`; typecheck and lint
 - [x] **T17** (AC-7.14, BR-16) Tool card labels and one-line summaries in `src/renderer/src/components/ToolCard.tsx` and `src/renderer/src/lib/format.ts` — [manual]: run an agent against a folder and open each card
-- [x] **T18** Update `docs/security/CONTROLES.md` and `docs/security/RIESGOS.md` for `run_command` not being confined and the provider-key filter
+- [x] **T18** Update `docs/security/CONTROLS.md` and `docs/security/RISKS.md` for `run_command` not being confined and the provider-key filter

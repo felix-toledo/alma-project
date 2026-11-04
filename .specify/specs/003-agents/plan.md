@@ -57,7 +57,7 @@ No new arrow against `docs/architecture.md`.
 ## 7. Security and privacy impact
 - `delegate_task` has no `ToolRisk`; every tool a subagent calls goes through `authorize()` with the same mode, tagged with the subagent id (spec 004).
 - The profile's instructions, working folder, local date, vault fragments and memories are sent to the agent's provider. A profile's `tools` and `allowMcp` are the only per-agent capability limits; app tools are offered to every agent.
-- No secrets in prompts. No change to `docs/security/`: approval and audit coverage already in `CONTROLES.md` and R-07 in `RIESGOS.md`.
+- No secrets in prompts. No change to `docs/security/`: approval and audit coverage already in `CONTROLS.md` and R-07 in `RISKS.md`.
 
 ## 8. Rollout
 No flag. Fresh installs get the nine default profiles with `general` as default; older settings files are migrated once on load (Office tools, Multimedia agent, `compose_image`). The default agent cannot be deleted from the editor.

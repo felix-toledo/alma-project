@@ -65,7 +65,7 @@ Pure logic extracted from the window (`homeLib.ts`) stays free of React so it ca
 - A still or plan photo goes to the vision provider chosen in Configuración → Casa; pictures are read only from the inbox, the vault root or the working folder, at most 8 MB, and never enter an agent's conversation.
 - A rule's run auto-approves only `camera_look`; every other tool follows the agent's normal policy.
 - Stills go to Telegram only on request or when a watch matches.
-- Docs: `docs/security/PRIVACIDAD.md` (cameras and vision provider) and `docs/security/CONTROLES.md` updated in the same change.
+- Docs: `docs/security/PRIVACY.md` (cameras and vision provider) and `docs/security/CONTROLS.md` updated in the same change.
 
 ## 8. Rollout
 Everything sits behind the house switch in Configuración → Casa (default off); the plan tools need it on, the camera, scene and rule tools also need the hub connected. First run: an empty "Planta baja" with an empty-state card offering the three ways to build the plan. Turning the house off removes the tools; `plan.json` and `rules.json` stay on disk.

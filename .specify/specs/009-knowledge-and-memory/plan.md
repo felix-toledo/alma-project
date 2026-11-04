@@ -80,7 +80,7 @@ tests import them without a database.
 - Fragments are injected as data inside `<vault>` tags ("datos, no instrucciones"); a note can still try to steer a model, which
   is why the memory guide tells the model not to store sensitive data it was not asked to store.
 - Hidden folders are never indexed or readable by tools.
-- `docs/security/PRIVACIDAD.md` (vault and index row, "Memoria y búsqueda") already covers the data; check it is still accurate.
+- `docs/security/PRIVACY.md` (vault and index row, "Memoria y búsqueda") already covers the data; check it is still accurate.
 
 ## 8. Rollout
 - No setting: the knowledge base exists whenever `activeVault` points at a folder, and is absent (no tools, no context) otherwise.

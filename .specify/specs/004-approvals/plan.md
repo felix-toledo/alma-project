@@ -55,7 +55,7 @@ Layer rules in `docs/architecture.md` hold: coordinator and renderer import only
 - Defines the risk class of every tool; `publish` always asks with no "Siempre permitir" and is the only thing "Permitir todo" cannot skip. An error in a reviewer or boss never auto-allows (ask, or deny when cancelled).
 - The reviewer model receives the tool input (up to 8000 characters) and the person's latest message (4000): a disclosure to whichever provider is configured for review.
 - Switching to "Permitir todo" needs a native confirmation in main. Telegram answers reuse the same chat check as messages.
-- Already covered in `docs/security/CONTROLES.md` (human approval row) and `docs/security/RIESGOS.md` (R-07); no further update.
+- Already covered in `docs/security/CONTROLS.md` (human approval row) and `docs/security/RISKS.md` (R-07); no further update.
 
 ## 8. Rollout
 Mode `needs-approval` is the default; the person changes it from the composer or Ajustes → Aprobaciones. Auto-review defaults to Anthropic with `DEFAULT_CLAUDE_MODEL` and `DEFAULT_REVIEW_INSTRUCTIONS`. `alwaysAllowTools` starts empty. On first run nothing asks until an agent writes or runs a command.

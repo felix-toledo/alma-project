@@ -38,7 +38,7 @@ Templates: [`../templates/`](../templates). Pipeline: [`docs/pipeline.md`](../..
 | 022 | [security-and-privacy](./022-security-and-privacy/spec.md) | secrets, guard, audit, privacy |
 | 023 | [app-shell-and-ui](./023-app-shell-and-ui/spec.md) | windows, tray, IPC, console-style UI |
 | 024 | [voice-control-models-and-meta](./024-voice-control-models-and-meta/spec.md) | voice cancel/end, model per chat, Meta default, fewer tokens, pop-up CSS |
-| 025 | [i18n-es-en](./025-i18n-es-en/spec.md) | `language` setting, es/en dictionaries, agent and voice language, docs in English (ready) |
+| 025 | [i18n-es-en](./025-i18n-es-en/spec.md) | `language` setting, es/en dictionaries, agent and voice language, docs in English (ready: the code is done; manual walks pending, see its tasks.md Close-out) |
 
 ## In progress
 

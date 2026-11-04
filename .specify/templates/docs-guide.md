@@ -12,7 +12,7 @@ maintainer, a new contributor, a user who wants to know what Alma does. Same tru
   not sure of in `src/`. If the spec and the code disagree, the code wins and you say so. Never describe behavior you did
   not confirm.
 - **Never invent a reason.** Why something was built a certain way is only written when it is documented somewhere
-  (README, `docs/DOMOTICA-PLAN.md`, `docs/security/*`, code comments, the design-note files listed in your assignment).
+  (README, `docs/HOME-AUTOMATION-PLAN.md`, `docs/security/*`, code comments, the design-note files listed in your assignment).
   Otherwise write `Rationale not documented` and, if useful, what the code suggests, labeled as inference.
 - **Do not hide problems.** Known bugs and gaps go in a "Known limits" section, not in the happy-path description.
   Link the spec as `[spec 002](../../.specify/specs/002-chat/spec.md)`.
@@ -20,11 +20,11 @@ maintainer, a new contributor, a user who wants to know what Alma does. Same tru
 - Do not edit `src/`, `tests/`, `.specify/specs/` or `package.json`. Only create/edit the files in your assignment.
 - **Never run `pnpm` or `npm`** (they reinstall `node_modules` and break it). Do not start the app.
 - Relative links must resolve (a test checks every link in `docs/`). From `docs/modules/x.md`: `../../.specify/specs/…`,
-  `../architecture.md`, `../references/herramientas.md`. Link to files that exist or that are in your assignment list.
+  `../architecture.md`, `../references/tools.md`. Link to files that exist or that are in your assignment list.
 - Write the first complete draft to disk **early**, then refine with Edit, so a cut-off never loses work.
 - Finish with a report of at most 10 lines: files written, anything you could not verify, anything surprising.
 
-File and folder names stay as listed in the assignment (`docs/modules/`, `docs/references/`, `herramientas.md`…), even
+File and folder names stay as listed in the assignment (`docs/modules/`, `docs/references/`, `tools.md`…), even
 though the content is English.
 
 ## Module document (`docs/modules/<name>.md`)

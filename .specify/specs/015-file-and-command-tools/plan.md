@@ -20,7 +20,7 @@ Six small tools (`read_file`, `list_dir`, `search_files`, `write_file`, `edit_fi
 - Inputs: `read_file {path, offset?, limit?}`, `list_dir {path?, depth?}`, `search_files {pattern, path?, glob?, case_sensitive?}`, `write_file {path, content}`, `edit_file {path, old_string, new_string, replace_all?}`, `run_command {command, timeout_seconds?}`.
 
 ## 4. Data and persistence
-Tools write only into the person's workspace; they keep no state of their own. Tool results are stored with the thread; non-read calls leave an audit line (see `docs/security/CONTROLES.md`). Nothing is migrated.
+Tools write only into the person's workspace; they keep no state of their own. Tool results are stored with the thread; non-read calls leave an audit line (see `docs/security/CONTROLS.md`). Nothing is migrated.
 
 ## 5. Dependency injection
 Tools receive everything through `ToolContext` (workspace, abort signal, settings). Tests use a temp directory as workspace and a fake `ToolContext`; `commandEnv` takes the environment as an argument so keys can be injected; the agent tests drive `runAgent` with a scripted provider and an `ApprovalBroker`.
@@ -54,7 +54,7 @@ Tools receive everything through `ToolContext` (workspace, abort signal, setting
 - Risk classes as in §3; `read` never asks, `write` and `exec` follow the approval mode, "siempre permitir" and auto-approve; mode "blocked" denies them.
 - `run_command` is arbitrary code as the user and is not confined to the workspace; its environment drops Alma's provider keys but keeps everything else.
 - File contents and command output go to the model provider.
-- Docs: the "las claves no llegan a lo que el modelo ejecuta" control and risk R-03 in `docs/security/CONTROLES.md` and `docs/security/RIESGOS.md`.
+- Docs: the "las claves no llegan a lo que el modelo ejecuta" control and risk R-03 in `docs/security/CONTROLS.md` and `docs/security/RISKS.md`.
 
 ## 8. Rollout
 No setting. The tools exist for every agent whose profile lists them (General and Programador have all six, Investigador and Revisor only the three reads); a conversation without a working folder gets a clear error instead of an approval card. Default approval mode is "ask".

@@ -70,7 +70,7 @@ state machine are not faked yet.
 
 ## 7. Security and privacy impact
 - No agent tools, so no new `ToolRisk`. Approvals raised in the voice thread are answered by voice only for that thread and only on a clear yes or no.
-- The voice print is biometric data, local, exported and erased with personal data (`docs/security/PRIVACIDAD.md` already lists it).
+- The voice print is biometric data, local, exported and erased with personal data (`docs/security/PRIVACY.md` already lists it).
 - Audio leaves the machine only for OpenAI or Meta transcription; text leaves for ElevenLabs; Hugging Face and GitHub see model downloads only.
 - Provider keys come from the encrypted store or environment variables; they are not logged. The main process grants Chromium only audio `media` requests to the main window.
 - Docs: no change to `docs/security/` (voice print and third parties are already recorded).
