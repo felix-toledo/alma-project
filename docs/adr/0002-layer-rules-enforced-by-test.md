@@ -8,7 +8,7 @@ status: accepted
 
 ## Why
 
-Documented in the constitution, Clause IV: without separation every tool grows its own copy of policy and I/O, nothing is unit-testable, and the process boundary (what may touch the network, the disk, the OS) blurs. The pipeline doc adds the general principle: when a prose rule is broken twice, it becomes a sensor ([pipeline.md](../pipeline.md), "Guías, sensores y compuertas humanas"). Relaxing a rule must be discussed first (constitution II); see [architecture.md](../architecture.md) section 2.
+Documented in the constitution, Clause IV: without separation every tool grows its own copy of policy and I/O, nothing is unit-testable, and the process boundary (what may touch the network, the disk, the OS) blurs. The pipeline doc adds the general principle: when a prose rule is broken twice, it becomes a sensor ([pipeline.md](../pipeline.md), "Guides, sensors and human gates"). Relaxing a rule must be discussed first (constitution II); see [architecture.md](../architecture.md) section 2.
 
 ## Considered options
 

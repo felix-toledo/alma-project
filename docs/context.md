@@ -79,7 +79,7 @@ The agent profile's reasoning level (`low`, `medium`, `high`, `xhigh`, `max`). C
 _Avoid_: thinking level, reasoning budget
 
 **Refusal fallback**:
-The Anthropic server-side beta (`server-side-fallback-2026-07-01`) that Alma switches on for the newest Claude models. If a turn still ends in `refusal`, its tools do not run and the run ends with "El modelo rechazó la solicitud.".
+The Anthropic server-side beta (`server-side-fallback-2026-07-01`) that Alma switches on for the newest Claude models. If a turn still ends in `refusal`, its tools do not run and the run ends with «El modelo rechazó la solicitud.».
 _Avoid_: retry, safety fallback
 
 **App tools**:
@@ -132,7 +132,7 @@ _Avoid_: view mode, preview
 The "Abrir nota" dialog opened with Ctrl+O to find a note by name.
 _Avoid_: file picker, command palette
 
-**Lo que sabe Alma** ("what Alma knows"):
+**«Lo que sabe Alma»** ("what Alma knows"):
 The panel of the vault view where the person sees, edits and deletes every memory and every knowledge note Alma wrote, plus the index status.
 _Avoid_: memory manager, knowledge panel
 
@@ -143,7 +143,7 @@ The single Telegram private chat the bot answers: the first allowed user who wri
 _Avoid_: linked chat, owner chat
 
 **Self chat**:
-The person's own WhatsApp chat ("Mensajes para mí", "Messages to me"), the only chat Alma answers. Alma's messages in it start with a robot mark.
+The person's own WhatsApp chat («Mensajes para mí», "Messages to me"), the only chat Alma answers. Alma's messages in it start with a robot mark.
 _Avoid_: saved messages, own chat
 
 **Linked device**:
@@ -177,7 +177,7 @@ The thread with channel `voice` that the assistant uses; a thread idle for more 
 _Avoid_: call, voice session
 
 **Wake word**:
-The phrase that starts a voice turn while the assistant is listening: "Hey Alma", the same in both languages (spec 025). Until its model is trained and added to `resources/wakewords/`, the previous "Hola Alma" model is the one that ships and loads.
+The phrase that starts a voice turn while the assistant is listening: "Ey Alma", the same in both languages, always (spec 025). The shipped model (`resources/wakewords/hola_alma_v0.1.onnx`, id `hola_alma`) already recognizes it; "Hola Alma" was a wrong name, so only the displayed phrase changes.
 _Avoid_: hotword, trigger phrase
 
 **Voice print**:
@@ -315,7 +315,7 @@ One camera picture saved to the inbox (`camera_look`, `camera_photo`); a still i
 _Avoid_: snapshot (the code uses that word for the live state of the house too), screenshot, frame
 
 **Vision model**:
-The model that looks at pictures for `look_at_image`, camera stills and plan photos; chosen in Configuración → Casa, otherwise the first agent with a key. Pictures never enter an agent's conversation, only the text answer does.
+The model that looks at pictures for `look_at_image`, camera stills and plan photos; chosen in «Configuración → Casa», otherwise the first agent with a key. Pictures never enter an agent's conversation, only the text answer does.
 _Avoid_: image model (that generates pictures), multimodal model
 
 ## Language: images and interface
@@ -333,7 +333,7 @@ A saved combination in `recetas.json` (template, palette, fonts, background, pie
 _Avoid_: preset, template (a template is one of the 12 built-in layouts)
 
 **App language**:
-The `language` setting (`es` or `en`) chosen in Configuración, defaulting to the system language. One value drives the renderer's text, the messages main and the coordinator show the person, dates, numbers and sorting, and the voice (speech-to-text and text-to-speech). A change takes effect live, with no restart. Only `es` and `en` exist (a regional code maps to its base language; any other system language starts in `en`); Spanish stays rioplatense and English is US English; formats are `es-AR` and `en-US`, 24-hour. Agents do not get the app language injected: they follow a general rule to answer in the language the person speaks in, and fall back to the app language only when there is no incoming message. Names Alma writes to disk follow the language for new files, and an existing name under either language always wins.
+The `language` setting (`es` or `en`) chosen in «Configuración», defaulting to the system language. One value drives the renderer's text, the messages main and the coordinator show the person, dates, numbers and sorting, and the voice (speech-to-text and text-to-speech). A change takes effect live, with no restart. Only `es` and `en` exist (a regional code maps to its base language; any other system language starts in `en`); Spanish stays rioplatense and English is US English; formats are `es-AR` and `en-US`, 24-hour. Agents do not get the app language injected: they follow a general rule to answer in the language the person speaks in, and fall back to the app language only when there is no incoming message. Names Alma writes to disk follow the language for new files, and an existing name under either language always wins.
 _Avoid_: locale, UI language (it covers more than the UI), interface language
 
 **Model-facing text**:

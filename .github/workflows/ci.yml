@@ -64,7 +64,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Reports without blocking while R-01 (docs/security/RIESGOS.md) is open; remove continue-on-error once it is closed.
+    # Reports without blocking while R-01 (docs/security/RISKS.md) is open; remove continue-on-error once it is closed.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4

@@ -1,8 +1,8 @@
 # Reference: where Alma keeps data
 
-Every folder and file Alma writes, inside and outside the user-data folder. Grouped by location, then by module. Module behavior lives in [docs/modules/seguridad.md](../modules/seguridad.md); this page is the lookup table.
+Every folder and file Alma writes, inside and outside the user-data folder. Grouped by location, then by module. Module behavior lives in [docs/modules/security.md](../modules/security.md); this page is the lookup table.
 
-- Spec: [022 · Seguridad y privacidad](../../.specify/specs/022-security-and-privacy/spec.md), [006 · Configuraciones](../../.specify/specs/006-settings/spec.md). Inventory written for people: `docs/security/PRIVACIDAD.md`.
+- Spec: [022 · Seguridad y privacidad](../../.specify/specs/022-security-and-privacy/spec.md), [006 · Configuraciones](../../.specify/specs/006-settings/spec.md). Inventory written for people: `docs/security/PRIVACY.md`.
 - **User-data folder** = Electron's `userData`: `%APPDATA%\Alma` on Windows. `ALMA_USER_DATA` overrides it (`app.setPath('userData', …)`, `src/main/index.ts`). The coordinator receives it as `dataDir` in the `init` message and writes everything below it.
 - Columns: **Who writes** (the code that creates it), **Retention** (when it goes away), **Sensitive** (secrets, personal or biometric data), **Export** (included by "Exportar mis datos…"), **Erase** (removed by "Borrar mi historial"). Only the five names in `EXPORTED` (`src/coordinator/privacy.ts`) are exported; only conversations, `inbox/` and the voice print are erased.
 
@@ -10,17 +10,17 @@ Every folder and file Alma writes, inside and outside the user-data folder. Grou
 
 | Path | Contents / format | Who writes | Retention / cleanup | Sensitive | Export | Erase |
 |---|---|---|---|---|---|---|
-| `settings.json` (+ `settings.json.tmp` during a save) | The whole `Settings` document, JSON, mode `0o600`, secrets as `enc:`+base64. Includes agent roster, company definitions, routine definitions, vault paths. See [ajustes.md](ajustes.md) | `SettingsStore.save()` (`src/main/settings.ts`) | Kept until deleted by hand. Never erased by the app | **Yes**: sealed keys, bot token, mail passwords | No | No |
+| `settings.json` (+ `settings.json.tmp` during a save) | The whole `Settings` document, JSON, mode `0o600`, secrets as `enc:`+base64. Includes agent roster, company definitions, routine definitions, vault paths. See [settings.md](settings.md) | `SettingsStore.save()` (`src/main/settings.ts`) | Kept until deleted by hand. Never erased by the app | **Yes**: sealed keys, bot token, mail passwords | No | No |
 | `threads/<uuid>.json` | One conversation per file: messages (text, images as base64, tool calls and results), subagent runs, tool states. JSON, mode `0o600`, atomic via `.tmp` | `ThreadStore` (`src/coordinator/store.ts`), debounced 300 ms | Until deleted by the person, "Borrar mi historial", or retention (`privacy.threadRetentionDays`, checked at start, every 12 h, on settings change; running threads are skipped) | **Yes**: everything said and every tool result | Yes (`threads`) | Yes |
 | `companies/<companyId>.json` | Per company: tasks (with comments and results), meetings (prep, transcript), activity (last 300), monthly spend, budget warnings. JSON | `CompanyStore` (`src/coordinator/company/store.ts`) | Activity is capped at 300 entries; the rest stays until the company data is edited. Deleting a company in the UI does not delete this file (not verified either way: no code path found that removes it) | Yes: work content | Yes (`companies`) | **No** |
 | `routines-state.json` | `{ [routineId]: { lastRunAt, lastThreadId, running } }` | `RoutineRunner` (`src/coordinator/routines.ts`) | Kept; `running` is reset on start | Low | Yes | **No** |
 | `audit/main-YYYY-MM.jsonl`, `audit/coordinator-YYYY-MM.jsonl` | Hash-chained audit trail, one JSON line per event (`ts`, `src`, `action`, `actor`, `target`, `outcome`, `detail`, `prev`), mode `0o600`. Strings in `detail` masked and cut at 300 characters | `audit()` (`src/shared/audit.ts`), from main and from the coordinator | Files older than 13 months (by UTC month) removed at process start | Medium: no messages or secrets by design, but `run_command` text (masked, 300 chars) and approval reasons are kept | Yes (`audit`) | **No** |
-| `inbox/<base36 time>-<name>` | Pictures the person sent: pasted/dropped in the chat (`files.saveImage`), photos from Telegram, camera snapshots taken by the home module (`<entity>-<time>.jpg`) | `saveInboxImage` (`src/coordinator/index.ts`), `HomeService` (`src/coordinator/home/index.ts`) | Until "Borrar mi historial". No age-based cleanup | **Yes**: personal photos, camera frames | No | Yes (folder emptied and recreated) |
+| `inbox/<base36 time>-<name>` | Pictures the person sent: pasted/dropped in the chat (`files.saveImage`), photos from Telegram, camera snapshots taken by the home module (`<entity>-<time>.jpg`) | `saveInboxImage` (`src/coordinator/index.ts`), `HomeService` (`src/coordinator/home/index.ts`) | Until «Borrar mi historial». No age-based cleanup | **Yes**: personal photos, camera frames | No | Yes (folder emptied and recreated) |
 | `voice-profile.json` | `{ vector, enrolledAt, samples }`: the averaged speaker embedding of the person's voice | `VoiceAssistant.enroll` (`src/coordinator/voice/assistant.ts`) | Until "Olvidar mi voz" or "Borrar mi historial" | **Yes, biometric** | Yes | Yes |
 | `voice-cache/<sha1>.mp3` | ElevenLabs audio of short fixed phrases ("fillers"), keyed by voice, model and text | `VoiceAssistant.elevenLabs` with `keep` | Kept; no cleanup | Low | No | No |
 | `models/` | Downloaded model files: Whisper (Hugging Face cache layout), `kokoro/<voice>.bin`, `openwakeword/*.onnx`, WavLM speaker model, `Xenova/bge-m3` embeddings | `voice-worker.ts` (`cached()`, `env.cacheDir`), `knowledge/embed-worker.ts` | Kept (large). Downloaded once from `huggingface.co` and the openWakeWord GitHub release | No | No | No |
 | `knowledge/<id>.db` | One SQLite file per vault (id = first 16 hex of SHA-1 of the lower-cased vault path): chunks, FTS5 index and sqlite-vec embeddings. A cache of the vault; it is rebuilt from the notes | `KnowledgeBase` (`src/coordinator/knowledge/base.ts`, `db.ts`) | Kept; not removed when a vault is closed | **Yes**: derived from the person's notes | No | No |
-| `whatsapp-auth/` | Baileys multi-file session (keys and credentials of the linked device) | `useMultiFileAuthState` (`src/coordinator/channels/whatsapp.ts`) | Removed on "Desvincular este dispositivo" (`logout`) | **Yes**: this folder is a login to the person's WhatsApp | No | No |
+| `whatsapp-auth/` | Baileys multi-file session (keys and credentials of the linked device) | `useMultiFileAuthState` (`src/coordinator/channels/whatsapp.ts`) | Removed on «Desvincular este dispositivo» (`logout`) | **Yes**: this folder is a login to the person's WhatsApp | No | No |
 | `whatsapp-auth-<companyId>/` | Same, for a company's own WhatsApp number | `companyWhatsApp()` (`src/coordinator/index.ts`) | Removed on `company.whatsapp.logout` | **Yes** | No | No |
 | `home/auth.json` | Home Assistant `{ mode, url, token, password? }`; token and password sealed with the OS store (`secret.seal`) | `HaEngine.saveAuth` (`src/coordinator/home/engine.ts`) | Removed by `home.uninstall` | **Yes** (sealed) | No | No |
 | `home/engine.json` | `{ port }` of the managed engine | engine | Removed by `home.uninstall` | No | No | No |
@@ -29,13 +29,13 @@ Every folder and file Alma writes, inside and outside the user-data folder. Grou
 | `home/plan.json` | The 2D floor plan (floors, rooms, device positions) | `PlanStore` (`src/coordinator/home/plan.ts`) | Kept on `home.uninstall` ("the plan and the rules stay") | Medium: layout of the home | No | No |
 | `home/rules.json` | Judgment rules and camera watches | `HomeTriggers` (`src/coordinator/home/triggers.ts`) | Kept on `home.uninstall` | Medium | No | No |
 | `Partitions/instagram/` (Chromium partition `persist:instagram`) | Instagram session cookies; the password is typed on Instagram's own page and never stored by Alma | Electron (`session.fromPartition`, `src/main/instagram.ts`) | Removed by "Desconectar" (`instagram:disconnect`) | **Yes**: session | No | No |
-| Electron/Chromium files (`Cookies`, `Local Storage/`, `Session Storage/`, `Network/`, caches…) | The renderer's `localStorage` keys (`umbra.prefs`, `alma.*`, see [ajustes.md](ajustes.md)) live here | Electron | Not managed by Alma | Low | No | No |
+| Electron/Chromium files (`Cookies`, `Local Storage/`, `Session Storage/`, `Network/`, caches…) | The renderer's `localStorage` keys (`umbra.prefs`, `alma.*`, see [settings.md](settings.md)) live here | Electron | Not managed by Alma | Low | No | No |
 
 Notes:
 
 - A folder from the previous app name, `%APPDATA%\MultiAgente`, is copied recursively into the user-data folder once when `ALMA_USER_DATA` is unset and the new folder has no `settings.json`, skipping `lockfile`, `Singleton*`, `Cache`, `Code Cache`, `GPUCache`, `DawnCache`, `Crashpad`. The original is left in place (`src/main/index.ts`).
 - Sealed values only open for the same Windows user on the same machine. Copying the user-data folder to another machine keeps everything except the keys, which read as empty.
-- `docs/security/PRIVACIDAD.md` lists "audios" under `inbox/`. In the code, voice notes from Telegram are transcribed in memory and not written to disk (`src/coordinator/channels/telegram.ts` `onVoice`); only pictures reach `inbox/`.
+- `docs/security/PRIVACY.md` lists "audios" under `inbox/`. In the code, voice notes from Telegram are transcribed in memory and not written to disk (`src/coordinator/channels/telegram.ts` `onVoice`); only pictures reach `inbox/`.
 - `saveInboxImage` replaces almost every letter of the original file name with `_` (the regular expression is `/[^w.-]+/g`, a literal `w`). The folder still confines the file.
 
 ## Outside the user-data folder
@@ -43,13 +43,13 @@ Notes:
 | Path | Contents / format | Who writes | Retention / cleanup | Sensitive | Export | Erase |
 |---|---|---|---|---|---|---|
 | Vault folders (any path the person chose; default for a new one `Documents\Alma\Vault`, from `vault:defaultPath`) | Markdown notes and attachments; the person's own files. Alma writes `Alma/Recuerdos.md` (what Alma remembers about the person, one line each), `Alma/Conocimientos/*.md` (notes with frontmatter), `Bienvenida.md` (on `vault.init` when the folder is empty). Hidden entries (names starting with `.`) are skipped by the index and refused to tools | `KnowledgeBase` (`src/coordinator/knowledge/base.ts`), `vault.init` (`src/coordinator/index.ts`), the person, other apps | Decided by the person. A delete from Alma goes to the system recycle bin (`shell.trashItem`, host request `trash`) | **Yes**: personal notes and memories | No | No |
-| Company vaults (`Company.vault`; suggested `Documents\Alma\Empresas\<name>`) | Same layout, plus `Reuniones/<date> <topic>.md` meeting minutes and any document the company's agents make | `CompanyEngine.minutes`, agents | Same as vaults. Deleting a company does not delete its vault ("El vault (sus archivos) no se borra") | Yes | No | No |
+| Company vaults (`Company.vault`; suggested `Documents\Alma\Empresas\<name>`) | Same layout, plus `Reuniones/<date> <topic>.md` meeting minutes and any document the company's agents make | `CompanyEngine.minutes`, agents | Same as vaults. Deleting a company does not delete its vault («El vault (sus archivos) no se borra») | Yes | No | No |
 | Working folders (`defaultWorkspace`, `Thread.workspace`, `Routine.workspace`) | Whatever agents create with their file tools: any file; `imagenes/<name>-<time>.png` and `.svg` (generated or composed images); Office files written by `office_create`/`office_edit`, with a `<file>.bak` copy of the previous version; `marca.md`, `publicaciones.md`, `biblioteca/` are read (and `publicaciones.md` appended) by the Community Manager agent by convention of its prompt | Agent tools (`src/coordinator/tools/*`), confined to the folder by `resolveInWorkspace` | Never cleaned by Alma | Depends on the work | No | No |
 | WSL distro `alma-home` (name from `ALMA_HOME_DISTRO`) | Registered in WSL; its disk lives in `<userData>\home\vm` (the folder passed to `wsl --import`) | `wsl --import` / `--unregister` | Removed by `home.uninstall` | Yes | No | No |
 | System credential store (DPAPI) | The key that opens every `enc:` value (it is tied to the Windows user, not to a file Alma owns) | Windows | Lost with the Windows profile | n/a | n/a | n/a |
 | Files an MCP server or a `run_command` creates | Anything: those programs run with the person's rights | Third-party programs | Not managed | Depends | No | No |
 
-Nothing is stored on a server run by Alma: there is none ([spec 022 · BR-9](../../.specify/specs/022-security-and-privacy/spec.md)). What leaves the machine is listed in `docs/security/PRIVACIDAD.md` section 2.
+Nothing is stored on a server run by Alma: there is none ([spec 022 · BR-9](../../.specify/specs/022-security-and-privacy/spec.md)). What leaves the machine is listed in `docs/security/PRIVACY.md` section 2.
 
 ## Back up
 
@@ -67,7 +67,7 @@ What the code does for each request:
 
 | Action | Where in the app | What it removes | What it leaves |
 |---|---|---|---|
-| "Borrar mi historial" (confirm: "No se puede deshacer. Tu vault, tus claves y tus canales no se tocan.") | General → Privacidad | Aborts running conversations and deletes every conversation (`threads/`), empties `inbox/` (photos, camera frames), forgets the voice print; records `privacy.erase`; the window reloads after 1.2 s (`privacy.erase`, `src/coordinator/index.ts`) | `companies/`, `routines-state.json`, `audit/`, `knowledge/`, `voice-cache/`, `models/`, `settings.json`, vaults, working folders, channel sessions, home data |
+| "Borrar mi historial" (confirm: «No se puede deshacer. Tu vault, tus claves y tus canales no se tocan.») | General → Privacidad | Aborts running conversations and deletes every conversation (`threads/`), empties `inbox/` (photos, camera frames), forgets the voice print; records `privacy.erase`; the window reloads after 1.2 s (`privacy.erase`, `src/coordinator/index.ts`) | `companies/`, `routines-state.json`, `audit/`, `knowledge/`, `voice-cache/`, `models/`, `settings.json`, vaults, working folders, channel sessions, home data |
 | Retention | General → "Borrar conversaciones sin actividad" | Conversations not updated in 30/90/180/365 days and not running (`privacy.retention` in the trail) | Same as above |
 | Delete one conversation | Sidebar | That `threads/<uuid>.json` | |
 | "Olvidar mi voz" | Voz | `voice-profile.json` | |
@@ -77,7 +77,7 @@ What the code does for each request:
 | Uninstall the home engine | Casa | The WSL distro `alma-home`, `home/vm`, `home/auth.json`, `home/engine.json` | `home/plan.json`, `home/rules.json` |
 | Vault notes | Vault view | One file to the recycle bin | Index rows are rebuilt from the files |
 
-**To remove everything** there is no single button. Following the table: run "Borrar mi historial"; delete `companies/`, `routines-state.json`, `audit/`, `knowledge/`, `voice-cache/` by hand; "Borrar" each key; unlink the channels; uninstall the home engine; delete the vaults and working folders you no longer want; then close Alma and delete the user-data folder. `docs/security/PRIVACIDAD.md` describes the same rights in section 3 and says the vault is deleted "desde el vault" (from the vault itself).
+**To remove everything** there is no single button. Following the table: run «Borrar mi historial»; delete `companies/`, `routines-state.json`, `audit/`, `knowledge/`, `voice-cache/` by hand; «Borrar» each key; unlink the channels; uninstall the home engine; delete the vaults and working folders you no longer want; then close Alma and delete the user-data folder. `docs/security/PRIVACY.md` describes the same rights in section 3 and says the vault is deleted "from the vault" (from the vault itself).
 
 ## Known limits
 
@@ -85,6 +85,6 @@ What the code does for each request:
 - File mode `0o600` has little effect on Windows; protection is the per-user profile folder plus DPAPI.
 - `voice-cache/` and `knowledge/*.db` have no cleanup.
 - I did not find code that removes `companies/<id>.json` when a company is deleted.
-- `PRIVACIDAD.md` mentions audio in `inbox/`; the code stores pictures only.
+- `PRIVACY.md` mentions audio in `inbox/`; the code stores pictures only.
 
 Written by hand from the code; when you add a row, verify the name in the code

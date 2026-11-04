@@ -4,24 +4,24 @@
 
 ## What it does
 
-- **Start a turn** by saying the wake word «Hola Alma» or pressing a global keyboard shortcut (default `Control+Alt+Space`) or the microphone button.
+- **Start a turn** by saying the wake word «Ey Alma» or pressing a global keyboard shortcut (default `Control+Alt+Space`) or the microphone button.
 - **Check it is you** (optional). Before a wake-word turn starts, Alma compares the last ~2 s of audio with a voice print the owner trained.
 - **Listen until you pause**, transcribe (local Whisper, OpenAI or Meta), and give the text to an agent in a voice conversation.
 - **Speak the answer sentence by sentence** with Kokoro (local), the Windows voices, or ElevenLabs.
 - **Follow-ups without the wake word**, and **interruption**: talk over Alma and she stops.
-- **Approve by voice**: when a tool call needs permission in the voice conversation, Alma asks "¿Sí o no?" and understands the answer.
+- **Approve by voice**: when a tool call needs permission in the voice conversation, Alma asks «¿Sí o no?» and understands the answer.
 - The same transcriber turns Telegram and WhatsApp voice notes into text.
 
 The models run on onnxruntime in a worker thread and download on first use. Cloud engines are opt-in.
 
 ## How to use it
 
-Everything is in **Configuración → Voz**. Changes save at once.
+Everything is in «Configuración → Voz». Changes save at once.
 
-1. Turn voice on. The state becomes `listening`. Windows may ask for the microphone; if it is denied, the overlay says "Windows no le da acceso al micrófono a Alma (Configuración de Windows → Privacidad → Micrófono)." (Windows does not give Alma access to the microphone).
-2. Say «Hola Alma» or press the shortcut. A chime plays, and the overlay shows "Te escucho…" (listening), "Entendiendo…" (understanding), "Pensando…" (thinking), "Hablando" (speaking) with the transcript and the answer.
+1. Turn voice on. The state becomes `listening`. Windows may ask for the microphone; if it is denied, the overlay says «Windows no le da acceso al micrófono a Alma (Configuración de Windows → Privacidad → Micrófono).» (Windows does not give Alma access to the microphone).
+2. Say «Ey Alma» or press the shortcut. A chime plays, and the overlay shows "Te escucho…" (listening), "Entendiendo…" (understanding), "Pensando…" (thinking), "Hablando" (speaking) with the transcript and the answer.
 3. Keep talking for a follow-up, or say a closing like «gracias», «chau Alma», «listo, nada más».
-4. Pressing the shortcut or button while Alma speaks stops her and ends the conversation. Pressing it while recording closes the recording ("Listo, ya terminé").
+4. Pressing the shortcut or button while Alma speaks stops her and ends the conversation. Pressing it while recording closes the recording («Listo, ya terminé»).
 5. Sidebar button: "Hablar", "Callar", "Voz con error" or "Voz…" depending on state.
 
 In the tab:
@@ -32,10 +32,10 @@ In the tab:
 | "Entrenar mi voz" / "Volver a entrenar" | Read three phrases, 5.5 s each, with a live level meter. Warns if consistency is below 75%. |
 | "Probar si me reconoce" | Records 3.5 s and shows similarity, threshold and verdict. |
 | "Olvidar mi voz" | Drops the voice print. |
-| "Probar la voz" | Alma says "Hola, soy Alma. ¿En qué te puedo ayudar hoy?" with the current engine, even if the assistant is off. |
+| "Probar la voz" | Alma says «Hola, soy Alma. ¿En qué te puedo ayudar hoy?» with the current engine, even if the assistant is off. |
 | ElevenLabs "Ver voces" / "Elegir" | Lists the account's voices with samples; stores the chosen voice id. |
 
-The tab quotes about 80 MB (Whisper base) and 250 MB (small). With no API key for the chosen cloud engine it says "Cargá una API key de OpenAI/Meta en Proveedores." (load a key in Providers).
+The tab quotes about 80 MB (Whisper base) and 250 MB (small). With no API key for the chosen cloud engine it says «Cargá una API key de OpenAI/Meta en Proveedores.» (load a key in Providers).
 
 ## How it works
 
@@ -62,18 +62,18 @@ Non-obvious points:
 - **Messages.** Renderer to coordinator: `voice.status`, `voice.trigger`, `voice.played`, `voice.enroll`, `voice.profile`, `voice.forgetProfile`, `voice.testSpeaker`, `voice.say`, `voice.elevenVoices`, plus the audio envelope `{kind:'audio', pcm}`. Coordinator to renderer: `voice.status`, `voice.play` (with `last`), `voice.stop`. Main to coordinator: `voice.trigger`. Worker requests: `config`, `listen`, `audio`, `transcribe`, `embed`, `tts`; replies: `wake`, `progress`, `result`, `tts-chunk`, `done`, `error`.
 - **Frames** are dropped, not queued, while the coordinator reconnects or voice is off. The coordinator keeps the last 25 frames (2 s) for the speaker check and 8 more as pre-roll when interrupted.
 - **Wake-word detection** runs only in `listening` and never while Alma speaks. The worker reports scores above 0.2; the coordinator acts at or above `wakeThreshold`. With wake word `off`, no audio goes to the detector.
-- **Speaker check only on wake-word starts.** The shortcut, the button and follow-ups never verify. Design note: WavLM scored the owner 0.44–0.92 on short phrases, which silently dropped them, so the check was removed from follow-ups; on real humans the same speaker scored 0.91–0.96 and different people 0.67–0.79, hence the default threshold 0.86 (nota de diseño, `integrations-design` and `channels-voice-design`).
-- **Why no Python.** Decided to run everything on onnxruntime-node, the same engine as the vault embeddings, with microphone capture in the renderer (nota de diseño, `channels-voice-design`). Messages with an `ArrayBuffer` in the transfer list are silently dropped on the renderer to utilityProcess port, so audio is copied.
-- **Spanish Kokoro** uses the Kokoro ONNX with `ef_dora` style and espeak-ng (WASM, `es-419`), since kokoro-js alone is English-only (nota de diseño). A leading "Mmm" is hummed instead of spelled.
-- **Fillers.** On thinking start, a random filler ("Mmm…", "A ver…", "Esperá que pienso.", …) is spoken at once; one search filler if a tool starts before any text. Fillers are cached; ElevenLabs fillers are kept on disk so credits are spent once. The 8 fillers are prepared in the background when voice is on with Kokoro or ElevenLabs.
+- **Speaker check only on wake-word starts.** The shortcut, the button and follow-ups never verify. Design note: WavLM scored the owner 0.44–0.92 on short phrases, which silently dropped them, so the check was removed from follow-ups; on real humans the same speaker scored 0.91–0.96 and different people 0.67–0.79, hence the default threshold 0.86 (design note, `integrations-design` and `channels-voice-design`).
+- **Why no Python.** Decided to run everything on onnxruntime-node, the same engine as the vault embeddings, with microphone capture in the renderer (design note, `channels-voice-design`). Messages with an `ArrayBuffer` in the transfer list are silently dropped on the renderer to utilityProcess port, so audio is copied.
+- **Spanish Kokoro** uses the Kokoro ONNX with `ef_dora` style and espeak-ng (WASM, `es-419`), since kokoro-js alone is English-only (design note). A leading "Mmm" is hummed instead of spelled.
+- **Fillers.** On thinking start, a random filler ("Mmm…", "A ver…", «Esperá que pienso.», …) is spoken at once; one search filler if a tool starts before any text. Fillers are cached; ElevenLabs fillers are kept on disk so credits are spent once. The 8 fillers are prepared in the background when voice is on with Kokoro or ElevenLabs.
 - **Barge-in** only with Kokoro or ElevenLabs. With the Windows engine echo cancellation is bypassed, so barge-in is off and the person must use the shortcut or button. An interruption whose words were at least 70% in what Alma just said is dropped as Alma hearing herself.
-- **Fallback.** If Kokoro or ElevenLabs synthesis fails, the overlay says "La voz elegida falló (<error>); usé la de Windows." and the text is spoken with the Windows voice. A failed filler is skipped silently.
-- **Voice conversation.** A thread with channel `voice`; a thread idle for more than 1 hour is replaced. The agent is `voice.agentId` (default agent if deleted), runs with low effort for the main agent, and is told: short answers, no Markdown/URLs/code, say what it will do before slow tools, no "¿algo más?".
+- **Fallback.** If Kokoro or ElevenLabs synthesis fails, the overlay says «La voz elegida falló (<error>); usé la de Windows.» and the text is spoken with the Windows voice. A failed filler is skipped silently.
+- **Voice conversation.** A thread with channel `voice`; a thread idle for more than 1 hour is replaced. The agent is `voice.agentId` (default agent if deleted), runs with low effort for the main agent, and is told: short answers, no Markdown/URLs/code, say what it will do before slow tools, no «¿algo más?».
 - **Voice approvals** only for the voice thread; two unclear answers in a row leave the approval pending in the app.
 
 ## Tools for agents
 
-The module exposes no agent tools. Voice approvals reuse the approval flow ([aprobaciones](aprobaciones.md)).
+The module exposes no agent tools. Voice approvals reuse the approval flow ([approvals](approvals.md)).
 
 ## Settings and data
 
@@ -117,7 +117,7 @@ Data:
 
 ## Security and privacy
 
-- The voice print is **biometric data**: local file, exported and erased with personal data ("Borrar mi historial" overwrites it). See `../security/PRIVACIDAD.md` and [seguridad](seguridad.md).
+- The voice print is **biometric data**: local file, exported and erased with personal data ("Borrar mi historial" overwrites it). See `../security/PRIVACY.md` and [security](security.md).
 - Audio leaves the machine only for OpenAI or Meta transcription (the whole recording as WAV). Text leaves for ElevenLabs. Hugging Face and GitHub see only the model downloads. Local Whisper and Kokoro send nothing.
 - Chromium grants only audio-only `media` requests to the main window. The window is not throttled in the background, so voice works from the tray.
 - The speaker check fails open: if it throws, the turn starts anyway, and with `verifySpeaker` on but no voice print anyone is answered. The shortcut and follow-ups skip the check by design.
@@ -131,7 +131,7 @@ Data:
 1. **A failed model download is never retried** until restart or until the model setting changes (loaders cache their promise).
 2. **After a worker crash the state stays `error`** until a voice setting changes.
 3. **Speaker check fails open** and answers anyone if no print exists.
-4. **README is stale:** it lists wake words «Hey Jarvis», «Alexa»…, but the code ships only «Hola Alma» (`src/main/settings.ts:103-104` forces any other saved value to `hola_alma`). The tab still says "Una palabra propia («Hola Alma») necesita entrenar un modelo aparte; por ahora usá una de estas." with one option.
+4. **README was stale (fixed in spec 025):** it listed wake words «Hey Jarvis», «Alexa»…, but the code ships only «Ey Alma» (`src/main/settings.ts:103-104` forces any other saved value to `hola_alma`). The tab still says «Otra palabra propia necesita entrenar un modelo aparte; por ahora usá una de estas.» with one option.
 5. The `loading` state ("Preparando la voz…") exists but nothing sets it; downloads only show as overlay text.
 6. "Probar la voz" and Telegram/WhatsApp voice-note transcription work with the assistant off, yet the replies tell the person to enable voice.
 7. A first approval in a freshly created voice thread may not match the thread id read at event time.
@@ -143,4 +143,4 @@ Data:
 
 ## See also
 
-[Telegram](telegram.md) · [WhatsApp](whatsapp.md) (voice notes) · [Aprobaciones](aprobaciones.md) · [Providers](providers.md) · [Configuraciones](configuraciones.md) · [Chat](chat.md) · [App shell](app-shell.md) · [Seguridad](seguridad.md) · [Ajustes](../references/ajustes.md) · [Architecture](../architecture.md)
+[Telegram](telegram.md) · [WhatsApp](whatsapp.md) (voice notes) · [Aprobaciones](approvals.md) · [Providers](providers.md) · [Configuraciones](settings.md) · [Chat](chat.md) · [App shell](app-shell.md) · [Seguridad](security.md) · [Ajustes](../references/settings.md) · [Architecture](../architecture.md)

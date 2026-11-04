@@ -16,8 +16,8 @@ It talks to one private chat only. Groups, supergroups and channels are always r
 ## How to use it
 
 1. In Telegram, talk to @BotFather, create a bot, and copy the token.
-2. In Alma open **Configuración → Telegram** (Settings → Telegram). Paste the token and press "Guardar token" (Save token). The badge goes "Conectando…" then "Conectado como @bot".
-3. Under "Quién puede escribirle" (who may write to it), type your Telegram username (with or without `@`; Enter or "Agregar"). Pick which agent answers.
+2. In Alma open «Configuración → Telegram» (Settings → Telegram). Paste the token and press "Guardar token" (Save token). The badge goes "Conectando…" then "Conectado como @bot".
+3. Under «Quién puede escribirle» (who may write to it), type your Telegram username (with or without `@`; Enter or "Agregar"). Pick which agent answers.
 4. Open the `t.me/<bot>` link shown once the bot is online and send `/start`. The first listed user who writes privately is bound to the bot by chat id.
 5. Write or send a voice note. The bot answers "Pensando…" (thinking) and replaces it with the answer.
 
@@ -25,13 +25,13 @@ Chat commands:
 
 | Command | Effect |
 |---|---|
-| `/start` | Replies "Hola, soy Alma. Escribime o mandame un audio. /nuevo empieza una conversación nueva." and runs no agent. |
-| `/nuevo` | Starts a new Telegram conversation ("Listo, conversación nueva."). The old one stays in the sidebar. |
+| `/start` | Replies «Hola, soy Alma. Escribime o mandame un audio. /nuevo empieza una conversación nueva.» and runs no agent. |
+| `/nuevo` | Starts a new Telegram conversation («Listo, conversación nueva.»). The old one stays in the sidebar. |
 | any other `/x` | Treated as ordinary text for the agent. |
 
 Asking Alma to message you, from any chat: «mandame por Telegram cuando termines» (send me a Telegram when you finish), «avisame por Telegram si...» (tell me on Telegram if...).
 
-Other controls in the tab: "Borrar" (delete the stored token; shown only when the token is in settings, not in the environment), the "Bot activo" (bot active) checkbox, and "Desvincular" (unbind) in the allowed-users card. The Telegram thread shows a paper-plane icon with the tooltip "Conversación de Telegram" in the sidebar.
+Other controls in the tab: "Borrar" (delete the stored token; shown only when the token is in settings, not in the environment), the "Bot activo" (bot active) checkbox, and "Desvincular" (unbind) in the allowed-users card. The Telegram thread shows a paper-plane icon with the tooltip «Conversación de Telegram» in the sidebar.
 
 ## How it works
 
@@ -67,7 +67,7 @@ Non-obvious points:
 - **Restart rules.** Applying settings restarts the bot only if the token or the enabled flag changed. A new token forgets the old approval buttons.
 - **Placeholder edits.** While the agent runs, the placeholder is edited with the tool name (prefix `mcp__` removed, underscores as spaces), at most every 1.5 s and only when the text changed.
 - **Approval buttons** carry `ap:<approvalId>:<allow|always|deny>`. After resolution (from either side) the message is edited to its original text plus "(respondido)" (answered). Only approvals for the Telegram conversation are sent; approvals for desktop chats, routines and companies never go to Telegram.
-- **Voice notes** are downloaded and handed to the transcriber of the [voice module](voz.md), echoed back as `🎙️ «texto»` and then handled like typed text. **Photos**: the largest size is saved in `<data>/inbox` and the agent is told "[El usuario te mandó una imagen: <ruta>. Mirala con look_at_image.]".
+- **Voice notes** are downloaded and handed to the transcriber of the [voice module](voice.md), echoed back as `🎙️ «texto»` and then handled like typed text. **Photos**: the largest size is saved in `<data>/inbox` and the agent is told «[El usuario te mandó una imagen: <ruta>. Mirala con look_at_image.]».
 - **Channel prompt.** In a Telegram thread the agent is told it is on a phone: brief answers, no tables or long code blocks, audios arrive transcribed.
 - **Messages between layers.** Request `telegram.status`; event `telegram.status` on every change; coordinator to main `settings.patch`.
 
@@ -77,7 +77,7 @@ Non-obvious points:
 |---|---|---|---|
 | `send_telegram` | `memory` | No (only the read-only mode `blocked` forbids it) | Send text (1–20 000 characters) and/or an image (`image_path`) to the bound chat. Also offered to company agents; needs no working folder (`standalone`). |
 
-Error messages the model sees: "Telegram no está conectado: falta el token del bot en Configuración → Telegram, o el usuario todavía no le escribió al bot para vincular su chat." (not connected or not bound), "Telegram no aceptó el mensaje/la foto: <message>" (Telegram refused), "Telegram no está disponible desde acá." (no Telegram capability in the run). Success returns "Mensaje enviado por Telegram." or "Foto enviada por Telegram.".
+Error messages the model sees: «Telegram no está conectado: falta el token del bot en Configuración → Telegram, o el usuario todavía no le escribió al bot para vincular su chat.» (not connected or not bound), «Telegram no aceptó el mensaje/la foto: <message>» (Telegram refused), «Telegram no está disponible desde acá.» (no Telegram capability in the run). Success returns «Mensaje enviado por Telegram.» or «Foto enviada por Telegram.».
 
 ## Settings and data
 
@@ -108,8 +108,8 @@ Alma must be running (window or tray). Nothing is received while it is closed.
 
 ## Security and privacy
 
-- Only the owner's private chat is served. A denied private chat gets "No estás autorizado para usar este bot. Para habilitarte, agregá @usuario en Alma → Configuración → Telegram." (not authorized to use this bot) and nothing runs or downloads; a denied group gets silence.
-- Binding is audited as `channel.bind` and denials as `channel.denied` (actor `remote`, throttled to one line a minute, chat type only, no names or text). See [seguridad](seguridad.md) and `../security/CONTROLES.md`.
+- Only the owner's private chat is served. A denied private chat gets «No estás autorizado para usar este bot. Para habilitarte, agregá @usuario en Alma → Configuración → Telegram.» (not authorized to use this bot) and nothing runs or downloads; a denied group gets silence.
+- Binding is audited as `channel.bind` and denials as `channel.denied` (actor `remote`, throttled to one line a minute, chat type only, no names or text). See [security](security.md) and `../security/CONTROLS.md`.
 - Messages, voice notes and photos go through Telegram's servers, which are not end-to-end encrypted for bots. Reminders and camera photos sent to the phone leave the machine too.
 - Anyone holding the owner's phone or Telegram account can drive the agents and approve actions.
 - The token is encrypted at rest. `TELEGRAM_BOT_TOKEN` is removed from the environment of commands that agents run (`src/coordinator/tools/shell.ts`). The token appears in the download URL used for voice notes and photos; Alma does not log it.
@@ -125,7 +125,7 @@ By hand: configure a bot, check the badge, write from the phone, press an approv
 
 1. **Probable bug: photos are saved with a broken name.** `saveInboxImage` sanitizes with `/[^w.-]+/g` (no backslash before `w`), so letters are replaced by `_` and the `.jpg` extension is lost; `look_at_image` may then refuse the file. Confirmed still present at `src/coordinator/index.ts:352`.
 2. Voice notes and photos are downloaded without checking HTTP status or size.
-3. A second message while the agent works is rejected with "No pude completar el pedido: Ya hay una ejecución en curso en esta conversación." and not queued.
+3. A second message while the agent works is rejected with «No pude completar el pedido: Ya hay una ejecución en curso en esta conversación.» and not queued.
 4. Reminders and notices are lost silently if the bot is offline.
 5. `send_telegram` never asks, though it sends data out (limited to the bound chat).
 6. Removing a user from the list does not unbind the chat; "Desvincular" keeps `threadId`.
@@ -135,4 +135,4 @@ Spec: [010](../../.specify/specs/010-telegram/spec.md).
 
 ## See also
 
-[WhatsApp](whatsapp.md) (the other chat channel) · [Voz](voz.md) (transcription of voice notes) · [Aprobaciones](aprobaciones.md) · [Rutinas](rutinas.md) (reminders delivered here) · [Casa](casa.md) · [Seguridad](seguridad.md) · [Herramientas](../references/herramientas.md) · [Ajustes](../references/ajustes.md) · [Architecture](../architecture.md)
+[WhatsApp](whatsapp.md) (the other chat channel) · [Voz](voice.md) (transcription of voice notes) · [Aprobaciones](approvals.md) · [Rutinas](routines.md) (reminders delivered here) · [Casa](home.md) · [Seguridad](security.md) · [Herramientas](../references/tools.md) · [Ajustes](../references/settings.md) · [Architecture](../architecture.md)

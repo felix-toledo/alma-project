@@ -17,7 +17,7 @@ The Python original (ALMA's voice-assistant) was the starting point and was reje
 ## Consequences
 
 - Kokoro and the `phonemizer` npm are English-only. Spanish works with the Kokoro ONNX model, the `voices/ef_dora.bin` style and an `espeak-ng` WASM (`-v es-419 --ipa=3`) whose input must be Latin-1 encoded (design note).
-- The only shipped wake word is "Hola Alma" (our own openWakeWord model in `resources/wakewords/`); old settings values are forced to it.
+- The only shipped wake word is "Ey Alma" (our own openWakeWord model in `resources/wakewords/`); old settings values are forced to it.
 - Speaker verification (WavLM) is applied only on wake-word starts: it scored the owner's short phrases 0.44 to 0.92, so follow-ups and the shortcut never verify. It also fails open if the check throws. The voice print is biometric data, stored locally in `voice-profile.json`.
 - Model loaders cache their promise, so a failed first download is not retried until restart.
 - Windows SAPI voices bypass echo cancellation, so there is no barge-in with them.

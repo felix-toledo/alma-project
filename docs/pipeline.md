@@ -1,95 +1,95 @@
-# Pipeline: de pedir una feature a producción
+# Pipeline: from asking for a feature to production
 
-Cómo trabajamos desde ahora. La autoridad es la [constitución](../.specify/memory/constitution.md); acá está el recorrido y qué compuerta frena en cada tramo.
+How we work from now on. The authority is the [constitution](../.specify/memory/constitution.md); this page gives the route and which gate stops you at each stretch.
 
-Se arranca con `/feature <idea>` (o `/fix <bug>`). El agente `router` mira el estado real del repo y decide el camino.
+You start with `/feature <idea>` (or `/fix <bug>`). The `router` agent looks at the real state of the repo and decides the path.
 
 ```
  idea
   │
   ▼
-router ──▶ ¿tamaño?
+router ──▶ size?
   │
-  ├─ FEATURE  (comportamiento nuevo o cambiado, herramienta, canal, ajuste)
+  ├─ FEATURE  (new or changed behavior, tool, channel, setting)
   │     Specify ─▶ Clarify ─▶ Plan ─▶ Tasks ─▶ Implement ─▶ Verify ─▶ PR ─▶ CI ─▶ main ─▶ Release
-  │     planner    planner    planner  planner  implementer  tester ∥        humano
+  │     planner    planner    planner  planner  implementer  tester ∥        human
   │               +grill-with-docs                          quality-checker
-  │        ▲ ─── humano aprueba la spec (`ready`) ───┘
+  │        ▲ ─── human approves the spec (`ready`) ───┘
   │
-  ├─ FIX      (algo documentado o evidente no se cumple)
-  │     test de regresión que FALLA ─▶ arreglo mínimo ─▶ Verify ─▶ PR … ─▶ + reforzar la compuerta que lo dejó pasar
+  ├─ FIX      (something documented or obvious is not met)
+  │     test of the regression that FAILS ─▶ minimal fix ─▶ Verify ─▶ PR … ─▶ + strengthen the gate that let it through
   │
-  └─ CHORE    (docs, dependencias, renombre sin cambio de comportamiento) ─▶ PR …
+  └─ CHORE    (docs, dependencies, a rename with no change of behavior) ─▶ PR …
 ```
 
-## Etapas
+## Stages
 
-| # | Etapa | Quién | Produce | Qué la frena |
+| # | Stage | Who | Produces | What stops it |
 |---|---|---|---|---|
-| 1 | Triage | `router` | camino elegido (feature / fix / chore) | — |
-| 2 | Specify | `planner` | `.specify/specs/NNN-slug/spec.md` (`status: draft`) con historias, AC y reglas | plantilla incompleta |
-| 3 | Clarify | `planner` + skill `grill-with-docs` | Open Questions respondidas; términos nuevos en `docs/context.md`; ADR si es difícil de revertir | **`tests/specs.test.ts`**: una spec `ready` con una pregunta abierta, o un `draft` con plan, falla |
-| ◆ | **Compuerta humana 1** | vos | spec en `status: ready` | nadie avanza sin esto |
-| 4 | Plan | `planner` | `plan.md`: capas tocadas, contratos, estrategia de test AC→test | reglas de capas (`docs/architecture.md`) |
-| 5 | Tasks | `planner` | `tasks.md`: una tarea = un test que falla + código mínimo | — |
-| 6 | Implement | `implementer`, una tarea por vez | test rojo → código → verde → refactor | hook al editar (Biome en el archivo), hook al terminar (`check:fast` si hubo cambios), `require-tests` |
-| 7 | Verify | `tester` ∥ `quality-checker`, por separado | `tester`: veredicto por AC mirando solo la spec; `quality-checker`: arquitectura y limpieza mirando solo el código | los hallazgos vuelven a `implementer` |
-| 8 | PR | vos / agente | rama `feat/…` o `fix/…`, commits `tipo(área): resumen`, plantilla de PR completa | pre-commit, commit-msg, pre-push (`pnpm run check`) |
-| 9 | CI | GitHub Actions | `quality`, `verify` (y `audit` informativo) | cualquiera roja |
-| ◆ | **Compuerta humana 2** | vos | merge a `main` | review; protección de rama (ver pendientes) |
-| 10 | Release | ver spec [001](../.specify/specs/001-release-packaging/spec.md) | hoy: `pnpm run build` y tag a mano. Mañana: tag → instalador | — |
+| 1 | Triage | `router` | chosen path (feature / fix / chore) | — |
+| 2 | Specify | `planner` | `.specify/specs/NNN-slug/spec.md` (`status: draft`) with stories, AC and rules | incomplete template |
+| 3 | Clarify | `planner` + skill `grill-with-docs` | Open Questions answered; new terms in `docs/context.md`; ADR if it is hard to reverse | **`tests/specs.test.ts`**: a `ready` spec with an open question, or a `draft` with a plan, fails |
+| ◆ | **Human gate 1** | you | spec in `status: ready` | nobody moves on without this |
+| 4 | Plan | `planner` | `plan.md`: layers touched, contracts, AC→test strategy | layer rules (`docs/architecture.md`) |
+| 5 | Tasks | `planner` | `tasks.md`: one task = one failing test + minimal code | — |
+| 6 | Implement | `implementer`, one task at a time | red test → code → green → refactor | edit hook (Biome on the file), finish hook (`check:fast` if anything changed), `require-tests` |
+| 7 | Verify | `tester` ∥ `quality-checker`, separately | `tester`: a verdict per AC looking only at the spec; `quality-checker`: architecture and cleanliness looking only at the code | the findings go back to `implementer` |
+| 8 | PR | you / agent | branch `feat/…` or `fix/…`, commits `type(area): summary`, PR template filled in | pre-commit, commit-msg, pre-push (`pnpm run check`) |
+| 9 | CI | GitHub Actions | `quality`, `verify` (and an informational `audit`) | any red one |
+| ◆ | **Human gate 2** | you | merge to `main` | review; branch protection (see pending items) |
+| 10 | Release | see spec [001](../.specify/specs/001-release-packaging/spec.md) | today: `pnpm run build` and a tag by hand. Tomorrow: tag → installer | — |
 
-`tester` y `quality-checker` no se hablan ni leen el razonamiento del `implementer`: cada uno juzga solo desde su fuente, para que ninguno apruebe lo que el otro vio con cariño.
+`tester` and `quality-checker` do not talk to each other or read the `implementer`'s reasoning: each one judges only from its own source, so that neither approves what the other looked at fondly.
 
-## Tamaños: cuándo NO hace falta spec
+## Sizes: when a spec is NOT needed
 
-Un proceso que frena todo se abandona. Regla práctica:
+A process that stops everything gets abandoned. Rule of thumb:
 
-- **Feature** si un usuario nota algo distinto o hay una regla que alguien podría discutir. Spec completa.
-- **Fix** si el comportamiento contradice algo ya documentado o es obvio. Sin spec: test que falla, arreglo, y nombrar la compuerta reforzada (Constitución II). Si el bug muestra que faltaba una regla escrita, se abre una spec aparte.
-- **Chore**: sin spec ni test nuevo.
+- **Feature** if a user notices something different or there is a rule someone could argue about. Full spec.
+- **Fix** if the behavior contradicts something already documented or is obvious. No spec: a failing test, the fix, and naming the gate that was strengthened (Constitution II). If the bug shows that a written rule was missing, a separate spec is opened.
+- **Chore**: no spec and no new test.
 
-Ante la duda, `router` pregunta una vez y elige el camino más corto que no adivine una regla de negocio.
+When in doubt, `router` asks once and picks the shortest path that does not guess a business rule.
 
-## Compuertas (sensores) y dónde corren
+## Gates (sensors) and where they run
 
-| Compuerta | Qué atrapa | Al editar | Al terminar el agente | Commit | Push | CI |
+| Gate | What it catches | On edit | When the agent finishes | Commit | Push | CI |
 |---|---|:-:|:-:|:-:|:-:|:-:|
-| Biome (`pnpm run lint`) | bugs, imports sin uso, ciclos, promesas sin esperar | archivo | ✔ | staged | ✔ | ✔ |
-| `tsc` (`pnpm run typecheck`) | tipos, incluidos los tests | | ✔ | | ✔ | ✔ |
-| Vitest (`pnpm run test`) | comportamiento + **arquitectura** + **specs** | | ✔ | | ✔ | ✔ |
-| Cobertura (`test:coverage`) | piso que solo sube | | | | ✔ | ✔ |
-| `require-tests` | lógica cambiada sin test cambiado (`[no-tests: motivo]` para excepciones) | | | | ✔ | ✔ (PR) |
-| `commit-msg` | formato `tipo(área): …`; sin `Co-Authored-By` de Claude | | | ✔ | | |
-| `build` | que compile y empaquete | | | | | ✔ |
-| `audit` | dependencias vulnerables | | | | | informativo (R-01) |
+| Biome (`pnpm run lint`) | bugs, unused imports, cycles, promises not awaited | file | ✔ | staged | ✔ | ✔ |
+| `tsc` (`pnpm run typecheck`) | types, tests included | | ✔ | | ✔ | ✔ |
+| Vitest (`pnpm run test`) | behavior + **architecture** + **specs** | | ✔ | | ✔ | ✔ |
+| Coverage (`test:coverage`) | a floor that only goes up | | | | ✔ | ✔ |
+| `require-tests` | logic changed without a test changed (`[no-tests: reason]` for exceptions) | | | | ✔ | ✔ (PR) |
+| `commit-msg` | format `type(area): …`; no Claude `Co-Authored-By` | | | ✔ | | |
+| `build` | that it compiles and packages | | | | | ✔ |
+| `audit` | vulnerable dependencies | | | | | informational (R-01) |
 
-"Silencio si pasa, ruido si falla": las compuertas verdes no imprimen nada; las rojas devuelven el error al agente para que se corrija solo. Si el agente se queda rojo 3 veces seguidas con el mismo cambio, deja de bloquear y te avisa (evita bucles).
+"Silence if it passes, noise if it fails": green gates print nothing; red ones hand the error back to the agent so it corrects itself. If the agent stays red 3 times in a row with the same change, it stops blocking and tells you (this avoids loops).
 
-Comandos: `pnpm run check` (todo), `pnpm run check:fast` (sin cobertura), `pnpm run lint`, `pnpm run test`.
+Commands: `pnpm run check` (everything), `pnpm run check:fast` (no coverage), `pnpm run lint`, `pnpm run test`.
 
-## Definición de terminado
+## Definition of done
 
-1. Spec `implemented`: con `plan.md` y `tasks.md`, cada AC cita su test (o es `[manual]` con cómo se verifica, o `[gap]` si todavía no tiene), sin Open Questions, tareas tildadas.
-2. `pnpm run check` verde.
-3. `tester` y `quality-checker` informaron sin hallazgos abiertos.
-4. Si tocó seguridad o privacidad: `docs/security/` actualizado en el mismo PR.
-5. CI verde y revisado por vos.
+1. Spec `implemented`: with `plan.md` and `tasks.md`, each AC cites its test (or is `[manual]` with how it is verified, or `[gap]` if it has none yet), no Open Questions, tasks ticked.
+2. `pnpm run check` green.
+3. `tester` and `quality-checker` reported with no open findings.
+4. If it touched security or privacy: `docs/security/` updated in the same PR.
+5. CI green and reviewed by you.
 
-## Guías, sensores y compuertas humanas (por qué existen)
+## Guides, sensors and human gates (why they exist)
 
-- **Guías** (antes de actuar): constitución, `CLAUDE.md`, agentes con herramientas mínimas (`router`, `planner` y `quality-checker` no escriben código), plantillas, skills.
-- **Sensores** (después de actuar): la tabla de arriba. Cuando una regla en prosa se rompe dos veces, se convierte en sensor (así nacieron `architecture.test.ts` y `specs.test.ts`).
-- **Compuertas humanas**: solo donde lo hecho es caro de deshacer — aprobar la spec y mergear.
+- **Guides** (before acting): constitution, `CLAUDE.md`, agents with minimal tools (`router`, `planner` and `quality-checker` do not write code), templates, skills.
+- **Sensors** (after acting): the table above. When a prose rule is broken twice, it becomes a sensor (that is how `architecture.test.ts` and `specs.test.ts` were born).
+- **Human gates**: only where what was done is expensive to undo — approving the spec and merging.
 
-## Deuda conocida (a propósito, con trinquete)
+## Known debt (on purpose, with a ratchet)
 
-- **548 avisos de Biome** (accesibilidad del renderer, `!` no nulos, comas): no bloquean, pero los errores sí. Se bajan de a poco; `biome.json` nunca se afloja.
-- **Sin formateador**: 141 archivos no están formateados de forma uniforme; pasar Biome format en un commit aparte y recién ahí sumarlo a `check`.
-- **Cobertura ~54 %** de líneas en `coordinator`/`shared`/`main`; el piso está en `vitest.config.mts` y solo sube. El renderer no tiene tests de componentes.
-- **Release** sin empaquetar: spec 001, en `draft`.
+- **548 Biome warnings** (renderer accessibility, non-null `!`, commas): they do not block, but errors do. They are brought down little by little; `biome.json` is never loosened.
+- **No formatter**: 141 files are not formatted uniformly; run Biome format in a separate commit and only then add it to `check`.
+- **Coverage ~54 %** of lines in `coordinator`/`shared`/`main`; the floor is in `vitest.config.mts` and only goes up. The renderer has no component tests.
+- **Release** not packaged: spec 001, in `draft`.
 
-## Pendientes que solo se hacen en GitHub
+## Pending items that can only be done on GitHub
 
-- Proteger `main`: exigir PR, y los checks `quality` y `verify`; prohibir push directo.
-- Completar el correo de seguridad en `SECURITY.md`.
+- Protect `main`: require a PR and the `quality` and `verify` checks; forbid direct pushes.
+- Fill in the security email in `SECURITY.md`.

@@ -19,13 +19,13 @@ Agents do not touch the shell. They reach it only through coordinator messages: 
 
 - **Launch twice**: the second launch brings the first window to the front.
 - **Close the window**: with «Al cerrar la ventana, seguir en la bandeja del sistema» (keep running in the tray on close) on, Alma hides. Click the tray icon, or use its menu «Abrir Alma» (open) / «Salir» (quit). «Salir» is the real exit.
-- **Start with Windows**: Configuración → General → «Abrir al iniciar Windows (minimizada)». It starts hidden (`--hidden`), tray and coordinator still start.
+- **Start with Windows**: «Configuración» → General → «Abrir al iniciar Windows (minimizada)». It starts hidden (`--hidden`), tray and coordinator still start.
 - **Move between sections**: the four tabs at the top of the sidebar: «Chat», «Vault», «Empresas», «Casa». «Nueva conversación» (new conversation) shows in Chat only. At the bottom: the MCP count (when servers exist), the voice button (when voice is enabled), «Rutinas (n)» and «Configuración».
 - **First run**: with no conversation the screen shows «Alma» and a «Nueva conversación» button, plus «Primero cargá una API key en Configuración» (load an API key first) when no provider has a key.
 - **Reminders**: a toast stack with «Cerrar» (close); it stays until you close it. Sound «notification» plays.
-- **Keyboard**: arrow keys move focus to the nearest visible control; Esc closes the Configuración and Rutinas dialogs. Arrows are left alone in text fields and selects; Left/Right are also left alone on the volume slider. Vault view: Ctrl/Cmd+Shift+F search, +N new note, +W close note, +E toggle reading, +L ask Alma about the selection (see [vault-y-conocimiento](vault-y-conocimiento.md)).
+- **Keyboard**: arrow keys move focus to the nearest visible control; Esc closes the «Configuración» and «Rutinas» dialogs. Arrows are left alone in text fields and selects; Left/Right are also left alone on the volume slider. Vault view: Ctrl/Cmd+Shift+F search, +N new note, +W close note, +E toggle reading, +L ask Alma about the selection (see [vault-and-knowledge](vault-and-knowledge.md)).
 - **Gamepad**: D-pad or left stick moves focus, A clicks, B goes back (but see "Known limits"). Holding repeats after 380 ms, then every 120 ms.
-- **Sound and motion**: Configuración → «Sonido y ambiente»: «Sonidos de interfaz», «Música de fondo», «Volumen», «Fondo en movimiento» (moving background). Turning motion off freezes animations everywhere.
+- **Sound and motion**: «Configuración» → «Sonido y ambiente»: «Sonidos de interfaz», «Música de fondo», «Volumen», «Fondo en movimiento» (moving background). Turning motion off freezes animations everywhere.
 
 ## How it works
 
@@ -80,7 +80,7 @@ Design system:
 | Sound prefs (muted, volume, music, motion) | `localStorage` key `umbra.prefs` | not muted, volume 0.7, music on, motion on unless the OS asks for reduced motion |
 | Section, company, vault chat panel | `localStorage` keys `alma.mode`, `alma.company`, `alma.vault.chat` | Chat |
 
-Without `localStorage` the preferences last for the session only. Details of `settings.json`: [configuraciones](configuraciones.md).
+Without `localStorage` the preferences last for the session only. Details of `settings.json`: [settings](settings.md).
 
 ## Limits and rules
 
@@ -89,14 +89,14 @@ Without `localStorage` the preferences last for the session only. Details of `se
 - Gamepad repeat 380 ms then 120 ms; stick threshold 0.6.
 - Render window waits 300 ms before drawing; the requested PNG size is honored.
 - Reminder toasts have `role="status"` and `aria-live="assertive"`.
-- The IPC allow-list (invoke): `settings:get`, `settings:update`, `settings:setApiKey`, `settings:setCompanySecret`, `instagram:status`, `instagram:connect`, `instagram:disconnect`, `dialog:pickFolder`, `shell:openPath`, `vault:defaultPath`; send: `coordinator:connect`. Main to window: `coordinator:port`, `coordinator:restarted`, `settings:changed`, `app:openThread`, `app:reminder`. Full list: [mensajes-ipc](../references/mensajes-ipc.md).
+- The IPC allow-list (invoke): `settings:get`, `settings:update`, `settings:setApiKey`, `settings:setCompanySecret`, `instagram:status`, `instagram:connect`, `instagram:disconnect`, `dialog:pickFolder`, `shell:openPath`, `vault:defaultPath`; send: `coordinator:connect`. Main to window: `coordinator:port`, `coordinator:restarted`, `settings:changed`, `app:openThread`, `app:reminder`. Full list: [ipc-messages](../references/ipc-messages.md).
 - `window.desktop` exposes only: `platform`; `coordinator.send/sendAudio/onMessage/onConnected`; `settings.get/update/setApiKey/setCompanySecret/onChanged`; `instagram.status/connect/disconnect`; `onOpenThread`; `onReminder`; `pickFolder`; `openPath`; `defaultVaultPath`. Every listener returns an unsubscribe function (confirmed in `src/preload/index.ts`).
 
 ## Security and privacy
 
 Checked against `src/main/index.ts`:
 
-- `contextIsolation` on, `nodeIntegration` off, `sandbox` on. CSP in `src/renderer/index.html`: scripts only from `self`; `object-src`, `base-uri` and `form-action` are `none`; images from self, `data:`, `blob:`, `alma-vault:` and `http://127.0.0.1:*`; `connect-src` self and `alma-vault:`. `media-src` also allows `https:` (a gap, see [seguridad](seguridad.md)).
+- `contextIsolation` on, `nodeIntegration` off, `sandbox` on. CSP in `src/renderer/index.html`: scripts only from `self`; `object-src`, `base-uri` and `form-action` are `none`; images from self, `data:`, `blob:`, `alma-vault:` and `http://127.0.0.1:*`; `connect-src` self and `alma-vault:`. `media-src` also allows `https:` (a gap, see [security](security.md)).
 - Links with `http(s)` go to the system browser; other schemes are denied. `will-navigate` and `will-redirect` are blocked unless the URL is the window's own. `<webview>` is blocked.
 - IPC gate `isTrusted`: only the top frame of the app's own window, still on the page it loaded. Otherwise «Origen no autorizado» and `ipc.rejected` (throttled). The `coordinator:connect` listener ignores untrusted callers silently, without an audit entry.
 - Permissions: only the main window, only audio capture (no video) and `clipboard-sanitized-write`. Everything else is denied.
@@ -106,7 +106,7 @@ Checked against `src/main/index.ts`:
 - The renderer cannot import `electron`, `node:*` or `shared/audit` (enforced by `tests/architecture.test.ts`).
 - Nothing leaves the machine from the shell itself. It stores no personal data besides UI preferences.
 
-More: [seguridad](seguridad.md).
+More: [security](security.md).
 
 ## How it is tested
 
@@ -128,4 +128,4 @@ By hand: launch the exe twice; start with `--hidden` and look for the tray icon;
 
 ## See also
 
-[configuraciones](configuraciones.md) · [seguridad](seguridad.md) · [chat](chat.md) · [voz](voz.md) · [rutinas](rutinas.md) · [vault-y-conocimiento](vault-y-conocimiento.md) · [empresas](empresas.md) · [casa](casa.md) · [mensajes-ipc](../references/mensajes-ipc.md) · [architecture](../architecture.md)
+[settings](settings.md) · [security](security.md) · [chat](chat.md) · [voice](voice.md) · [routines](routines.md) · [vault-and-knowledge](vault-and-knowledge.md) · [companies](companies.md) · [home](home.md) · [ipc-messages](../references/ipc-messages.md) · [architecture](../architecture.md)

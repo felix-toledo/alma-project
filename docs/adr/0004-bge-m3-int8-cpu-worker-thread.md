@@ -21,4 +21,4 @@ Alternatives: not documented (the note mentions only "No reranker for now").
 - The query is embedded as-is, with no retrieval instruction prefix.
 - Changing the model means re-embedding every vault (the model id `Xenova/bge-m3:q8` is stored in the index).
 - It shares the same engine, `onnxruntime-node`, as the voice models ([ADR 0008](0008-voice-in-js-on-onnxruntime.md)).
-- Models come only from Hugging Face downloads (`allowLocalModels` is off); `huggingface.co` sees no personal data ([PRIVACIDAD.md](../security/PRIVACIDAD.md)).
+- Models come only from Hugging Face downloads (`allowLocalModels` is off); `huggingface.co` sees no personal data ([PRIVACY.md](../security/PRIVACY.md)).

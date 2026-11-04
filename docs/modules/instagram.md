@@ -16,12 +16,12 @@ Not implemented: reading Instagram (feed, messages, insights), stories, reels, c
 
 The "bot in 4 steps" walkthrough, checked against the code:
 
-1. **Configuración → Proveedores** (Settings → Providers): load the Anthropic key (for the text) and the xAI key (for the images). `compose_image` also works without an image-model key; see [imagenes](imagenes.md).
-2. **Configuración → Instagram**: press "Conectar Instagram". A window "Conectar Instagram" (520×780) opens on Instagram's login page. Log in there; the window closes by itself about 1.2 s after the session cookie appears. The badge changes from "Sin conectar" (not connected) to "Conectada", and the button now reads "Abrir Instagram para revisar la sesión" (open Instagram to check the session). "Desconectar" clears the session.
+1. «Configuración → Proveedores» (Settings → Providers): load the Anthropic key (for the text) and the xAI key (for the images). `compose_image` also works without an image-model key; see [images](images.md).
+2. «Configuración → Instagram»: press "Conectar Instagram". A window "Conectar Instagram" (520×780) opens on Instagram's login page. Log in there; the window closes by itself about 1.2 s after the session cookie appears. The badge changes from "Sin conectar" (not connected) to "Conectada", and the button now reads «Abrir Instagram para revisar la sesión» (open Instagram to check the session). "Desconectar" clears the session.
 3. In the working folder, create a `marca.md` with the tone, the audience, the topics and what to avoid. The routine prompt tells the agent to follow it and to avoid topics already listed in `publicaciones.md`.
-4. **Rutinas → "Plantilla: post diario de Instagram"**: choose the folder and the time. The template is prefilled with agent `community-manager` (the default agent if that one was deleted), daily at 10:00 Monday to Friday. When the post is ready a desktop notification "Post listo para Instagram" arrives with the first line of the caption. Review the card and press **Publicar** or **Rechazar**.
+4. «Rutinas → Plantilla: post diario de Instagram»: choose the folder and the time. The template is prefilled with agent `community-manager` (the default agent if that one was deleted), daily at 10:00 Monday to Friday. When the post is ready a desktop notification «Post listo para Instagram» arrives with the first line of the caption. Review the card and press «Publicar» or «Rechazar».
 
-While "Modo de prueba" (test mode) is on, look at the Instagram window titled "Instagram · modo de prueba". If everything looks right, especially the line breaks of the text, turn test mode off in Configuración → Instagram.
+While «Modo de prueba» (test mode) is on, look at the Instagram window titled «Instagram · modo de prueba». If everything looks right, especially the line breaks of the text, turn test mode off in «Configuración → Instagram».
 
 To ask in chat: «publicá en Instagram la imagen imagenes/promo.png con este texto: ...» (publish this image on Instagram with this text). The agent must have a working folder, because the image path has to be inside it.
 
@@ -35,7 +35,7 @@ Instagram may block actions or suspend accounts that automate. The tab recommend
 | `src/main/index.ts` | Handlers for connect/disconnect/status and for the `instagram.publish` host request; audit entries; one-time import of the legacy "MultiAgente" profile. |
 | `src/preload/index.ts`, `src/shared/desktop-api.ts` | `window.desktop.instagram.status|connect|disconnect` (IPC channels `instagram:status|connect|disconnect`). |
 | `src/coordinator/tools/media.ts` | The `instagram_publish` tool, validation, approval preview. |
-| `src/coordinator/index.ts` | Host bridge and the "Post listo para Instagram" notification. |
+| `src/coordinator/index.ts` | Host bridge and the «Post listo para Instagram» notification. |
 | `src/renderer/src/components/SettingsDialog.tsx` (`InstagramTab`), `ToolCard.tsx`, `RoutinesDialog.tsx` | Tab, post preview card, routine template. |
 
 ```
@@ -51,7 +51,7 @@ host.result {ok, message} ──> tool result for the model
 Non-obvious points:
 
 - **Test mode is read when the tool runs**, from fresh settings, not when the approval was shown.
-- **Automation steps.** Open the home page, click "Crear" (and "Publicación" if a menu appears), set the file on `input[type="file"]`, click "Siguiente" twice (crop, filters), insert the caption, then click "Compartir" and wait for a success text. Clicks are real mouse events at element positions, text goes in with `Input.insertText`, injected helpers only read the DOM.
+- **Automation steps.** Open the home page, click "Crear" (and «Publicación» if a menu appears), set the file on `input[type="file"]`, click "Siguiente" twice (crop, filters), insert the caption, then click "Compartir" and wait for a success text. Clicks are real mouse events at element positions, text goes in with `Input.insertText`, injected helpers only read the DOM.
 - **"Compartir" is clicked once and never retried**, because a retry could publish twice. Other clicks are retried up to 3 times (each waits up to 6 s for the screen text to change).
 - **Languages.** Page text is matched in English, Spanish and Portuguese. Other languages fail at the first step.
 - **Disguise.** The user agent has the `Alma` and `Electron` tokens removed so the session looks like plain Chrome.
@@ -65,9 +65,9 @@ Non-obvious points:
 |---|---|---|---|
 | `instagram_publish` | `publish` | Always, in every mode except `blocked` (which forbids it); "Siempre permitir" is never offered; a company agent goes through the boss first | Publish one `.png`, `.jpg` or `.jpeg` image from the working folder with a caption. Not `standalone`: needs a working folder. |
 
-Registered in `BUILTIN_TOOLS`; held by the `community-manager` agent and by marketing agents in the company templates (`src/shared/company.ts`). The per-agent "Sin pedir aprobación" list in Settings → Agentes does not offer it.
+Registered in `BUILTIN_TOOLS`; held by the `community-manager` agent and by marketing agents in the company templates (`src/shared/company.ts`). The per-agent «Sin pedir aprobación» list in Settings → Agentes does not offer it.
 
-Errors the model can see: "No existe la imagen …", "Instagram necesita una imagen PNG o JPEG.", "Instagram admite hasta 30 hashtags; el texto tiene N.", "La ruta … está fuera de la carpeta de trabajo.", "No hay una sesión de Instagram. Conectala en Configuración → Instagram.", and on automation failure "No pude <step>: <reason>. La ventana de Instagram quedó abierta para que termines a mano. Instagram puede haber cambiado su página.". A rejection returns "No se ejecutó: …" with the instruction not to retry the same action.
+Errors the model can see: «No existe la imagen …», «Instagram necesita una imagen PNG o JPEG.», «Instagram admite hasta 30 hashtags; el texto tiene N.», «La ruta … está fuera de la carpeta de trabajo.», «No hay una sesión de Instagram. Conectala en Configuración → Instagram.», and on automation failure «No pude <step>: <reason>. La ventana de Instagram quedó abierta para que termines a mano. Instagram puede haber cambiado su página.». A rejection returns «No se ejecutó: …» with the instruction not to retry the same action.
 
 ## Settings and data
 
@@ -83,7 +83,7 @@ Data: session cookies in the Electron partition `persist:instagram` under the us
 |---|---|
 | One image, `.png` / `.jpg` / `.jpeg`; caption at most 2200 characters; at most 30 hashtags (`#` + letters, digits or `_`) | `tools/media.ts` (`CAPTION_LIMIT = 2200`) |
 | Preview image only if at most 12 MB and PNG, JPEG or WebP; otherwise the approval shows the caption without image | `tools/media.ts` |
-| Waits: page 30 s, "Crear" 30 s, "Publicación" 5 s, file input 20 s, each "Siguiente" 30 s, caption box 20 s, "Compartir" 20 s to be stable, success text 180 s, polling 500 ms | `main/instagram.ts` |
+| Waits: page 30 s, "Crear" 30 s, «Publicación» 5 s, file input 20 s, each "Siguiente" 30 s, caption box 20 s, "Compartir" 20 s to be stable, success text 180 s, polling 500 ms | `main/instagram.ts` |
 | Login window polls the cookie every 1.5 s and closes 1.2 s after it appears | `main/instagram.ts` |
 | After a real publish the window closes 2.5 s later; in test mode and on failure it stays open | `main/instagram.ts` |
 | The coordinator has no timeout on the host reply (longest step is the 180 s confirmation) | spec 012 §7 |
@@ -93,7 +93,7 @@ Data: session cookies in the Electron partition `persist:instagram` under the us
 - Acts in the person's name on a third party (Instagram, Meta). The image and caption leave the machine only when publishing.
 - Password never handled by Alma. Cookies sit in a separate Electron partition; the window runs sandboxed (`contextIsolation`, `sandbox`, no Node).
 - Connect and disconnect from the UI are audited as `instagram.connect` / `instagram.disconnect` (actor `user`); a publish as `instagram.publish` (actor `agent`). No caption or image content goes into the audit.
-- Listed in `../security/PRIVACIDAD.md` under always-approved publications. See [seguridad](seguridad.md) and [aprobaciones](aprobaciones.md).
+- Listed in `../security/PRIVACY.md` under always-approved publications. See [security](security.md) and [approvals](approvals.md).
 - A routine that publishes while nobody is at the computer simply waits for the person's approval.
 
 ## How it is tested
@@ -112,4 +112,4 @@ Data: session cookies in the Electron partition `persist:instagram` under the us
 
 ## See also
 
-[Imágenes](imagenes.md) (creating the picture) · [Rutinas](rutinas.md) · [Aprobaciones](aprobaciones.md) · [Agentes](agentes.md) · [Empresas](empresas.md) · [Seguridad](seguridad.md) · [Herramientas](../references/herramientas.md) · [Architecture](../architecture.md)
+[Images](images.md) (creating the picture) · [Routines](routines.md) · [Approvals](approvals.md) · [Agents](agents.md) · [Companies](companies.md) · [Security](security.md) · [Tools](../references/tools.md) · [Architecture](../architecture.md)

@@ -19,6 +19,6 @@ Alternatives: not documented.
 - Files can be edited by any program; a folder watcher re-scans after a 400 ms quiet period. Hidden (dot) folders such as `.git` are never indexed or readable by tools.
 - All vault paths are confined to the vault root; the note says the previous ALMA monorepo had a `..` traversal plus recursive delete bug, so confinement is deliberate ([spec 009](../../.specify/specs/009-knowledge-and-memory/spec.md) AC-8.4).
 - Memories are Markdown bullets; any bullet in `Recuerdos.md` counts as a memory and is rewritten on the next `remember`/`forget`.
-- Notes and memories live outside the data folder that "export my data" and erase cover; the vault is also in plain text on disk (R-04 in [RIESGOS.md](../security/RIESGOS.md)).
+- Notes and memories live outside the data folder that "export my data" and erase cover; the vault is also in plain text on disk (R-04 in [RISKS.md](../security/RISKS.md)).
 - Not built yet, per the note: wikilinks/backlinks and a graph view.
 - Excalidraw cannot measure text inside the coordinator (no canvas), so agent drawings are queued as ops in the file and applied by the window when it opens it.

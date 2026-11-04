@@ -7,7 +7,7 @@ Rules for reading them:
 - Status `accepted` means the decision is in the code today.
 - Where no document explains why, the ADR says `Rationale not documented` and, if useful, an inference labeled as such.
 - "Alternatives: not documented" means no source names a rejected option; none were invented.
-- Sources are the design notes (the maintainer's recorded rationale), [DOMOTICA-PLAN.md](../DOMOTICA-PLAN.md), the constitution, `docs/security/*` and the specs.
+- Sources are the design notes (the maintainer's recorded rationale), [HOME-AUTOMATION-PLAN.md](../HOME-AUTOMATION-PLAN.md), the constitution, `docs/security/*` and the specs.
 
 | # | Decision | Status |
 |---|---|---|
@@ -28,7 +28,7 @@ Rules for reading them:
 | [0015](0015-companies-task-driven-wakeups.md) | Companies: agent teams that wake only for concrete triggers | accepted |
 | [0016](0016-biome-lint-only-no-formatter.md) | Biome lint only, no formatter yet | accepted |
 | [0017](0017-sdd-pipeline.md) | SDD pipeline | accepted |
-| [0018](0018-typed-dictionaries-no-i18n-library.md) | Typed es/en dictionaries in `src/shared`, no i18n library (spec 025) | proposed |
-| [0019](0019-names-follow-language-existing-wins.md) | Names Alma writes follow the language; an existing name always wins (spec 025) | proposed |
+| [0018](0018-typed-dictionaries-no-i18n-library.md) | Typed Spanish/English dictionaries in `src/shared`, no i18n library (spec 025) | accepted |
+| [0019](0019-names-follow-language-existing-wins.md) | Names Alma writes follow the language; an existing name always wins (spec 025) | accepted |
 
 Candidates not written because no evidence supports them as separate decisions: the choice of Electron itself, and the choice of React/CodeMirror (the design note covers CodeMirror only as part of the vault editor, in [0006](0006-vault-as-plain-markdown.md)).

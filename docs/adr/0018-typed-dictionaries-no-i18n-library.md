@@ -1,12 +1,12 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Typed dictionaries in `src/shared`, no i18n library
 
 Alma needs to speak Spanish and English everywhere ([spec 025](../../.specify/specs/025-i18n-es-en/spec.md)). The proposal from the maintainer: two typed dictionaries (`es.ts`, `en.ts`) in `src/shared/`, a `useT()` hook in the renderer, and no i18next. `shared` is the leaf every layer may import, so `main` and the coordinator read the same dictionaries as the renderer without breaking the layer rules ([architecture.md](../architecture.md)). A key-parity test and a ratchet against hardcoded JSX text keep both languages complete.
 
-Status is `proposed`: it becomes `accepted` when the human moves spec 025 to `ready`.
+Status is `accepted` for the dictionary design only (typed `es`/`en` files in `src/shared/i18n`, `translate`, the parity test and the ratchet), which spec 025 implements. The reason for not using i18next stays 'not documented'.
 
 ## Why
 

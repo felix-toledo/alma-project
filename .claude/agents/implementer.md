@@ -33,7 +33,7 @@ Before touching code read `.specify/memory/constitution.md`, `docs/architecture.
 - **UI** (`src/renderer`): load the `console-ui` and `umbra-ui` skills first; every color, spacing and component comes from them.
 - **pnpm only.** Never `npm install` / `npm audit fix`. Never `--no-verify`. Never add `Co-Authored-By` trailers.
 - Don't add a dependency unless the plan names it; say so if you think one is needed.
-- Style: match neighboring code (no semicolons, single quotes, English identifiers, Spanish user-facing text); a comment only for a non-obvious *why*.
+- Style: match neighboring code (no semicolons, single quotes, English identifiers, user-facing text through the dictionaries in `src/shared/i18n`); a comment only for a non-obvious *why*.
 - You don't edit `.specify/memory/constitution.md`, `.claude/agents/`, or specs — that is `planner`'s and the human's ground. A weak `biome.json` rule or coverage floor is only ever tightened.
 - Never say "done" without `pnpm run check:fast` green.
 

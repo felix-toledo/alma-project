@@ -19,13 +19,13 @@ All in Settings → "Conectores MCP" tab.
 
 1. **Add a local program.** In the form "Nuevo servidor" ("New server") choose "Comando local (stdio)". Fill name and command. Name: spaces become `-`. Arguments: one per line. Environment: `CLAVE=valor` per line. Allowed tools: separated by commas, spaces or lines (empty = all). Press "Agregar" (enabled once name and command are filled). The server is saved enabled.
 2. **Add a remote server.** Choose "Remoto (HTTPS)". Fill name and URL. Headers: `Nombre: valor` per line.
-3. **One click for Chrome.** If no server named `chrome-devtools` exists, a "Chrome DevTools" card offers "Agregar Chrome", which adds a stdio server `npx -y chrome-devtools-mcp@1.11.0`. It needs Node on the PATH. Then ask an agent, for example: "abrí esta página en Chrome" (open this page in Chrome).
-4. **Import.** Paste an `mcp.json` in the import box and press "Importar". Bad JSON shows the parser's error under the box; valid JSON with no servers shows "No se encontró ningún servidor."; otherwise the servers are merged over existing ones (a same name is overwritten) and the box clears.
+3. **One click for Chrome.** If no server named `chrome-devtools` exists, a "Chrome DevTools" card offers "Agregar Chrome", which adds a stdio server `npx -y chrome-devtools-mcp@1.11.0`. It needs Node on the PATH. Then ask an agent, for example: «abrí esta página en Chrome» (open this page in Chrome).
+4. **Import.** Paste an `mcp.json` in the import box and press "Importar". Bad JSON shows the parser's error under the box; valid JSON with no servers shows «No se encontró ningún servidor.»; otherwise the servers are merged over existing ones (a same name is overwritten) and the box clears.
 5. **Read the rows.** Each row shows name, a badge (`N herramientas` when connected, otherwise `disabled`, `connecting`, `error`; `desconocido` if no status yet), the command line or URL, the error text, and the tool names.
 6. **Switch off / remove / retry.** The "Activo" checkbox keeps the configuration. "Quitar" ("Remove") deletes the server at once, with no confirmation. "Reconectar" ("Reconnect") closes and reconnects every server from the current configuration.
 7. **Choose which agents use MCP.** Settings → Agentes, the "Conectores MCP" checkbox of each profile. A new profile starts unchecked.
-8. **Sidebar.** Shows "MCP: N conectado(s)" and, if some failed, " · N con error"; hidden when no server is configured.
-9. **Confirm.** When you add a stdio server, change its command, arguments, folder or environment, or turn one on, Alma shows a native warning "Confirmar cambio de seguridad" ("Confirm security change"): "Alma va a ejecutar estos programas en tu computadora:" ("Alma will run these programs on your computer:") plus the list, buttons "Permitir" / "Cancelar" (default Cancelar). Nothing is saved until you answer "Permitir".
+8. **Sidebar.** Shows «MCP: N conectado(s)» and, if some failed, « · N con error»; hidden when no server is configured.
+9. **Confirm.** When you add a stdio server, change its command, arguments, folder or environment, or turn one on, Alma shows a native warning "Confirmar cambio de seguridad" ("Confirm security change"): «Alma va a ejecutar estos programas en tu computadora:» ("Alma will run these programs on your computer:") plus the list, buttons "Permitir" / "Cancelar" (default Cancelar). Nothing is saved until you answer "Permitir".
 
 In chat, an MCP tool call card is labelled `<server> · <tool>`. In Telegram status text the `mcp__` prefix is dropped and `_` becomes a space.
 
@@ -62,7 +62,7 @@ Flow details worth knowing:
 - **Naming.** `mcp__` + server + `__` + tool, each part with every character outside `[a-zA-Z0-9_-]` replaced by `_`, the whole cut to 64 characters (provider tool-name limits; the code comment cites OpenAI's 64). Two different names can collapse to the same one (`my server` and `my_server`); the first match wins.
 - **Description.** `[MCP <server>] <description>` cut to 1024 characters; with no description the tool name is used.
 - **Results.** Text parts are kept; an embedded resource contributes its text or `[recurso <uri>]`; other parts become `[contenido <tipo> omitido]`; structured content is used (as JSON) only when no part produced text; empty is `(sin contenido)`. A result flagged `isError` comes back as an error for the model and the card. The agent loop truncates long results in the middle.
-- **Cancel and failure.** The agent run's abort signal cancels an in-flight call. A call that throws (server died, timeout) reaches the model as `Error: <message>` and the run continues. A tool not exposed (server removed, off, failed, outside the allow-list) throws `La herramienta MCP <nombre> no está disponible.`; a name the agent was not offered is refused with "La herramienta … no está disponible para este agente."
+- **Cancel and failure.** The agent run's abort signal cancels an in-flight call. A call that throws (server died, timeout) reaches the model as `Error: <message>` and the run continues. A tool not exposed (server removed, off, failed, outside the allow-list) throws `La herramienta MCP <nombre> no está disponible.`; a name the agent was not offered is refused with «La herramienta … no está disponible para este agente.»
 - **Import.** Accepts `{ "mcpServers": {…} }` or the bare map. `command` entries become stdio servers (args, env, optional `cwd`, `tools`), `url` entries become http servers (headers); non-object entries and entries with neither are skipped; with both, `url` wins; the optional `type` is ignored; imported servers are always enabled.
 
 ## Tools for agents
@@ -71,9 +71,9 @@ MCP adds tools dynamically, one per exposed tool of each connected server. They 
 
 | Name | Risk | Asks approval | Purpose |
 |---|---|---|---|
-| `mcp__<server>__<tool>` | `exec` (assigned by the agent loop) | per approval mode: asks in "Pedir aprobación", blocked in "Solo lectura", runs in "Siempre permitir"; "always allow" and per-agent auto-approve lists match on the qualified name | Whatever the server's tool does. |
+| `mcp__<server>__<tool>` | `exec` (assigned by the agent loop) | per approval mode: asks in «Pedir aprobación», blocked in "Solo lectura", runs in "Siempre permitir"; "always allow" and per-agent auto-approve lists match on the qualified name | Whatever the server's tool does. |
 
-The audit trail records each call with the qualified name, risk `exec` and the decision. See [aprobaciones.md](aprobaciones.md) and [herramientas.md](../references/herramientas.md).
+The audit trail records each call with the qualified name, risk `exec` and the decision. See [approvals.md](approvals.md) and [tools.md](../references/tools.md).
 
 ## Settings and data
 
@@ -82,7 +82,7 @@ The audit trail records each call with the qualified name, risk `exec` and the d
 | `mcpServers` (map name -> `{ type: 'stdio', command, args?, env?, cwd?, enabled, tools? }` or `{ type: 'http', url, headers?, enabled, tools? }`) | `{}` | `settings.json` in the user data folder, written by main |
 | `allowMcp` per agent profile | on for some seeded agents, off for others; off for a new custom profile and for every company agent | agent profiles in settings |
 
-An empty or missing `tools` list exposes all tools of the server. `env` values and `headers` are stored in plain text in `settings.json` and sent to the renderer with the public settings; only provider API keys are encrypted. Nothing else is persisted: statuses are in memory. See [ajustes.md](../references/ajustes.md) and [datos.md](../references/datos.md).
+An empty or missing `tools` list exposes all tools of the server. `env` values and `headers` are stored in plain text in `settings.json` and sent to the renderer with the public settings; only provider API keys are encrypted. Nothing else is persisted: statuses are in memory. See [settings.md](../references/settings.md) and [data.md](../references/data.md).
 
 ## Limits and rules
 
@@ -102,13 +102,13 @@ Server stderr is piped and not shown. `StdioClientTransport` spawns the command 
 
 ## Security and privacy
 
-- **A stdio server is arbitrary code with your user's permissions.** The spec ties this to R-12 in [RIESGOS.md](../security/RIESGOS.md); controls are in [CONTROLES.md](../security/CONTROLES.md).
+- **A stdio server is arbitrary code with your user's permissions.** The spec ties this to R-12 in [RISKS.md](../security/RISKS.md); controls are in [CONTROLS.md](../security/CONTROLS.md).
 - **Asks before running a new program.** `newCommands` lists a stdio server that is new, has a different command, arguments, folder or environment, or goes from off to on. A change of only `tools`, a remote server, or a disabled stdio server lists nothing. On "Cancelar" nothing is saved, the call fails with "Cambio cancelado." and a `settings.update` audit entry with outcome `denied` and target `mcpServers` is written. Remote servers are never confirmed.
 - **Per-agent switch and approval policy** decide who can call a tool and whether the person is asked.
 - **Minimal environment** for child programs (above).
 - **What leaves the machine:** a remote server sees whatever the agent sends in the tool arguments, and its headers (which may hold tokens). A stdio server can do anything its code does. Tool output from a server is untrusted text given to the model.
 - **Stored:** tokens in `env` and `headers` sit in plain text in `settings.json` (see below).
-- Security view of the confirmation: [seguridad.md](seguridad.md).
+- Security view of the confirmation: [security.md](security.md).
 
 ## How it is tested
 
@@ -126,16 +126,16 @@ Server stderr is piped and not shown. `StdioClientTransport` spawns the command 
 4. **Name collisions.** Sanitizing and the 64-character cut can map two different servers or tools to one name; the first wins silently.
 5. **No retry.** A dropped server stays in `error` until "Reconectar" or a settings change.
 6. **"Quitar" has no confirmation** and removes env and headers with it; adding a server with an existing name silently overwrites it.
-7. **Every MCP tool counts as `exec`.** A harmless read-only tool still asks in "Pedir aprobación"..
+7. **Every MCP tool counts as `exec`.** A harmless read-only tool still asks in «Pedir aprobación»..
 8. **Inconsistent `allowMcp` defaults.** Some seeded agents have it on and others off; policy or accident of the seed data is not documented.
 9. Rationale for these choices is not documented beyond the spec's questions.
 
 ## See also
 
-- [aprobaciones.md](aprobaciones.md): how `exec` risk and "always allow" decide.
-- [seguridad.md](seguridad.md): threat model, audit trail, native confirmations.
-- [agentes.md](agentes.md): the per-profile "Conectores MCP" switch; [empresas.md](empresas.md): company agents never get MCP.
-- [configuraciones.md](configuraciones.md): the Settings dialog and `settings.json`.
+- [approvals.md](approvals.md): how `exec` risk and "always allow" decide.
+- [security.md](security.md): threat model, audit trail, native confirmations.
+- [agents.md](agents.md): the per-profile "Conectores MCP" switch; [companies.md](companies.md): company agents never get MCP.
+- [settings.md](settings.md): the Settings dialog and `settings.json`.
 - [telegram.md](telegram.md): how MCP tool calls show in status text.
 - [app-shell.md](app-shell.md): main process and settings update path.
-- Reference: [herramientas.md](../references/herramientas.md), [ajustes.md](../references/ajustes.md), [mensajes-ipc.md](../references/mensajes-ipc.md), [limites.md](../references/limites.md).
+- Reference: [tools.md](../references/tools.md), [settings.md](../references/settings.md), [ipc-messages.md](../references/ipc-messages.md), [limits.md](../references/limits.md).

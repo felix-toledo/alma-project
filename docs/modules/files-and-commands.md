@@ -4,7 +4,7 @@
 
 ## What it does
 
-**For the person.** An agent can look around your project folder, read and search files, create and edit files, and run commands such as builds, tests and git. Everything is confined to the **working folder** of the conversation (the one you choose with the folder button in the chat). Reading never asks you. Writing a file or running a command goes through the approval policy (see [aprobaciones](aprobaciones.md)).
+**For the person.** An agent can look around your project folder, read and search files, create and edit files, and run commands such as builds, tests and git. Everything is confined to the **working folder** of the conversation (the one you choose with the folder button in the chat). Reading never asks you. Writing a file or running a command goes through the approval policy (see [approvals](approvals.md)).
 
 **For an agent.** Six tools, all with Spanish descriptions and Spanish error messages so the model can correct itself:
 
@@ -16,11 +16,11 @@ This module also defines how any tool call is validated, gated, run and shown (t
 
 ## How to use it
 
-1. Open a conversation and press the **folder button** to pick the working folder. Without one, file tools fail with "No hay carpeta de trabajo seleccionada…" (no working folder selected) and nothing is asked.
+1. Open a conversation and press the **folder button** to pick the working folder. Without one, file tools fail with «No hay carpeta de trabajo seleccionada…» (no working folder selected) and nothing is asked.
 2. Ask in chat. Real phrases:
-   - "Leé `package.json` y decime qué scripts hay" (read it and tell me which scripts exist).
-   - "Buscá dónde se usa `resolveInWorkspace`" (find where it is used).
-   - "Corré los tests" (run the tests).
+   - «Leé `package.json` y decime qué scripts hay» (read it and tell me which scripts exist).
+   - «Buscá dónde se usa `resolveInWorkspace`» (find where it is used).
+   - «Corré los tests» (run the tests).
 3. When the agent wants to write or run something, an approval card appears (unless you chose "allow all" or "always allow" for that tool). Each tool call shows as a card with a Spanish label ("Leer archivo", "Listar carpeta", "Buscar", "Escribir archivo", "Editar archivo", "Ejecutar comando"), a one-line summary and, expanded, the "Resultado" or "Error" in a monospace block.
 4. Default agents: General, Programador and most others carry all six tools (via `FILE_TOOLS` in `src/shared/defaults.ts`); Investigador and Revisor carry only the three read tools (plus `office_read`).
 
@@ -39,7 +39,7 @@ Files in `src/coordinator/tools/`:
 | `../approval.ts` | the approval policy |
 
 ```
-model asks tool_use ─► known tool? (builtin, app tool, MCP) ─no─► "La herramienta X no está disponible para este agente."
+model asks tool_use ─► known tool? (builtin, app tool, MCP) ─no─► «La herramienta X no está disponible para este agente.»
         │ yes
         ▼
  Zod schema ─fail─► is_error result (INVALID_JSON + issues), nothing asked
@@ -48,7 +48,7 @@ model asks tool_use ─► known tool? (builtin, app tool, MCP) ─no─► "La 
  needs workspace? (not `standalone`) ─none─► error, nothing asked
         │
         ▼
- approval (risk + mode + per-tool rules; `read` never asks) ─deny─► "No se ejecutó: Rechazado por vos…"
+ approval (risk + mode + per-tool rules; `read` never asks) ─deny─► «No se ejecutó: Rechazado por vos…»
         │ allow
         ▼
  tool.run(input, ctx) ─► string (cut to 60 000 chars, start and end kept) ─► tool_result
@@ -78,13 +78,13 @@ Non-obvious points:
 | `edit_file` | `write` | per mode | Replace a unique `old_string` (or all with `replace_all`). |
 | `run_command` | `exec` | per mode | Run a shell command in the workspace; `timeout_seconds` 1–600. |
 
-"Per mode" means the approval mode decides: ask, auto-review, allow all, read-only (blocked, which denies these), plus per-tool "always allow" and per-agent auto-approve. See [aprobaciones](aprobaciones.md) and [references/herramientas.md](../references/herramientas.md).
+"Per mode" means the approval mode decides: ask, auto-review, allow all, read-only (blocked, which denies these), plus per-tool "always allow" and per-agent auto-approve. See [approvals](approvals.md) and [references/tools.md](../references/tools.md).
 
 In a **company**, `write_file`, `edit_file`, `office_create`, `office_edit`, `generate_image` and `compose_image` are auto-approved for the company agent (`COMPANY_AUTO_APPROVE` in `agent.ts`). `run_command` still asks. (Spec 015 BR-3 lists only the first two; the code has the longer list.)
 
 ## Settings and data
 
-No settings of its own besides the approval mode and each agent's tool list. Nothing is stored by these tools: they read and write inside your working folder. Tool results are saved with the conversation. Audit lines for non-read calls go to the audit trail (see [seguridad](seguridad.md)).
+No settings of its own besides the approval mode and each agent's tool list. Nothing is stored by these tools: they read and write inside your working folder. Tool results are saved with the conversation. Audit lines for non-read calls go to the audit trail (see [security](security.md)).
 
 ## Limits and rules
 
@@ -137,4 +137,4 @@ Variables removed from the command environment (case-insensitive): `ANTHROPIC_AP
 
 ## See also
 
-[aprobaciones](aprobaciones.md) · [agentes](agentes.md) · [chat](chat.md) · [web-y-correo](web-y-correo.md) · [office-y-dibujos](office-y-dibujos.md) · [imagenes](imagenes.md) · [seguridad](seguridad.md) · [references/herramientas.md](../references/herramientas.md) · [architecture](../architecture.md)
+[approvals](approvals.md) · [agents](agents.md) · [chat](chat.md) · [web-and-mail](web-and-mail.md) · [office-and-drawings](office-and-drawings.md) · [images](images.md) · [security](security.md) · [references/tools.md](../references/tools.md) · [architecture](../architecture.md)

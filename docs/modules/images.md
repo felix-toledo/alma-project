@@ -15,13 +15,13 @@
 
 ## How to use it
 
-**Choose the image service.** **Configuración → Imágenes**: pick the service (xAI, OpenAI, Meta). A service shows "· falta la key" (key missing) when it has neither a stored key nor an environment key; keys are set in Configuración → Proveedores. The model field may stay empty ("vacío = el más nuevo disponible", empty = newest available); the refresh button lists the service's image models. Changing the service clears the model. If you paste something that looks like an API key into the model field, Save is disabled ("Eso es una API key, no un modelo…").
+**Choose the image service.** «Configuración → Imágenes»: pick the service (xAI, OpenAI, Meta). A service shows «· falta la key» (key missing) when it has neither a stored key nor an environment key; keys are set in «Configuración → Proveedores». The model field may stay empty («vacío = el más nuevo disponible», empty = newest available); the refresh button lists the service's image models. Changing the service clears the model. If you paste something that looks like an API key into the model field, Save is disabled («Eso es una API key, no un modelo…»).
 
 **Ask for pictures.** Real phrases:
 
-- "Generá una imagen de un mate sobre una mesa de madera, formato 4:5" (generate an image of a mate on a wooden table).
-- "Armame un post de cita con esta frase: …" (make me a quote post with this phrase).
-- "Hacé una imagen de promo con la paleta de mi marca" (make a promo image with my brand palette).
+- «Generá una imagen de un mate sobre una mesa de madera, formato 4:5» (generate an image of a mate on a wooden table).
+- «Armame un post de cita con esta frase: …» (make me a quote post with this phrase).
+- «Hacé una imagen de promo con la paleta de mi marca» (make a promo image with my brand palette).
 
 **Your brand library.** Create `biblioteca/` inside the working folder:
 
@@ -34,9 +34,9 @@ biblioteca/
   recetas.json    ready-made combos (template, palette, font, background, pieces)
 ```
 
-A recipe is called with `recipe: "promo"`; whatever else the agent passes overrides it and its `elements` add to the recipe's. `"decorations": false` drops the template's own shapes. If you have your own palettes and none is named, one of yours is used. Your SVG pieces take the element's `color` where they use `currentColor` and `color2` where they use `var(--acento)`. A piece named like a built-in shape wins. Details and an example recipe are in the README section "Biblioteca de imágenes".
+A recipe is called with `recipe: "promo"`; whatever else the agent passes overrides it and its `elements` add to the recipe's. `"decorations": false` drops the template's own shapes. If you have your own palettes and none is named, one of yours is used. Your SVG pieces take the element's `color` where they use `currentColor` and `color2` where they use `var(--acento)`. A piece named like a built-in shape wins. Details and an example recipe are in the README section «Biblioteca de imágenes».
 
-**Show Alma a picture.** Paste a screenshot into the chat box or drop an image on the chat; it shows as an attachment chip and the next message carries "Imagen adjunta (mirala con look_at_image): <path>" (attached image, look at it with look_at_image). Through Telegram, send a photo; the agent gets "[El usuario te mandó una imagen: <path>. Mirala con look_at_image.]" plus the caption.
+**Show Alma a picture.** Paste a screenshot into the chat box or drop an image on the chat; it shows as an attachment chip and the next message carries "Imagen adjunta (mirala con look_at_image): <path>" (attached image, look at it with look_at_image). Through Telegram, send a photo; the agent gets «[El usuario te mandó una imagen: <path>. Mirala con look_at_image.]» plus the caption.
 
 ## How it works
 
@@ -80,7 +80,7 @@ The same seed and input give the same SVG byte for byte; with no seed a random o
 | `compose_image` | `write` | per mode | Original image from the library; SVG plus PNG in `imagenes/`. Needs a working folder. |
 | `look_at_image` | `read` | no | Ask a vision model a question about a picture; standalone. |
 
-The default agents Multimedia and Community Manager list the first two as auto-approved (preparing a post does not wait; publishing does), and a company agent auto-approves both. See [references/herramientas.md](../references/herramientas.md).
+The default agents Multimedia and Community Manager list the first two as auto-approved (preparing a post does not wait; publishing does), and a company agent auto-approves both. See [references/tools.md](../references/tools.md).
 
 ## Settings and data
 
@@ -116,7 +116,7 @@ Slug: accents and punctuation removed, lower case, dashes, 40 characters, fallin
 - The generation prompt leaves the machine to the image service; a picture given to `look_at_image` leaves it to the vision model's provider. Compose runs fully offline (fonts are bundled).
 - Model-written SVG is sanitized (scripts, `foreignObject`, `on…=` handlers and any `href` not pointing to `#…` or `data:image/…` removed) and rasterized in a hidden sandboxed window whose network is blocked.
 - Paths from the model are confined: the workspace for generation and preview; the inbox, active vault and working folder for vision.
-- Pictures in the inbox are never deleted automatically. The privacy erase action ("Borrar mis datos", see [seguridad](seguridad.md)) removes the whole inbox.
+- Pictures in the inbox are never deleted automatically. The privacy erase action ("Borrar mis datos", see [security](security.md)) removes the whole inbox.
 
 ## How it is tested
 
@@ -124,20 +124,20 @@ Slug: accents and punctuation removed, lower case, dashes, 40 characters, fallin
 - `tests/media.test.ts`: newest-model pick and save, model choice per provider, missing key message.
 - `tests/home.test.ts`: image size from PNG, GIF and JPEG headers.
 - Not covered: WebP size, non-xAI request shapes, URL download, fallbacks, abort, the render window, `loadPicture` limits and roots, `visionModel` order, Telegram photos, `files.image` limits.
-- By hand: paste a screenshot, send it and watch the agent call `look_at_image`; generate or compose and see the image in the card; point a card at a deleted file ("No se pudo mostrar <path>: <reason>"); open Configuración → Imágenes with and without keys.
+- By hand: paste a screenshot, send it and watch the agent call `look_at_image`; generate or compose and see the image in the card; point a card at a deleted file («No se pudo mostrar <path>: <reason>»); open «Configuración → Imágenes» with and without keys.
 
 ## Known limits
 
-1. **Likely bug, confirmed in the code:** `saveInboxImage` (`src/coordinator/index.ts`, around line 352) cleans names with `/[^w.-]+/g`, a literal `w`, not `\w`. Every other letter and digit becomes `_`, so `telegram-AgAD1.jpg` is stored as `<time>-_-_._` and the extension is lost. `look_at_image` decides the type by extension, so a picture pasted in the chat or sent by Telegram would answer "Solo se pueden mirar imágenes JPG, PNG, WebP o GIF." (only JPG, PNG, WebP or GIF can be viewed). It looks like a missing backslash.
+1. **Likely bug, confirmed in the code:** `saveInboxImage` (`src/coordinator/index.ts`, around line 352) cleans names with `/[^w.-]+/g`, a literal `w`, not `\w`. Every other letter and digit becomes `_`, so `telegram-AgAD1.jpg` is stored as `<time>-_-_._` and the extension is lost. `look_at_image` decides the type by extension, so a picture pasted in the chat or sent by Telegram would answer «Solo se pueden mirar imágenes JPG, PNG, WebP o GIF.» (only JPG, PNG, WebP or GIF can be viewed). It looks like a missing backslash.
 2. `loadPicture` checks roots with `startsWith` and no path separator, so `C:\trabajo-secreto` passes for a root `C:\trabajo`.
 3. If the model list fails once, the fallback model is cached until restart.
 4. The settings model list does not exclude `video`/`edit` models and sorts ascending, unlike the automatic pick.
 5. Preview accepts only PNG/JPEG/WebP, vision accepts GIF, composed SVG cannot be shown.
-6. The vision system prompt says "un asistente de domótica" (a home-automation assistant) even for unrelated chat pictures.
+6. The vision system prompt says «un asistente de domótica» (a home-automation assistant) even for unrelated chat pictures.
 7. On xAI the aspect ratio is only a text hint, so the real size is whatever the service returns, which matters for Instagram 4:5. Product decision.
 8. The inbox has no size or age limit. Product decision.
 9. Minor doc drift: the README table says 22 shapes, the spec 23.
 
 ## See also
 
-[instagram](instagram.md) · [casa](casa.md) (cameras and plans use `look`) · [telegram](telegram.md) · [providers](providers.md) · [office-y-dibujos](office-y-dibujos.md) (the SVG to PNG renderer) · [archivos-y-comandos](archivos-y-comandos.md) · [seguridad](seguridad.md) · [references/herramientas.md](../references/herramientas.md) · README section "Biblioteca de imágenes"
+[instagram](instagram.md) · [home](home.md) (cameras and plans use `look`) · [telegram](telegram.md) · [providers](providers.md) · [office-and-drawings](office-and-drawings.md) (the SVG to PNG renderer) · [files-and-commands](files-and-commands.md) · [security](security.md) · [references/tools.md](../references/tools.md) · README section «Biblioteca de imágenes»

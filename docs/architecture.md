@@ -1,70 +1,70 @@
-# Arquitectura de Alma
+# Alma's architecture
 
-Qué piezas hay, qué puede hablar con qué, y dónde va cada cosa nueva. Las reglas de la sección 2 no son una guía: las hace cumplir `tests/architecture.test.ts` en cada `pnpm test`.
+What the pieces are, what can talk to what, and where each new thing goes. The rules in section 2 are not a guideline: `tests/architecture.test.ts` enforces them on every `pnpm test`.
 
-## 1. Procesos y capas
+## 1. Processes and layers
 
 ```
 ┌──────────── renderer (React) ─────────────┐        src/renderer
-│  UI. Sin disco, sin red, sin node.        │
+│  UI. No disk, no network, no node.        │
 └───────────────┬───────────────────────────┘
-        window.desktop (preload, tipado en shared/desktop-api.ts)
+        window.desktop (preload, typed in shared/desktop-api.ts)
 ┌───────────────▼───────────────────────────┐
 │  main (Electron)                          │        src/main + src/preload
-│  ventanas, bandeja, settings, diálogos    │
-│  nativos, sesión de Instagram             │
+│  windows, tray, settings, native          │
+│  dialogs, Instagram session               │
 └───────────────┬───────────────────────────┘
-        MessagePort: RequestEnvelope / CoordinatorMessage (tipados en shared/types)
+        MessagePort: RequestEnvelope / CoordinatorMessage (typed in shared/types)
 ┌───────────────▼───────────────────────────┐
 │  coordinator (utilityProcess)             │        src/coordinator
-│  agentes, herramientas, proveedores,      │
-│  canales, conocimiento, domótica, voz     │
+│  agents, tools, providers, channels,      │
+│  knowledge, home automation, voice        │
 └───────────────────────────────────────────┘
-   shared (src/shared): tipos, esquemas y funciones puras que usan 2+ capas
+   shared (src/shared): types, schemas and pure functions used by 2+ layers
 ```
 
-| Capa | Es dueña de | Nunca |
+| Layer | Owns | Never |
 |---|---|---|
-| `shared` | tipos, defaults, lógica pura compartida | importar otra capa |
+| `shared` | types, defaults, shared pure logic | import another layer |
 | `renderer` | pantallas y estado de UI | importar `main`/`coordinator`, `electron`, `node:*`, `shared/audit` |
-| `main` | ventanas, settings en disco, diálogos nativos, secretos (`safeStorage`) | importar `coordinator`/`renderer` |
-| `coordinator` | todo lo que piensa o hace I/O para un agente | importar `main`/`renderer`; tocar `electron` fuera de `index.ts` |
+| `main` | windows, settings on disk, native dialogs, secrets (`safeStorage`) | import `coordinator`/`renderer` |
+| `coordinator` | everything that thinks or does I/O for an agent | import `main`/`renderer`; touch `electron` outside `index.ts` |
 
-Entre capas solo viajan mensajes tipados. Si dos capas necesitan lo mismo, va a `shared` (si es puro) o se manda un mensaje (si no).
+Only typed messages travel between layers. If two layers need the same thing, it goes to `shared` (if it is pure) or a message is sent (if not).
 
-## 2. Reglas que se verifican solas
+## 2. Rules that check themselves
 
-Están en `tests/support/arch.ts` (`RULES`), cada una con un caso negativo en `tests/architecture.test.ts` para que no pasen vacías. Además Biome rechaza ciclos de imports (`noImportCycles`).
+They are in `tests/support/arch.ts` (`RULES`), each with a negative case in `tests/architecture.test.ts` so they do not pass empty. Biome also rejects import cycles (`noImportCycles`).
 
-Para agregar una regla: nueva entrada en `RULES` + un fixture que la rompa en el test. Para aflojar una: hablarlo primero (Constitución II).
+To add a rule: a new entry in `RULES` + a fixture in the test that breaks it. To loosen one: talk about it first (Constitution II).
 
-## 3. Cómo se escribe el código
+## 3. How the code is written
 
-**Núcleo funcional, cáscara imperativa.** La decisión vive en una función pura, exportada y con test; el I/O es una cáscara fina alrededor. Ejemplos: `src/main/guard.ts` (`newCommands`), `src/coordinator/tools/web.ts` (`isPrivateHost`, `htmlToText`, `parseDuckDuckGo`).
+**Functional core, imperative shell.** The decision lives in a pure function, exported and tested; the I/O is a thin shell around it. Examples: `src/main/guard.ts` (`newCommands`), `src/coordinator/tools/web.ts` (`isPrivateHost`, `htmlToText`, `parseDuckDuckGo`).
 
-**Inyección de dependencias.** Una herramienta recibe lo que necesita por `ToolContext` / `Host` (carpeta de trabajo, settings, `signal`, vault, Telegram, WhatsApp, la casa). No importa singletons ni lee estado global. Es lo que permite al test pasarle un doble.
+**Dependency injection.** A tool receives what it needs through `ToolContext` / `Host` (working folder, settings, `signal`, vault, Telegram, WhatsApp, the house). It does not import singletons or read global state. That is what lets the test hand it a double.
 
-**Validar en el borde, confiar adentro.** Zod en: entradas de herramientas, mensajes IPC, settings leídos de disco, todo lo que viene de la red.
+**Validate at the edge, trust inside.** Zod for: tool inputs, IPC messages, settings read from disk, everything that comes from the network.
 
-**Variación por estrategia.** Proveedores (`providers/`), canales (`channels/`): una interfaz y una implementación por caso, no un `if` creciente en quien llama.
+**Variation by strategy.** Providers (`providers/`), channels (`channels/`): one interface and one implementation per case, not a growing `if` in the caller.
 
-**Estilo.** Igualá al código de al lado: sin punto y coma, comillas simples, identificadores en inglés, textos al usuario en español rioplatense, comentarios solo para el *por qué* no obvio. Biome avisa de lo evidente; no hay formateador automático todavía (ver deuda en `docs/pipeline.md`).
+**Style.** Match the code next to it: no semicolons, single quotes, identifiers in English, user-facing text through the dictionaries in `src/shared/i18n` (Spanish and English), comments only for the non-obvious *why*; docs, skills, code comments and commit messages are English. Biome flags the obvious; there is no automatic formatter yet (see the debt in `docs/pipeline.md`).
 
-## 4. Dónde va lo nuevo
+## 4. Where new things go
 
-| Quiero agregar… | Va en | Y además |
+| I want to add… | It goes in | And also |
 |---|---|---|
-| Una herramienta para agentes | `src/coordinator/tools/<nombre>.ts` exportando `ToolDefinition` (nombre, `risk`, esquema Zod, `run`) | registrarla donde se registran sus hermanas (`tools/index.ts` o `agent.ts`); elegir `risk` con cuidado (`publish` si actúa por el usuario hacia afuera); test en `tests/` |
-| Un canal (como Telegram) | `src/coordinator/channels/` | aprobaciones y límites de usuario permitidos; entrada en `docs/security/` |
-| Un proveedor de modelo | `src/coordinator/providers/` implementando `Provider` | test con proveedor falso, como `tests/providers.test.ts` |
-| Un ajuste | tipo y default en `shared/types` y `shared/defaults`; lectura/escritura en `main/settings.ts`; pantalla en `SettingsDialog` | si ejecuta código nuevo, confirmación nativa (`main/guard.ts`) |
-| Una pantalla | `src/renderer/src/<área>/`, con los skills `console-ui` y `umbra-ui` | la lógica con reglas a `shared/` + test |
-| Una regla de negocio | función pura en `shared/` (o junto a la herramienta) | spec primero (Constitución I) |
+| A tool for agents | `src/coordinator/tools/<name>.ts` exporting `ToolDefinition` (name, `risk`, Zod schema, `run`) | register it where its siblings are registered (`tools/index.ts` or `agent.ts`); choose `risk` carefully (`publish` if it acts outward on the user's behalf); a test in `tests/` |
+| A channel (like Telegram) | `src/coordinator/channels/` | approvals and allowed-user limits; an entry in `docs/security/` |
+| A model provider | `src/coordinator/providers/` implementing `Provider` | a test with a fake provider, like `tests/providers.test.ts` |
+| A setting | type and default in `shared/types` and `shared/defaults`; read/write in `main/settings.ts`; screen in `SettingsDialog` | if it runs new code, a native confirmation (`main/guard.ts`) |
+| A screen | `src/renderer/src/<area>/`, with the `console-ui` and `umbra-ui` skills | logic with rules goes to `shared/` + a test |
+| A business rule | pure function in `shared/` (or next to the tool) | spec first (Constitution I) |
 
 ## 5. Tests
 
-- Viven en `tests/<área>.test.ts`; los dobles y utilidades compartidas en `tests/support/`.
-- Se nombra el criterio que verifican: `it('AC-2.1 rechaza hosts privados', …)`. Así `tests/specs.test.ts` puede comprobar que cada AC de una spec `implemented` tiene test.
-- Sistema de archivos: carpeta temporal por test (`mkdtempSync`) y limpieza en `afterEach`. Red: `vi.mock` del módulo, nunca internet real. Proveedores: el `Provider` falso de `tests/agent.test.ts`.
-- Un test nuevo se ve fallar primero (Constitución III).
-- El renderer no tiene tests de componentes: lo cubren typecheck, lint y una corrida manual. Por eso su lógica se saca a `shared/`.
+- They live in `tests/<area>.test.ts`; shared doubles and utilities in `tests/support/`.
+- They name the criterion they verify: `it('AC-2.1 rejects private hosts', …)`. That way `tests/specs.test.ts` can check that every AC of an `implemented` spec has a test.
+- File system: a temp folder per test (`mkdtempSync`) and cleanup in `afterEach`. Network: `vi.mock` of the module, never the real internet. Providers: the fake `Provider` of `tests/agent.test.ts`.
+- A new test is seen to fail first (Constitution III).
+- The renderer has no component tests: typecheck, lint and a manual run cover it. That is why its logic is pulled out into `shared/`.

@@ -2,11 +2,11 @@
 
 Every tool an agent can call, grouped by module. All rows were checked against the code (`defineTool({ name: … })` objects
 and `agent.ts`). Tool names, risk values and file names are the literal ones from the code. For the behavior of each
-module see the module docs: [files and commands](../modules/archivos-y-comandos.md), [office and drawings](../modules/office-y-dibujos.md),
-[images](../modules/imagenes.md), [vault and knowledge](../modules/vault-y-conocimiento.md), [routines](../modules/rutinas.md),
-[web and mail](../modules/web-y-correo.md), [Telegram](../modules/telegram.md), [WhatsApp](../modules/whatsapp.md),
-[Instagram](../modules/instagram.md), [home](../modules/casa.md), [companies](../modules/empresas.md), [MCP](../modules/mcp.md),
-[agents](../modules/agentes.md) and [approvals](../modules/aprobaciones.md).
+module see the module docs: [files and commands](../modules/files-and-commands.md), [office and drawings](../modules/office-and-drawings.md),
+[images](../modules/images.md), [vault and knowledge](../modules/vault-and-knowledge.md), [routines](../modules/routines.md),
+[web and mail](../modules/web-and-mail.md), [Telegram](../modules/telegram.md), [WhatsApp](../modules/whatsapp.md),
+[Instagram](../modules/instagram.md), [home](../modules/home.md), [companies](../modules/companies.md), [MCP](../modules/mcp.md),
+[agents](../modules/agents.md) and [approvals](../modules/approvals.md).
 
 ## 1. Risk and approval
 
@@ -25,10 +25,10 @@ Each tool declares one `ToolRisk` (`src/coordinator/tools/types.ts:15`). The app
 Approval modes (`ApprovalMode`, `src/shared/types.ts:7`; labels in `src/renderer/src/lib/format.ts:3`; default
 `needs-approval`, `src/shared/defaults.ts:199`):
 
-| Risk | Pedir aprobación (`needs-approval`) | Auto-review (`auto-review`) | Permitir todo (`always-allow`) | Solo lectura (`blocked`) |
+| Risk | «Pedir aprobación» (`needs-approval`) | «Auto-review» (`auto-review`) | «Permitir todo» (`always-allow`) | «Solo lectura» (`blocked`) |
 |---|---|---|---|---|
 | `read` | Runs, no question | Runs, no question | Runs, no question | Runs, no question |
-| `memory` | Runs, no question | Runs, no question | Runs, no question | Denied ("Bloqueado por el modo de aprobación") |
+| `memory` | Runs, no question | Runs, no question | Runs, no question | Denied («Bloqueado por el modo de aprobación») |
 | `home` | Runs, no question | Runs, no question | Runs, no question | Denied |
 | `write`, `exec` | Asks the user, unless the tool is in the agent's `autoApproveTools`, the company auto-approve list or `alwaysAllowTools` | A reviewer model judges it; `allow` runs it, `flag` asks the user (flagged), a reviewer error asks the user. The same exceptions skip the review | Runs, no question | Denied (the exceptions do not apply) |
 | `publish` | Asks the user every time, with no "always allow" button | Same as Pedir: asks every time | Same: asks every time | Denied |
@@ -44,7 +44,7 @@ Details that matter and are easy to miss, all in `approval.ts`:
 - Tools that are not in the registry (every MCP tool) get `risk = 'exec'` (`agent.ts:374`), so they follow the `write`/`exec` row.
 - `COMPANY_AUTO_APPROVE` (`agent.ts:25`): in a company, `write_file`, `edit_file`, `office_create`, `office_edit`, `generate_image` and `compose_image` are added to the auto-approve list. `run_command` still asks.
 - Audit: every call whose risk is not `read` is recorded with `audit()` (`agent.ts:396`).
-- Input is validated with the tool's Zod schema before anything runs; invalid input returns an error result and no approval is asked (`agent.ts:343`). Results go back through `truncateMiddle` (60,000 characters, see [limites.md](limites.md)).
+- Input is validated with the tool's Zod schema before anything runs; invalid input returns an error result and no approval is asked (`agent.ts:343`). Results go back through `truncateMiddle` (60,000 characters, see [limits.md](limits.md)).
 
 ## 2. Who gets which tools
 
@@ -59,7 +59,7 @@ Details that matter and are easy to miss, all in `approval.ts`:
 
 "Standalone" (`standalone: true`) means the tool does not touch the thread's workspace folder, so it works without one.
 Builtin tools that are not standalone (`read_file`, `list_dir`, `search_files`, `write_file`, `edit_file`, `run_command`,
-`generate_image`, `compose_image`, `instagram_publish`) fail with "Sin carpeta de trabajo" when the conversation has no workspace
+`generate_image`, `compose_image`, `instagram_publish`) fail with «Sin carpeta de trabajo» when the conversation has no workspace
 (`agent.ts:351`, which only checks tools found in the registry). The three office tools and every app tool are
 `standalone`. MCP tools and `delegate_task` are not checked.
 

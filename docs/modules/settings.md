@@ -1,6 +1,6 @@
 # Settings (Configuraciones)
 
-> The single settings document of the machine (`settings.json`), how its secrets are sealed, how a change reaches the running agents, and the 14-tab **Configuración** (Settings) dialog. Spec: [006 · Configuraciones](../../.specify/specs/006-settings/spec.md). Test status: 6 criteria with a test, 62 without (29 of those are manual checks in the interface, 33 have no check at all).
+> The single settings document of the machine (`settings.json`), how its secrets are sealed, how a change reaches the running agents, and the 14-tab «Configuración» (Settings) dialog. Spec: [006 · Settings](../../.specify/specs/006-settings/spec.md). Test status: 6 criteria with a test, 62 without (29 of those are manual checks in the interface, 33 have no check at all).
 
 ## What it does
 
@@ -14,19 +14,19 @@ A person edits settings from the dialog. An agent does not edit settings directl
 
 ## How to use it
 
-Open the dialog from the sidebar (**Configuración**), from the empty state, from a chat's key warning, or on the `teams` / `home` tab from Empresas and Casa. It opens on **Proveedores** unless a caller asks for another tab. Esc or a click on the backdrop closes it; there is no "unsaved changes" prompt.
+Open the dialog from the sidebar («Configuración»), from the empty state, from a chat's key warning, or on the `teams` / `home` tab from Empresas and Casa. It opens on **Proveedores** unless a caller asks for another tab. Esc or a click on the backdrop closes it; there is no "unsaved changes" prompt.
 
 | Tab (`Tab` id) | What you do there | Owner module |
 |---|---|---|
-| Proveedores (`providers`) | One card each for Anthropic, xAI, DeepSeek, Vercel AI Gateway, Meta (Muse), OpenAI. Paste a key and press **Guardar**; **Borrar** removes it. Badge: «Key guardada» (key stored) / «Usa <VAR>» (taken from the environment variable) / «Sin configurar» (nothing). xAI also has «URL base». **Probar conexión** (test connection) lists the provider's models. | [providers](providers.md) |
-| Agentes (`agents`) | List, create, edit, delete agents; **Usar por defecto** (use as default). | [agentes](agentes.md) |
-| Equipos (`teams`) | Embeds the teams editor. | [empresas](empresas.md) |
-| Aprobaciones (`approvals`) | Four modes: «Pedir aprobación» (`needs-approval`), «Auto-review», «Permitir todo» (`always-allow`), «Solo lectura» (`blocked`); reviewer model and instructions; the «Siempre permitir» list with **Quitar** (remove). | [aprobaciones](aprobaciones.md) |
-| Imágenes (`images`) | Service (xAI / OpenAI / Meta), model, refresh list. | [imagenes](imagenes.md) |
-| Telegram, WhatsApp, Mail (`email`), Voz (`voice`), Instagram | One tab per channel. | [telegram](telegram.md), [whatsapp](whatsapp.md), [web-y-correo](web-y-correo.md), [voz](voz.md), [instagram](instagram.md) |
+| Proveedores (`providers`) | One card each for Anthropic, xAI, DeepSeek, Vercel AI Gateway, Meta (Muse), OpenAI. Paste a key and press **Guardar**; **Borrar** removes it. Badge: «Key guardada» (key stored) / «Usa <VAR>» (taken from the environment variable) / «Sin configurar» (nothing). xAI also has «URL base». «Probar conexión» (test connection) lists the provider's models. | [providers](providers.md) |
+| Agentes (`agents`) | List, create, edit, delete agents; **Usar por defecto** (use as default). | [agents](agents.md) |
+| Equipos (`teams`) | Embeds the teams editor. | [companies](companies.md) |
+| Aprobaciones (`approvals`) | Four modes: «Pedir aprobación» (`needs-approval`), «Auto-review», «Permitir todo» (`always-allow`), «Solo lectura» (`blocked`); reviewer model and instructions; the «Siempre permitir» list with «Quitar» (remove). | [approvals](approvals.md) |
+| «Imágenes» (`images`) | Service (xAI / OpenAI / Meta), model, refresh list. | [images](images.md) |
+| Telegram, WhatsApp, Mail (`email`), Voz (`voice`), Instagram | One tab per channel. | [telegram](telegram.md), [whatsapp](whatsapp.md), [web-and-mail](web-and-mail.md), [voice](voice.md), [instagram](instagram.md) |
 | MCP (`mcp`) | Servers, **Agregar Chrome**, **+ Agregar servidor**, **Importar mcp.json**, **Reconectar**. | [mcp](mcp.md) |
-| Casa (`home`) | Engine mode, vision provider, accounts. | [casa](casa.md) |
-| General (`general`) | Default working folder, run in tray, launch with Windows, conversation retention, **Exportar mis datos…**, **Borrar mi historial**. | [seguridad](seguridad.md) for privacy |
+| Casa (`home`) | Engine mode, vision provider, accounts. | [home](home.md) |
+| General (`general`) | Default working folder, run in tray, launch with Windows, conversation retention, **Exportar mis datos…**, **Borrar mi historial**. | [security](security.md) for privacy |
 | Sonido y ambiente (`ambience`) | Interface sounds, background music, volume, moving background. | [app-shell](app-shell.md) |
 
 Steps for the two most common jobs:
@@ -73,7 +73,7 @@ Load order in `SettingsStore.load()`: start from `defaultSettings()`, shallow-me
 - A secret found unsealed on disk is rewritten sealed, but only when a secure store exists (rewriting without one would blank the keys).
 - `getPublic()` strips `providers` and `companySecrets` and replaces them with `hasKey` / `fromEnv` per provider and `companyPasswords` (a map of company id to boolean).
 
-IPC and messages (see [spec 023](../../.specify/specs/023-app-shell-and-ui/spec.md) and [mensajes-ipc](../references/mensajes-ipc.md)):
+IPC and messages (see [spec 023](../../.specify/specs/023-app-shell-and-ui/spec.md) and [ipc-messages](../references/ipc-messages.md)):
 
 | Direction | Message |
 |---|---|
@@ -84,7 +84,7 @@ IPC and messages (see [spec 023](../../.specify/specs/023-app-shell-and-ui/spec.
 
 ## Settings and data
 
-Stored in `settings.json` inside Electron's `userData` folder (`%APPDATA%\Alma`). `ALMA_USER_DATA` points to another folder (also used for conversations, the audit trail and the Instagram session). The full list of keys is in [ajustes](../references/ajustes.md); defaults that matter here:
+Stored in `settings.json` inside Electron's `userData` folder (`%APPDATA%\Alma`). `ALMA_USER_DATA` points to another folder (also used for conversations, the audit trail and the Instagram session). The full list of keys is in [settings](../references/settings.md); defaults that matter here:
 
 | Setting | Default |
 |---|---|
@@ -128,9 +128,9 @@ Secret slots (nine): `anthropic`, `xai`, `deepseek`, `vercel`, `meta`, `openai`,
   - adds, changes or re-enables a stdio MCP server command (`newCommands` in `guard.ts`), or
   - moves `approvalMode` to `always-allow` from another mode.
   Cancel throws «Cambio cancelado.» and audits `settings.update` as denied. Switching away from `always-allow`, or any other change, never asks.
-- Audit entries written by this module: `settings.update` (names of keys that really changed; for `approvalMode` also the new value), `secret.set` / `secret.clear` (target = provider id or `company:<id>`, never the value), `always-allow.add`. See [seguridad](seguridad.md).
+- Audit entries written by this module: `settings.update` (names of keys that really changed; for `approvalMode` also the new value), `secret.set` / `secret.clear` (target = provider id or `company:<id>`, never the value), `always-allow.add`. See [security](security.md).
 - Every IPC call must come from the top frame of the app's own window on the page it loaded; otherwise «Origen no autorizado» and an `ipc.rejected` audit entry.
-- Nothing in settings is sent to a third party by this module. The Probar conexión button calls the provider with the key you saved.
+- Nothing in settings is sent to a third party by this module. The «Probar conexión» button calls the provider with the key you saved.
 
 ## How it is tested
 
@@ -159,4 +159,4 @@ Not covered: `SettingsStore` itself (load, migrations, sealing, atomic save, pub
 
 ## See also
 
-[providers](providers.md) · [agentes](agentes.md) · [aprobaciones](aprobaciones.md) · [seguridad](seguridad.md) · [app-shell](app-shell.md) · [ajustes](../references/ajustes.md) · [datos](../references/datos.md) · [mensajes-ipc](../references/mensajes-ipc.md)
+[providers](providers.md) · [agents](agents.md) · [approvals](approvals.md) · [security](security.md) · [app-shell](app-shell.md) · [settings](../references/settings.md) · [data](../references/data.md) · [ipc-messages](../references/ipc-messages.md)

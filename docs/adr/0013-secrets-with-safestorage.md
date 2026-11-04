@@ -8,7 +8,7 @@ API keys and passwords are encrypted with `safeStorage` (DPAPI on Windows) befor
 
 ## Why
 
-Documented in the constitution (Clause V: secrets only encrypted, never in logs, audit, errors, fixtures or prompts) and in [CONTROLES.md](../security/CONTROLES.md) (encrypted at rest; SOC 2 CC6.1, ISO 27001 A.8.24). Why `safeStorage` over another store: Rationale not documented.
+Documented in the constitution (Clause V: secrets only encrypted, never in logs, audit, errors, fixtures or prompts) and in [CONTROLS.md](../security/CONTROLS.md) (encrypted at rest; SOC 2 CC6.1, ISO 27001 A.8.24). Why `safeStorage` over another store: Rationale not documented.
 
 ## Considered options
 

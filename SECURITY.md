@@ -1,24 +1,24 @@
-# Seguridad
+# Security
 
-## Cómo reportar una vulnerabilidad
+## How to report a vulnerability
 
-Escribí a **<correo de seguridad: completar>** con el asunto «Alma: vulnerabilidad», sin abrir un issue público. Incluí los pasos para reproducirla y la versión (`package.json`).
+Write to **<security email: to be filled in>** with the subject «Alma: vulnerabilidad», without opening a public issue. Include the steps to reproduce it and the version (`package.json`).
 
-- Confirmación de recepción: 2 días hábiles.
-- Evaluación y plan: 7 días.
-- Corrección de severidad alta o crítica: 30 días; el resto, en la siguiente versión.
+- Acknowledgement of receipt: 2 business days.
+- Assessment and plan: 7 days.
+- Fix for high or critical severity: 30 days; the rest, in the next version.
 
-## Alcance
+## Scope
 
-La aplicación de escritorio (`src/main`, `src/preload`, `src/coordinator`, `src/renderer`), sus herramientas y sus integraciones. No cubre vulnerabilidades de los servicios de terceros que Alma consume.
+The desktop application (`src/main`, `src/preload`, `src/coordinator`, `src/renderer`), its tools and its integrations. It does not cover vulnerabilities of the third-party services Alma consumes.
 
-## Qué hay hecho
+## What is already in place
 
-Mapa de controles contra SOC 2, ISO 27001 e ISO 27701: [docs/security/CONTROLES.md](docs/security/CONTROLES.md). Riesgos abiertos: [docs/security/RIESGOS.md](docs/security/RIESGOS.md). Datos personales y proveedores: [docs/security/PRIVACIDAD.md](docs/security/PRIVACIDAD.md).
+Map of controls against SOC 2, ISO 27001 and ISO 27701: [docs/security/CONTROLS.md](docs/security/CONTROLS.md). Open risks: [docs/security/RISKS.md](docs/security/RISKS.md). Personal data and providers: [docs/security/PRIVACY.md](docs/security/PRIVACY.md).
 
-## Si creés que una clave se filtró
+## If you think a key leaked
 
-1. Revocala en el panel del proveedor (Anthropic, xAI, Meta, etc.) y generá otra.
-2. En Alma → Configuración → Proveedores, borrá la clave vieja y cargá la nueva.
-3. Telegram: regenerá el token con @BotFather. WhatsApp: desvinculá el dispositivo desde el celular.
-4. Revisá la bitácora (`%APPDATA%\Alma\audit`) a partir de la fecha de la filtración.
+1. Revoke it in the provider's panel (Anthropic, xAI, Meta, etc.) and generate another.
+2. In Alma → «Configuración → Proveedores», delete the old key and load the new one.
+3. Telegram: regenerate the token with @BotFather. WhatsApp: unlink the device from the phone.
+4. Review the audit trail (`%APPDATA%\Alma\audit`) from the date of the leak.

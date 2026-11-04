@@ -1,11 +1,11 @@
 # Reference: settings
 
-Every field of the `Settings` model, grouped by section (the order of `Settings` in `src/shared/types.ts`). For each field: path, type, default, where the person changes it, and what it does. Module behavior lives in [docs/modules/configuraciones.md](../modules/configuraciones.md); this page is the lookup table.
+Every field of the `Settings` model, grouped by section (the order of `Settings` in `src/shared/types.ts`). For each field: path, type, default, where the person changes it, and what it does. Module behavior lives in [docs/modules/settings.md](../modules/settings.md); this page is the lookup table.
 
 - Sources: `src/shared/types.ts` (model), `src/shared/home.ts` (`HomeSettings`), `src/shared/defaults.ts` (`defaultSettings()`), `src/main/settings.ts` (load, migrations, sealing), `src/renderer/src/components/SettingsDialog.tsx` and `src/renderer/src/home/HomeSettings.tsx` (UI).
 - Spec: [006 · Configuraciones](../../.specify/specs/006-settings/spec.md).
-- "Tab" is the tab of the **Configuración** dialog (UI names are in Spanish and quoted). The dialog has 14 tabs: Proveedores, Agentes, Equipos, Aprobaciones, Telegram, WhatsApp, Mail, Voz, Imágenes, Instagram, Casa, Conectores MCP, General, Sonido y ambiente.
-- "sin interfaz" (no interface) means no control in the window edits it: the app or the coordinator writes it.
+- "Tab" is the tab of the «Configuración» dialog (UI names are in Spanish and quoted). The dialog has 14 tabs: «Proveedores», «Agentes», «Equipos», «Aprobaciones», «Telegram», «WhatsApp», «Mail», «Voz», «Imágenes», «Instagram», «Casa», «Conectores MCP», «General», «Sonido y ambiente».
+- «sin interfaz» (no interface) means no control in the window edits it: the app or the coordinator writes it.
 - **Secret** marks the sealed slots: written to disk as `enc:` + base64 (OS secure store), never sent to the window. See [Secrets](#secrets).
 
 ## File, load and save
@@ -47,7 +47,7 @@ Nine provider/service slots plus one per company. The coordinator receives them 
 | `email` | `providers.email.apiKey` (mailbox app password) | none (`fromEnv` is always false) | Mail |
 | per company | `companySecrets[companyId]` (company mailbox password) | none | Equipos (`settings:setCompanySecret`) |
 
-Other secrets that are not in `settings.json`: the Home Assistant token and the managed account password (sealed by the coordinator through `secret.seal`, stored in `home/auth.json`, see [datos.md](datos.md)); the Instagram session (browser partition, see [datos.md](datos.md)).
+Other secrets that are not in `settings.json`: the Home Assistant token and the managed account password (sealed by the coordinator through `secret.seal`, stored in `home/auth.json`, see [data.md](data.md)); the Instagram session (browser partition, see [data.md](data.md)).
 
 Rules (`src/main/settings.ts`):
 
@@ -61,14 +61,14 @@ Rules (`src/main/settings.ts`):
 
 | Path | Type | Default | Tab | What it changes |
 |---|---|---|---|---|
-| `defaultAgentId` | string | `'general'` | Agentes ("Usar por defecto") | Agent used for new chats, routines and channels whose own agent no longer exists |
+| `defaultAgentId` | string | `'general'` | Agentes («Usar por defecto») | Agent used for new chats, routines and channels whose own agent no longer exists |
 | `agents` | `AgentProfile[]` | the 9 default agents (below) | Agentes; company agents also in Equipos | The agent roster. Empty/absent on load restores the defaults |
 | `approvalMode` | `'needs-approval' \| 'auto-review' \| 'always-allow' \| 'blocked'` | `'needs-approval'` | Aprobaciones | Whether tools ask, are judged by a reviewer model, run freely, or are read-only. Moving to `always-allow` needs a native confirmation dialog ([spec 004](../../.specify/specs/004-approvals/spec.md)) |
 | `autoReview` | `{ provider, model, instructions }` | Meta (empty model = Muse Spark), `DEFAULT_REVIEW_INSTRUCTIONS`; saves from before move over once if a Meta key exists ([024](../../.specify/specs/024-voice-control-models-and-meta/spec.md)) | Aprobaciones (card "Auto-review") | Reviewer used in `auto-review` mode. Read by `src/coordinator/approval.ts` |
 | `alwaysAllowTools` | string[] | `[]` | Aprobaciones (card "Siempre permitir", remove only) | Tool names that skip approval. Added when the person picks "Siempre permitir" in an approval (`alwaysAllow` message) |
 | `mcpServers` | `Record<string, McpServerConfig>` | `{}` | Conectores MCP | External tool servers. Adding, changing or re-enabling a stdio command needs a native confirmation |
-| `defaultWorkspace` | string | `''` | General ("Carpeta de trabajo por defecto") | Working folder given to new chats, routines, channels |
-| `images` | `{ provider: 'xai' \| 'openai' \| 'meta'; model }` | `{ provider: 'meta', model: '' }` | Imágenes | Image generation service; empty model = newest one the account lists |
+| `defaultWorkspace` | string | `''` | General («Carpeta de trabajo por defecto») | Working folder given to new chats, routines, channels |
+| `images` | `{ provider: 'xai' \| 'openai' \| 'meta'; model }` | `{ provider: 'meta', model: '' }` | «Imágenes» | Image generation service; empty model = newest one the account lists |
 | `instagram` | `{ testMode }` | `{ testMode: true }` | Instagram | Test mode fills the post but never clicks "Compartir" |
 | `routines` | `Routine[]` | `[]` | no Settings tab: the "Rutinas" dialog (and agents through the routine tools) | Scheduled tasks and reminders |
 | `background` | `{ runInTray, launchAtLogin }` | `{ true, false }` | General | Keep running in the tray when the window closes; open at Windows login (with `--hidden`) |
@@ -102,7 +102,7 @@ See [Secrets](#secrets) for the keys. Only one non-secret field:
 
 ## `voice`
 
-Owner: [docs/modules/voz.md](../modules/voz.md). All edited in the **Voz** tab. Text inputs here save on every keystroke.
+Owner: [docs/modules/voice.md](../modules/voice.md). All edited in the **Voz** tab. Text inputs here save on every keystroke.
 
 | Path | Type | Default | Tab control | What it changes |
 |---|---|---|---|---|
@@ -127,7 +127,7 @@ Owner: [docs/modules/voz.md](../modules/voz.md). All edited in the **Voz** tab. 
 
 ## `email`
 
-Owner: [docs/modules/web-y-correo.md](../modules/web-y-correo.md). Edited in **Mail**; the password is the `email` secret slot. Leaving the address field with an empty IMAP host guesses the servers (`emailServersFor`, `src/shared/defaults.ts`). Each `Company` also has its own `email` object of the same shape.
+Owner: [docs/modules/web-and-mail.md](../modules/web-and-mail.md). Edited in **Mail**; the password is the `email` secret slot. Leaving the address field with an empty IMAP host guesses the servers (`emailServersFor`, `src/shared/defaults.ts`). Each `Company` also has its own `email` object of the same shape.
 
 | Path | Type | Default | What it changes |
 |---|---|---|---|
@@ -144,16 +144,16 @@ Owner: [docs/modules/whatsapp.md](../modules/whatsapp.md). Edited in **WhatsApp*
 | Path | Type | Default | What it changes |
 |---|---|---|---|
 | `whatsapp.enabled` | boolean | `false` | "Activar WhatsApp": starts the linked session (QR on first use) |
-| `whatsapp.agentId` | string | `'general'` | Agent that answers the person's "Mensajes para mí" chat |
+| `whatsapp.agentId` | string | `'general'` | Agent that answers the person's «Mensajes para mí» chat |
 | `whatsapp.threadId` | string \| null | `null` | sin interfaz. Conversation WhatsApp messages go to; `/nuevo` starts another |
 
 ## `home`
 
-Owner: [docs/modules/casa.md](../modules/casa.md). Edited in **Casa** (`HomeSettings.tsx`).
+Owner: [docs/modules/home.md](../modules/home.md). Edited in **Casa** (`HomeSettings.tsx`).
 
 | Path | Type | Default | Tab control | What it changes |
 |---|---|---|---|---|
-| `home.enabled` | boolean | `false` | "Activar la domótica" | Starts the home engine and exposes the home tools |
+| `home.enabled` | boolean | `false` | «Activar la domótica» | Starts the home engine and exposes the home tools |
 | `home.mode` | `'managed' \| 'external'` | `'managed'` | radios | `managed`: Alma installs Home Assistant in the hidden WSL2 distro `alma-home`; `external`: connect to one the person already has |
 | `home.externalUrl` | string | `''` | URL field (external mode) | Base URL of the external Home Assistant (token sealed in `home/auth.json`, never here) |
 | `home.mirrored` | boolean | `false` | none | **Dead setting**, see below |
@@ -219,11 +219,11 @@ Default agents (`DEFAULT_AGENTS`, `src/shared/defaults.ts`). The code ships **9*
 | `enabled` | boolean | On/off |
 | `action?` | `'task' \| 'reminder'` | Missing = `'task'`. A reminder only notifies (desktop and Telegram), no agent |
 
-Run history is not here: it is in `routines-state.json` ([datos.md](datos.md)).
+Run history is not here: it is in `routines-state.json` ([data.md](data.md)).
 
 ## `Company` and `CompanyMember` (items of `companies`)
 
-Owner: [docs/modules/empresas.md](../modules/empresas.md).
+Owner: [docs/modules/companies.md](../modules/companies.md).
 
 | Field | Type | What it changes |
 |---|---|---|
@@ -253,7 +253,7 @@ Owner: [docs/modules/empresas.md](../modules/empresas.md).
 
 | Setting | Where | Notes |
 |---|---|---|
-| "Sonidos de interfaz", "Música de fondo", "Volumen", "Fondo en movimiento" (tab Sonido y ambiente) | Browser `localStorage`, key `umbra.prefs` | Per window; the coordinator never sees them. Another key `ambience` belongs to unused code |
+| «Sonidos de interfaz», «Música de fondo», «Volumen», «Fondo en movimiento» (tab «Sonido y ambiente») | Browser `localStorage`, key `umbra.prefs` | Per window; the coordinator never sees them. Another key `ambience` belongs to unused code |
 | View state: `alma.mode`, `alma.company`, `alma.vault.chat`, `alma.vault.tabs:<vault>`, `alma.vault.expanded:<vault>`, `alma.vault.reading`, `alma.home.tab` | Browser `localStorage` | Last selected mode/company/tabs; safe to lose |
 | `ALMA_USER_DATA`, `ALMA_ALLOW_PLAINTEXT_SECRETS`, `ALMA_HOME_DISTRO` (default `alma-home`), `ALMA_HOME_DEMO`, `ALMA_INSTAGRAM_URL` | Environment | Read in `src/main/index.ts`, `src/main/settings.ts`, `src/coordinator/home/engine.ts`, `src/main/instagram.ts`. The last three are for tests and development |
 

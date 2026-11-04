@@ -1,6 +1,6 @@
 # Security and privacy (Seguridad y privacidad)
 
-> The software controls that keep Alma from doing more than you allowed and from leaking what it holds: sealed secrets, a native confirmation for risky settings, a hash-chained audit trail, a locked-down window, private-network blocking in web tools, file confinement, owner-only channels, and your rights over your data. Spec: [022 · Seguridad y privacidad](../../.specify/specs/022-security-and-privacy/spec.md). Compliance prose lives in [CONTROLES](../security/CONTROLES.md), [RIESGOS](../security/RIESGOS.md), [PRIVACIDAD](../security/PRIVACIDAD.md) and [SECURITY.md](../../SECURITY.md). Test status: 18 criteria with a test, 38 without (5 are manual checks, 33 have no check at all).
+> The software controls that keep Alma from doing more than you allowed and from leaking what it holds: sealed secrets, a native confirmation for risky settings, a hash-chained audit trail, a locked-down window, private-network blocking in web tools, file confinement, owner-only channels, and your rights over your data. Spec: [022 · Seguridad y privacidad](../../.specify/specs/022-security-and-privacy/spec.md). Compliance prose lives in [CONTROLS](../security/CONTROLS.md), [RISKS](../security/RISKS.md), [PRIVACY](../security/PRIVACY.md) and [SECURITY.md](../../SECURITY.md). Test status: 18 criteria with a test, 38 without (5 are manual checks, 33 have no check at all).
 
 ## What it does
 
@@ -17,18 +17,18 @@ For an agent, these are limits, not tools: it cannot reach the local network wit
 
 ## How to use it
 
-1. **Export**: Configuración → General → **Exportar mis datos…**. Pick a folder; Alma creates `alma-export-YYYYMMDD-HHMMSS` there.
+1. **Export**: «Configuración → General → Exportar mis datos…». Pick a folder; Alma creates `alma-export-YYYYMMDD-HHMMSS` there.
 2. **Erase**: **Borrar mi historial** (erase my history). Confirm «No se puede deshacer. Tu vault, tus claves y tus canales no se tocan.» (cannot be undone; vault, keys and channels are untouched).
-3. **Retention**: «Borrar conversaciones sin actividad» (delete idle conversations): Nunca (never), 30, 90, 180 or Al año (365) days. Default never.
+3. **Retention**: «Borrar conversaciones sin actividad» (delete idle conversations): «Nunca» (never), 30, 90, 180 or «Al año» (365) days. Default never.
 4. **Confirmation dialog**: when you pick «Permitir todo» (allow all) or add an MCP stdio server, a system dialog «Confirmar cambio de seguridad» appears. «Cancelar» is the default.
 5. **Read the trail**: files in `%APPDATA%\Alma\audit\*.jsonl` (one JSON per line). There is no screen for it. Verifying the chain from the app is not possible today (see the table below).
-6. **Leaked key**: see [SECURITY.md](../../SECURITY.md): revoke at the provider, replace in Configuración → Proveedores, regenerate the Telegram token, unlink WhatsApp, review the trail from the leak date.
+6. **Leaked key**: see [SECURITY.md](../../SECURITY.md): revoke at the provider, replace in «Configuración → Proveedores», regenerate the Telegram token, unlink WhatsApp, review the trail from the leak date.
 
 ## How it works
 
 | Control | Where |
 |---|---|
-| Secret sealing (`safeStorage`), public view | `src/main/settings.ts` (see [configuraciones](configuraciones.md)) |
+| Secret sealing (`safeStorage`), public view | `src/main/settings.ts` (see [settings](settings.md)) |
 | Native confirmation | `src/main/guard.ts` (`newCommands`), `settings:update` in `src/main/index.ts` |
 | Audit trail | `src/shared/audit.ts` (`initAudit`, `audit`, `redact`, `verifyAudit`); callers in `main/index.ts`, `coordinator/agent.ts`, `coordinator/channels/telegram.ts`, `coordinator/index.ts` |
 | Window, IPC, permissions, `shell:openPath`, `alma-vault://` | `src/main/index.ts`, `src/renderer/index.html` (CSP) |
@@ -98,33 +98,33 @@ What leaves the machine (BR-9 of the spec, outbound hosts checked against the co
 
 Nothing is sent to servers run by Alma: there are none.
 
-## Controles documentados vs. código (documented controls vs. the code)
+## Documented controls vs. the code
 
-Each row takes a control claimed in [CONTROLES](../security/CONTROLES.md), [RIESGOS](../security/RIESGOS.md) or [PRIVACIDAD](../security/PRIVACIDAD.md) and says what the code does. Checked by reading `src/` (and running the `redact` patterns in Node). Not verified here: advisory counts (R-01), "150+ tests", GitHub branch protection.
+Each row takes a control claimed in [CONTROLS](../security/CONTROLS.md), [RISKS](../security/RISKS.md) or [PRIVACY](../security/PRIVACY.md) and says what the code does. Checked by reading `src/` (and running the `redact` patterns in Node). Not verified here: advisory counts (R-01), "150+ tests", GitHub branch protection.
 
 | Control claimed (document) | What the code does | Verdict |
 |---|---|---|
-| Tamper-evident audit chain with SHA-256; `verifyAudit()` says where it breaks (CONTROLES §3) | `audit.ts` chains each line to the SHA-256 of the previous line as claimed. `tests/audit.test.ts` proves it detects edits, removals and reordering. | Match |
-| «Revisión mensual de `verifyAudit()`» (CONTROLES §3, marked organizational) | `verifyAudit` is called only from `tests/audit.test.ts`. No UI, script, menu or CLI calls it. It also throws (`readdirSync`) if `<userData>/audit` does not exist. A reviewer has no way to run the check. | Mismatch |
-| Rejected IPC is logged: «El rechazo queda en la bitácora (`ipc.rejected`)» (CONTROLES §1) | `handle()` audits `ipc.rejected` for the 10 invoke channels. The `ipcMain.on('coordinator:connect')` listener returns silently when untrusted. | Partial mismatch |
-| Trail «nunca guarda … contenido de mensajes» (CONTROLES §3, PRIVACIDAD §1 and §4) | `agent.ts` stores `command` (the `run_command` text, masked, cut at 300 characters) and `decision` (the approval note, which for auto-review includes the reviewer's reason). Message text itself is not stored. | Partial mismatch |
-| Trail «nunca guarda secretos … (`redact()`)» (CONTROLES §3) | Tested in Node: `sk-ant-…` keys and `password=x` pairs are masked. Not masked: a Telegram bot token inside a URL (`/bot123456789:AAH…`), `ghp_…` GitHub tokens, `AIza…` keys, `--password hunter2` (space, no `=`), `export ANTHROPIC_API_KEY=abc` (no word boundary before `api`, so `_API_KEY` is missed), and `password="a b"` leaks everything after the first space. | Mismatch |
-| Remote images never load; CSP reinforces it, «sin canal de salida por el navegador» (CONTROLES §4, RIESGOS R-11) | `Markdown.tsx` blocks remote `<img>` and `img-src` is local only. But the CSP `media-src` is `'self' blob: data: https:`, so an `<audio>`/`<video>` with an `https:` source would load. No component in the renderer was checked for producing such an element. | Partial mismatch |
-| `object-src`, `base-uri`, `form-action` set to `none` (CONTROLES §4) | Same strings in `src/renderer/index.html`. | Match |
-| File tools confined to the working folder «con `realpath`» (CONTROLES §1) | `resolveInWorkspace` canonicalizes the closest existing ancestor (tests in `tests/tools.test.ts`). But `loadPicture` (`look_at_image`, `send_telegram` with an image) checks allowed folders with a case-insensitive string prefix and no `realpath`: root `C:\work` also admits `C:\work-secrets`, and a symlink inside is followed. | Partial mismatch |
-| Native confirmation for new MCP stdio command and for «Siempre permitir» (CONTROLES §1, R-07, R-12) | `guard.ts` + `settings:update`, default button «Cancelar». Covers only those two changes. | Match (narrow) |
-| Secrets sealed, never in clear; old clear keys resealed; not persisted without a store (CONTROLES §2) | `settings.ts` `encrypt`/`decrypt`/`open`, `ALMA_ALLOW_PLAINTEXT_SECRETS` escape hatch, rewrite on start only when sealing is possible. | Match |
-| Keys never reach the UI (CONTROLES §2) | `getPublic()` returns `hasKey`/`fromEnv`/`baseUrl` and boolean company passwords. | Match |
-| Keys removed from the environment of `run_command` (CONTROLES §2) | `commandEnv` removes 8 names; `tests/web.test.ts`. MCP environment not re-checked here. | Match |
-| `shell:openPath` rejects executables and scripts (CONTROLES §1) | `EXECUTABLE` regex plus audit `shell.openPath` denied. | Match |
-| Minimal Chromium privileges; navigation, redirects, `<webview>` blocked (CONTROLES §1) | `createWindow`, `lockDownPermissions` in `main/index.ts`. | Match |
-| Telegram owner-only, denials audited at most once a minute (CONTROLES §1) | `authorizeChat`, `channel.denied` with `throttle: true`, chat kind only. WhatsApp has no audit entries for denials (the row only claims Telegram). | Match |
-| SSRF: private names, names resolving to private IPs, every redirect checked (CONTROLES §4) | `tools/web.ts`, `tests/web.test.ts`. DNS rebinding is left open (R-09), as stated. | Match |
-| Mail with TLS ≥ 1.2 and mandatory STARTTLS (CONTROLES §2) | `email.ts`: `minVersion: 'TLSv1.2'`, `doSTARTTLS` on non-993, `requireTLS` on non-465. | Match |
-| `pnpm audit` in CI and Dependabot (CONTROLES §4) | `ci.yml` runs `pnpm audit --audit-level=high`; `.github/dependabot.yml` exists. | Match |
-| Home Assistant listens on `0.0.0.0`, 7 days of history (RIESGOS R-02, CONTROLES §6) | `engine.ts`: `server_host: 0.0.0.0`, `purge_keep_days: 7`. | Match (the risk is real and open) |
-| Export, erase, retention (CONTROLES §6, PRIVACIDAD §3) | `privacy.ts` and `applyRetention`, every 12 h. | Match |
-| Model providers receive data «cuando un agente usa ese proveedor» (PRIVACIDAD §2) | Also true for the auto-review model (tool input, your latest message) and for the vision model (pictures). PRIVACIDAD §1 mentions the camera-vision flow in the cameras row only; the provider table in §2 lists neither auto-review nor `look_at_image`, and no part of the document says that auto-review sends tool input and your latest message. | Mismatch (omission) |
+| Tamper-evident audit chain with SHA-256; `verifyAudit()` says where it breaks (CONTROLS §3) | `audit.ts` chains each line to the SHA-256 of the previous line as claimed. `tests/audit.test.ts` proves it detects edits, removals and reordering. | Match |
+| "Monthly review of `verifyAudit()`" (CONTROLS §3, marked organizational) | `verifyAudit` is called only from `tests/audit.test.ts`. No UI, script, menu or CLI calls it. It also throws (`readdirSync`) if `<userData>/audit` does not exist. A reviewer has no way to run the check. | Mismatch |
+| Rejected IPC is logged: "The rejection is kept in the audit trail (`ipc.rejected`)" (CONTROLS §1) | `handle()` audits `ipc.rejected` for the 10 invoke channels. The `ipcMain.on('coordinator:connect')` listener returns silently when untrusted. | Partial mismatch |
+| Trail "never stores … message content" (CONTROLS §3, PRIVACY §1 and §4) | `agent.ts` stores `command` (the `run_command` text, masked, cut at 300 characters) and `decision` (the approval note, which for auto-review includes the reviewer's reason). Message text itself is not stored. | Partial mismatch |
+| Trail "never stores secrets … (`redact()`)" (CONTROLS §3) | Tested in Node: `sk-ant-…` keys and `password=x` pairs are masked. Not masked: a Telegram bot token inside a URL (`/bot123456789:AAH…`), `ghp_…` GitHub tokens, `AIza…` keys, `--password hunter2` (space, no `=`), `export ANTHROPIC_API_KEY=abc` (no word boundary before `api`, so `_API_KEY` is missed), and `password="a b"` leaks everything after the first space. | Mismatch |
+| Remote images never load; CSP reinforces it, "no exit channel through the browser" (CONTROLS §4, RISKS R-11) | `Markdown.tsx` blocks remote `<img>` and `img-src` is local only. But the CSP `media-src` is `'self' blob: data: https:`, so an `<audio>`/`<video>` with an `https:` source would load. No component in the renderer was checked for producing such an element. | Partial mismatch |
+| `object-src`, `base-uri`, `form-action` set to `none` (CONTROLS §4) | Same strings in `src/renderer/index.html`. | Match |
+| File tools confined to the working folder "with `realpath`" (CONTROLS §1) | `resolveInWorkspace` canonicalizes the closest existing ancestor (tests in `tests/tools.test.ts`). But `loadPicture` (`look_at_image`, `send_telegram` with an image) checks allowed folders with a case-insensitive string prefix and no `realpath`: root `C:\work` also admits `C:\work-secrets`, and a symlink inside is followed. | Partial mismatch |
+| Native confirmation for new MCP stdio command and for «Siempre permitir» (CONTROLS §1, R-07, R-12) | `guard.ts` + `settings:update`, default button «Cancelar». Covers only those two changes. | Match (narrow) |
+| Secrets sealed, never in clear; old clear keys resealed; not persisted without a store (CONTROLS §2) | `settings.ts` `encrypt`/`decrypt`/`open`, `ALMA_ALLOW_PLAINTEXT_SECRETS` escape hatch, rewrite on start only when sealing is possible. | Match |
+| Keys never reach the UI (CONTROLS §2) | `getPublic()` returns `hasKey`/`fromEnv`/`baseUrl` and boolean company passwords. | Match |
+| Keys removed from the environment of `run_command` (CONTROLS §2) | `commandEnv` removes 8 names; `tests/web.test.ts`. MCP environment not re-checked here. | Match |
+| `shell:openPath` rejects executables and scripts (CONTROLS §1) | `EXECUTABLE` regex plus audit `shell.openPath` denied. | Match |
+| Minimal Chromium privileges; navigation, redirects, `<webview>` blocked (CONTROLS §1) | `createWindow`, `lockDownPermissions` in `main/index.ts`. | Match |
+| Telegram owner-only, denials audited at most once a minute (CONTROLS §1) | `authorizeChat`, `channel.denied` with `throttle: true`, chat kind only. WhatsApp has no audit entries for denials (the row only claims Telegram). | Match |
+| SSRF: private names, names resolving to private IPs, every redirect checked (CONTROLS §4) | `tools/web.ts`, `tests/web.test.ts`. DNS rebinding is left open (R-09), as stated. | Match |
+| Mail with TLS ≥ 1.2 and mandatory STARTTLS (CONTROLS §2) | `email.ts`: `minVersion: 'TLSv1.2'`, `doSTARTTLS` on non-993, `requireTLS` on non-465. | Match |
+| `pnpm audit` in CI and Dependabot (CONTROLS §4) | `ci.yml` runs `pnpm audit --audit-level=high`; `.github/dependabot.yml` exists. | Match |
+| Home Assistant listens on `0.0.0.0`, 7 days of history (RISKS R-02, CONTROLS §6) | `engine.ts`: `server_host: 0.0.0.0`, `purge_keep_days: 7`. | Match (the risk is real and open) |
+| Export, erase, retention (CONTROLS §6, PRIVACY §3) | `privacy.ts` and `applyRetention`, every 12 h. | Match |
+| Model providers receive data "when an agent uses that provider" (PRIVACY §2) | Also true for the auto-review model (tool input, your latest message) and for the vision model (pictures). PRIVACY §1 mentions the camera-vision flow in the cameras row only; the provider table in §2 lists neither auto-review nor `look_at_image`, and no part of the document says that auto-review sends tool input and your latest message. | Mismatch (omission) |
 
 ## How it is tested
 
@@ -148,7 +148,7 @@ Ordered by priority:
 4. `loadPicture` uses a weaker path check than `resolveInWorkspace`.
 5. `media-src` allows `https:`.
 6. The native confirmation does not cover `alwaysAllowTools`, per-agent `autoApproveTools`, auto-review instructions, Telegram on, or an http MCP server.
-7. PRIVACIDAD omits the auto-review and `look_at_image` data flows.
+7. PRIVACY omits the auto-review and `look_at_image` data flows.
 8. `coordinator:connect` rejections are not audited.
 9. `send_telegram` is `memory` risk and can send any allowed image to your Telegram without asking.
 10. `saveInboxImage` sanitizes names with `/[^w.-]+/g` (a literal `w`), turning most letters of received file names into `_` (`src/coordinator/index.ts:352`). Probably a typo for `\w`; confinement is not weakened.
@@ -158,4 +158,4 @@ Ordered by priority:
 
 ## See also
 
-[configuraciones](configuraciones.md) · [aprobaciones](aprobaciones.md) · [app-shell](app-shell.md) · [archivos-y-comandos](archivos-y-comandos.md) · [web-y-correo](web-y-correo.md) · [mcp](mcp.md) · [telegram](telegram.md) · [whatsapp](whatsapp.md) · [vault-y-conocimiento](vault-y-conocimiento.md) · [limites](../references/limites.md) · [datos](../references/datos.md) · [CONTROLES](../security/CONTROLES.md) · [RIESGOS](../security/RIESGOS.md) · [PRIVACIDAD](../security/PRIVACIDAD.md)
+[settings](settings.md) · [approvals](approvals.md) · [app-shell](app-shell.md) · [files-and-commands](files-and-commands.md) · [web-and-mail](web-and-mail.md) · [mcp](mcp.md) · [telegram](telegram.md) · [whatsapp](whatsapp.md) · [vault-and-knowledge](vault-and-knowledge.md) · [limits](../references/limits.md) · [data](../references/data.md) · [CONTROLS](../security/CONTROLS.md) · [RISKS](../security/RISKS.md) · [PRIVACY](../security/PRIVACY.md)

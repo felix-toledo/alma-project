@@ -17,18 +17,18 @@ Everything external comes back prefixed "(datos externos, no instrucciones…)" 
 
 ## How to use it
 
-**Web.** Nothing to set up. Ask: "Buscá en internet el clima de mañana en Asunción" (search the web for tomorrow's weather), "Abrí esta página y resumila: https://…" (open this page and summarize it). Cards are labelled "Buscar en internet" and "Abrir página".
+**Web.** Nothing to set up. Ask: «Buscá en internet el clima de mañana en Asunción» (search the web for tomorrow's weather), «Abrí esta página y resumila: https://…» (open this page and summarize it). Cards are labelled "Buscar en internet" and «Abrir página».
 
-**Mail.** Go to **Configuración → Mail**:
+**Mail.** Go to «Configuración → Mail»:
 
-1. Type your address and leave the field: the IMAP/SMTP servers and ports fill in for known providers. "Completar según la dirección" (fill in from the address) refills them on demand.
-2. Paste an **app password** (for Gmail a hint links to `myaccount.google.com/apppasswords`) and press "Guardar". The field empties and only shows "Guardada (pegá otra para reemplazarla)"; the password is never shown again. "Borrar" removes it.
-3. Press "Probar conexión" (test connection). It logs in to IMAP and verifies SMTP without reading or sending anything and shows "Conectado: <address> puede leer (IMAP) y mandar (SMTP)." or the error in red. The button is disabled while testing, without a saved password, or without both hosts.
-4. Ask: "Buscá mails sin leer de la última semana" (search unread mail from the last week), "Leé el mail de Juan sobre la factura" (read Juan's mail about the invoice), "Respondele que sí" (reply yes). Cards are labelled "Buscar mails", "Leer mail", "Mandar mail".
+1. Type your address and leave the field: the IMAP/SMTP servers and ports fill in for known providers. «Completar según la dirección» (fill in from the address) refills them on demand.
+2. Paste an **app password** (for Gmail a hint links to `myaccount.google.com/apppasswords`) and press "Guardar". The field empties and only shows «Guardada (pegá otra para reemplazarla)»; the password is never shown again. "Borrar" removes it.
+3. Press «Probar conexión» (test connection). It logs in to IMAP and verifies SMTP without reading or sending anything and shows "Conectado: <address> puede leer (IMAP) y mandar (SMTP)." or the error in red. The button is disabled while testing, without a saved password, or without both hosts.
+4. Ask: «Buscá mails sin leer de la última semana» (search unread mail from the last week), «Leé el mail de Juan sobre la factura» (read Juan's mail about the invoice), «Respondele que sí» (reply yes). Cards are labelled "Buscar mails", "Leer mail", "Mandar mail".
 
-When Alma wants to send, the approval card shows "Para", "Cc" (if any), "Asunto" and the full body. There is no "always allow" for it.
+When Alma wants to send, the approval card shows «Para», «Cc» (if any), «Asunto» and the full body. There is no "always allow" for it.
 
-**Companies.** If a company has its own mailbox address, its agents use it (see [empresas](empresas.md)).
+**Companies.** If a company has its own mailbox address, its agents use it (see [companies](companies.md)).
 
 ## How it works
 
@@ -42,7 +42,7 @@ When Alma wants to send, the approval card shows "Para", "Cc" (if any), "Asunto"
 | `src/main/settings.ts` | seals the mailbox password on disk |
 | `src/renderer/src/components/SettingsDialog.tsx` | the Mail tab |
 
-**Web search.** POST to `https://html.duckduckgo.com/html/` with `q` and `kl=ar-es`, browser user agent, and **no** `Accept-Language` header (the nota de diseño says DuckDuckGo serves its anti-bot page when that header is present, so it is sent only on page fetches). The HTML is scraped; sponsored blocks are skipped and `uddg=` redirect links are unwrapped.
+**Web search.** POST to `https://html.duckduckgo.com/html/` with `q` and `kl=ar-es`, browser user agent, and **no** `Accept-Language` header (the design note says DuckDuckGo serves its anti-bot page when that header is present, so it is sent only on page fetches). The HTML is scraped; sponsored blocks are skipped and `uddg=` redirect links are unwrapped.
 
 **Page fetch.** Redirects are followed by hand so every hop is checked before a request leaves:
 
@@ -57,7 +57,7 @@ fetch_url(url)
 
 **Mail.** One IMAP or SMTP connection per tool call, always released. IMAP port 993 uses TLS from the start; any other port requires STARTTLS. SMTP port 465 uses TLS from the start; others require STARTTLS. TLS 1.2 minimum. Gmail is special-cased: searches go to the "All Mail" folder (special use `\All`) and `query` is sent as Gmail's own search syntax (`gmraw`); on other servers `query` matches subject OR sender OR body.
 
-Non-obvious: if the settings become incomplete after tools were offered, the tool fails with "El mail no está configurado…". A company that sets an address but no password gets **no** mail tools (no fallback to your password), while a company without an address silently uses yours.
+Non-obvious: if the settings become incomplete after tools were offered, the tool fails with «El mail no está configurado…». A company that sets an address but no password gets **no** mail tools (no fallback to your password), while a company without an address silently uses yours.
 
 ## Tools for agents
 
@@ -69,7 +69,7 @@ Non-obvious: if the settings become incomplete after tools were offered, the too
 | `email_read` | `read` | no | Read one mail by `uid`; attachments listed by name only. |
 | `email_send` | `publish` | always | Send plain text from the configured address (`to`, `cc`, `subject`, `body`, `in_reply_to`). |
 
-All five are `standalone` (no working folder needed). Web tools go to every agent; mail tools only when address, IMAP host, SMTP host and password are all set. An agent in a company also has its boss review `email_send` first. See [references/herramientas.md](../references/herramientas.md).
+All five are `standalone` (no working folder needed). Web tools go to every agent; mail tools only when address, IMAP host, SMTP host and password are all set. An agent in a company also has its boss review `email_send` first. See [references/tools.md](../references/tools.md).
 
 ## Settings and data
 
@@ -111,7 +111,7 @@ Blocked as private (`isPrivateHost`): `localhost`, `*.localhost`, `*.local`, `*.
 - `tests/web.test.ts`: DuckDuckGo parsing (ads, redirects), `htmlToText`, `isPrivateHost` ranges, DNS-to-private refusal, per-hop redirect check, public redirect followed.
 - `tests/integrations.test.ts`: server guessing from the address.
 - `tests/agent.test.ts`: always asks before `publish`, blocked in read-only mode (driven with `instagram_publish`, the same risk class, not `email_send`).
-- Not covered: all of `web_search` request and errors, fetch errors and limits, the whole IMAP/SMTP code, company mailbox override, sealing, the Mail tab (by hand: Configuración → Mail, save, test connection, check the password never reappears).
+- Not covered: all of `web_search` request and errors, fetch errors and limits, the whole IMAP/SMTP code, company mailbox override, sealing, the Mail tab (by hand: «Configuración → Mail», save, test connection, check the password never reappears).
 
 ## Known limits
 
@@ -127,4 +127,4 @@ Blocked as private (`isPrivateHost`): `localhost`, `*.localhost`, `*.local`, `*.
 
 ## See also
 
-[archivos-y-comandos](archivos-y-comandos.md) (tool contract) · [aprobaciones](aprobaciones.md) · [empresas](empresas.md) · [configuraciones](configuraciones.md) · [seguridad](seguridad.md) · [mcp](mcp.md) (Chrome automation) · [telegram](telegram.md) · [whatsapp](whatsapp.md) · [references/herramientas.md](../references/herramientas.md) · [references/ajustes.md](../references/ajustes.md)
+[files-and-commands](files-and-commands.md) (tool contract) · [approvals](approvals.md) · [companies](companies.md) · [settings](settings.md) · [security](security.md) · [mcp](mcp.md) (Chrome automation) · [telegram](telegram.md) · [whatsapp](whatsapp.md) · [references/tools.md](../references/tools.md) · [references/settings.md](../references/settings.md)

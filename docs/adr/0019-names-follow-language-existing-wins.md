@@ -1,12 +1,12 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Names Alma writes follow the language; an existing name always wins
 
-Alma writes files and folders with fixed names (`Alma/Recuerdos.md`, `Alma/Conocimientos/`, `Reuniones/…`, `biblioteca/`, `paletas.json`, `recetas.json`, the frontmatter key `origen: ia`). With the app language changing live ([spec 025](../../.specify/specs/025-i18n-es-en/spec.md) BR-23), these names follow `language` for new files only. When Alma reads or writes, if a file or folder exists under either language's name, that one is used and nothing is renamed or duplicated; if both exist the current language's is used; only when none exists is it created under the current language's name. The human chose that names follow the language and delegated the rule for existing files ("fijate entonces que conviene en esto").
+Alma writes files and folders with fixed names (`Alma/Recuerdos.md`, `Alma/Conocimientos/`, `Reuniones/…`, `biblioteca/`, `paletas.json`, `recetas.json`, the frontmatter key `origen: ia`). With the app language changing live ([spec 025](../../.specify/specs/025-i18n-es-en/spec.md) BR-23), these names follow `language` for new files only. When Alma reads or writes, if a file or folder exists under either language's name, that one is used and nothing is renamed or duplicated; if both exist the current language's is used; only when none exists is it created under the current language's name. The human chose that names follow the language and delegated the rule for existing files («fijate entonces que conviene en esto»).
 
-Status is `proposed`: it becomes `accepted` once the rule is in the code.
+Status is `accepted`: the rule is in the code (`src/shared/i18n/names.ts`, the knowledge base, the compose library, the meeting minutes and the names of new notes and drawings) and tested in `tests/i18n-names.test.ts`.
 
 ## Why
 

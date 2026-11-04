@@ -5,7 +5,7 @@
 ## What it does
 
 - The person keeps several **agent profiles** and picks one per conversation (or per channel, routine or house rule). Alma ships nine.
-- An agent works through tools (files, commands, Office, images, web, vault, routines, house, mail, MCP...), asking the person first when the approval policy says so ([aprobaciones](aprobaciones.md)).
+- An agent works through tools (files, commands, Office, images, web, vault, routines, house, mail, MCP...), asking the person first when the approval policy says so ([approvals](approvals.md)).
 - A profile with "may delegate" can hand independent subtasks to other profiles with `delegate_task`. The sub-agents run at the same time, each with its own history, and return their final text. Sub-agents cannot delegate again.
 - The person can stop a run at any time, and a conversation whose app closed mid-action stays usable.
 - Each turn the agent is told where it is (working folder, shell, local date and time), and receives memories and the vault fragments closest to the latest message.
@@ -13,13 +13,13 @@
 ## How to use it
 
 - **Pick an agent**: the "Agente" selector in the chat header; it applies from the next message. New chats use the default agent (`general`).
-- **Edit agents**: Configuración → Agentes (`AgentsTab` in `SettingsDialog.tsx`). The list shows non-company agents with the provider name and "· por defecto" ("· default") on the default one.
+- **Edit agents**: «Configuración → Agentes» (`AgentsTab` in `SettingsDialog.tsx`). The list shows non-company agents with the provider name and «· por defecto» ("· default") on the default one.
   - "+ Nuevo agente" creates "Nuevo agente": Anthropic, first Claude model, effort `medium`, tools `read_file`, `list_dir`, `search_files`, MCP off, no delegation.
   - Editing any field enables "Guardar cambios" (save) and "Descartar" (discard).
   - Changing the provider resets the model (first Claude model for Anthropic, empty for the others). The refresh button next to the model field fetches the provider's model list.
-  - The group "Sin pedir aprobación (para este agente)" ("No approval needed (for this agent)") offers only the agent's checked tools that are not read-only and not `instagram_publish`.
-  - "Usar por defecto" (use as default) sets the default. "Borrar" (delete) asks "¿Borrar el agente «…»?" and is disabled for the default agent and when only one agent exists.
-- **Ask for delegation** in chat with the `general`, `grok`, `deepseek` or `vercel` agent: "Investigá estas tres carpetas en paralelo y haceme un resumen" (research these three folders in parallel and give me a summary).
+  - The group «Sin pedir aprobación (para este agente)» ("No approval needed (for this agent)") offers only the agent's checked tools that are not read-only and not `instagram_publish`.
+  - "Usar por defecto" (use as default) sets the default. "Borrar" (delete) asks «¿Borrar el agente …?» and is disabled for the default agent and when only one agent exists.
+- **Ask for delegation** in chat with the `general`, `grok`, `deepseek` or `vercel` agent: «Investigá estas tres carpetas en paralelo y haceme un resumen» (research these three folders in parallel and give me a summary).
 
 Default profiles (`src/shared/defaults.ts`; the spec's summary says ten but the code, and the spec's own BR-1, have nine):
 
@@ -57,7 +57,7 @@ startRun -> pick profile (thread.agentId, else first agent) -> runAgent(profile,
      else Promise.all(executeTool(...)) -> one user message of tool_result blocks, persist
 ```
 
-`executeTool` order: aborted? ("Cancelado por el usuario.") → tool not offered? → `delegate_task`? → validate input with Zod (`INVALID_JSON` error result) → no working folder for a non-`standalone` built-in? (error, no approval asked) → `authorize` ([aprobaciones](aprobaciones.md)) → run → `tool.state` events and an audit entry for every non-`read` call. Settings are re-read after the approval wait, so changes made while waiting apply.
+`executeTool` order: aborted? («Cancelado por el usuario.») → tool not offered? → `delegate_task`? → validate input with Zod (`INVALID_JSON` error result) → no working folder for a non-`standalone` built-in? (error, no approval asked) → `authorize` ([approvals](approvals.md)) → run → `tool.state` events and an audit entry for every non-`read` call. Settings are re-read after the approval wait, so changes made while waiting apply.
 
 Delegation (`delegate`): the sub-agent's run is stored in `thread.subagents[<tool call id>]`, starts with only its `task` as a message, uses its own profile (provider, model, tools, no-approval list) and shares the parent's folder, abort signal, approval broker, vault, MCP, settings and channels. Its approvals carry the sub-agent id. `delegate_task` is offered only when the run is top level (depth 0), the profile has `canDelegate`, it is not a company run, and at least one other non-company agent exists. The tool description lists those agents with id, name and description.
 
@@ -75,7 +75,7 @@ Which agent runs a conversation: the thread's `agentId`; if that no longer exist
 |---|---|---|---|
 | `delegate_task` (`agent`, `title`, `task`) | none (handled in the loop) | no | run another profile as a sub-agent and get its final text |
 
-Built-in tools a profile can list (`BUILTIN_TOOLS`): `read_file`, `list_dir`, `search_files`, `write_file`, `edit_file`, `run_command`, `office_read`, `office_create`, `office_edit`, `generate_image`, `compose_image`, `instagram_publish`. Names that match nothing are ignored. Risk of each tool: [references/herramientas.md](../references/herramientas.md).
+Built-in tools a profile can list (`BUILTIN_TOOLS`): `read_file`, `list_dir`, `search_files`, `write_file`, `edit_file`, `run_command`, `office_read`, `office_create`, `office_edit`, `generate_image`, `compose_image`, `instagram_publish`. Names that match nothing are ignored. Risk of each tool: [references/tools.md](../references/tools.md).
 
 ## Settings and data
 
@@ -84,7 +84,7 @@ Built-in tools a profile can list (`BUILTIN_TOOLS`): `read_file`, `list_dir`, `s
 | `agents` | the nine profiles above | in `settings.json`; older files are migrated: Office tools added once, Multimedia added once (stays deleted if deleted later), `compose_image` added where `generate_image` exists |
 | `defaultAgentId` | `general` | cannot be deleted from the editor |
 
-Conversations, `subagents` and `toolStates` live in the thread store ([chat](chat.md)). Settings details: [configuraciones](configuraciones.md), [references/ajustes.md](../references/ajustes.md).
+Conversations, `subagents` and `toolStates` live in the thread store ([chat](chat.md)). Settings details: [settings](settings.md), [references/settings.md](../references/settings.md).
 
 ## Limits and rules
 
@@ -128,4 +128,4 @@ Also: the spec's summary says "ten" default profiles; there are nine.
 
 ## See also
 
-[chat](chat.md) · [aprobaciones](aprobaciones.md) · [providers](providers.md) · [configuraciones](configuraciones.md) · [empresas](empresas.md) · [mcp](mcp.md) · [vault-y-conocimiento](vault-y-conocimiento.md) · [archivos-y-comandos](archivos-y-comandos.md) · [references/herramientas.md](../references/herramientas.md) · [references/limites.md](../references/limites.md)
+[chat](chat.md) · [approvals](approvals.md) · [providers](providers.md) · [settings](settings.md) · [companies](companies.md) · [mcp](mcp.md) · [vault-and-knowledge](vault-and-knowledge.md) · [files-and-commands](files-and-commands.md) · [references/tools.md](../references/tools.md) · [references/limits.md](../references/limits.md)

@@ -1,4 +1,4 @@
-/* Tailwind v4: los tokens se mapean acá (equivale al tailwind.config) */
+/* Tailwind v4: the tokens are mapped here (the equivalent of tailwind.config) */
 @theme inline {
   --color-base: var(--bg-base);
   --color-elevated: var(--bg-elevated);

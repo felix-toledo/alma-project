@@ -8,7 +8,7 @@ The **House** (Casa) feature uses Home Assistant (HA) as its engine. Alma instal
 
 ## Why
 
-From [DOMOTICA-PLAN.md](../DOMOTICA-PLAN.md) section 2 and the design note "home-automation-design": maximum device compatibility (Tuya, eWeLink, Tapo/ONVIF, Hue, Chromecast and anything HA supports) without making the installer depend on a separate HA box. Excalidraw drawings and photos are only **inputs** to the plan; the view is Alma's own plan so it can be edited by dragging and by agents. Simple rules become HA automations (reliable, no tokens); rules needing judgment wake an agent with the event. HA is Python, an explicit exception to the "no Python" rule of [ADR 0008](0008-voice-in-js-on-onnxruntime.md), isolated inside WSL.
+From [HOME-AUTOMATION-PLAN.md](../HOME-AUTOMATION-PLAN.md) section 2 and the design note "home-automation-design": maximum device compatibility (Tuya, eWeLink, Tapo/ONVIF, Hue, Chromecast and anything HA supports) without making the installer depend on a separate HA box. Excalidraw drawings and photos are only **inputs** to the plan; the view is Alma's own plan so it can be edited by dragging and by agents. Simple rules become HA automations (reliable, no tokens); rules needing judgment wake an agent with the event. HA is Python, an explicit exception to the "no Python" rule of [ADR 0008](0008-voice-in-js-on-onnxruntime.md), isolated inside WSL.
 
 ## Considered options
 
@@ -19,7 +19,7 @@ Named in DOMOTICA-PLAN section 4.1: **Plan B**, a minimal Ubuntu distro with `uv
 - Windows 10/11 with WSL2 and virtualization only; other platforms are `unsupported`. Install needs 6.5 GB free (about 1.2 GB download, about 3 GB on disk, 4 to 10 minutes first time, about 30 s later starts).
 - With NAT, LAN discovery (mDNS/SSDP) does not work: brands are added by account, cloud or IP.
 - The engine stops when Alma quits, so HA rules do not run then.
-- HA listens on `0.0.0.0` inside WSL; with WSL mirrored networking it could be exposed to the LAN (R-02 in [RIESGOS.md](../security/RIESGOS.md), open).
+- HA listens on `0.0.0.0` inside WSL; with WSL mirrored networking it could be exposed to the LAN (R-02 in [RISKS.md](../security/RISKS.md), open).
 - The plan promised a 30 s health check with automatic restart; the code only recovers when the HA process exits.
 - `home_call_service` is a general back door and does not guard garage/gate covers; scenes can set locks without asking.
 - Downloads come from GitHub (`crane`, SonoffLAN) and `ghcr.io` (HA image); the HA token and owner password are sealed with `safeStorage` ([ADR 0013](0013-secrets-with-safestorage.md)).

@@ -1,6 +1,6 @@
 # Reference: messages between layers
 
-The contracts between the three processes: renderer (window), main (Electron) and coordinator (utility process). Grouped by hop, in the order a message travels. Layers and rules: [docs/architecture.md](../architecture.md). Window shell and security gates: [docs/modules/app-shell.md](../modules/app-shell.md) and [docs/modules/seguridad.md](../modules/seguridad.md). Specs: [023 · App shell](../../.specify/specs/023-app-shell-and-ui/spec.md), [006 · Configuraciones](../../.specify/specs/006-settings/spec.md), [022 · Seguridad](../../.specify/specs/022-security-and-privacy/spec.md).
+The contracts between the three processes: renderer (window), main (Electron) and coordinator (utility process). Grouped by hop, in the order a message travels. Layers and rules: [docs/architecture.md](../architecture.md). Window shell and security gates: [docs/modules/app-shell.md](../modules/app-shell.md) and [docs/modules/security.md](../modules/security.md). Specs: [023 · App shell](../../.specify/specs/023-app-shell-and-ui/spec.md), [006 · Configuraciones](../../.specify/specs/006-settings/spec.md), [022 · Seguridad](../../.specify/specs/022-security-and-privacy/spec.md).
 
 ```
 renderer ──window.desktop (preload)──┬─ ipcRenderer.invoke ──► main        (settings, dialogs, Instagram, shell)
@@ -72,7 +72,7 @@ All `ipcMain.handle` channels go through `handle()` in `src/main/index.ts`, whic
 | `instagram:connect` | none | `{ connected }` | Opens Instagram's login in an app window; resolves when it closes; audits `instagram.connect` | |
 | `instagram:disconnect` | none | `{ connected }` | Clears the partition storage; audits `instagram.disconnect` | |
 | `dialog:pickFolder` | none | `string \| null` | Native folder picker | |
-| `shell:openPath` | `path: string` | `''` or error text | Opens a folder or document with the OS. Refuses non-string, relative or missing paths ("La ruta no existe.") and files with executable or script extensions ("Alma no abre programas ni scripts.", audit `shell.openPath` denied) | |
+| `shell:openPath` | `path: string` | `''` or error text | Opens a folder or document with the OS. Refuses non-string, relative or missing paths («La ruta no existe.») and files with executable or script extensions ("Alma no abre programas ni scripts.", audit `shell.openPath` denied) | |
 | `vault:defaultPath` | none | `string` | `Documents\Alma\Vault` | |
 
 ### Fire-and-forget channel (renderer to main)
@@ -107,7 +107,7 @@ The field `kind` is reserved by the envelope: `vault.create` therefore names its
 | Method | Payload | Result | What it does |
 |---|---|---|---|
 | `threads.list` | none | `ThreadSummary[]` | All conversations, newest first |
-| `threads.get` | `threadId` | `Thread` | One full conversation; error "La conversación no existe." |
+| `threads.get` | `threadId` | `Thread` | One full conversation; error «La conversación no existe.» |
 | `threads.create` | `agentId, workspace` | `Thread` | New conversation; broadcasts `thread.updated` |
 | `threads.update` | `threadId, title?, agentId?, workspace?` | `ThreadSummary` | Rename, change agent or folder |
 | `threads.delete` | `threadId` | `null` | Aborts the run if any, deletes the file |
@@ -134,11 +134,11 @@ The field `kind` is reserved by the envelope: `vault.create` therefore names its
 | Method | Payload | Result | What it does |
 |---|---|---|---|
 | `routines.state` | none | `Record<id, RoutineState>` | Run history snapshot |
-| `routines.runNow` | `routineId` | thread id or `null` | Runs a task now; a reminder only notifies and is not "used up"; unknown id throws "La rutina no existe." |
+| `routines.runNow` | `routineId` | thread id or `null` | Runs a task now; a reminder only notifies and is not "used up"; unknown id throws «La rutina no existe.» |
 
 ### Vault and knowledge
 
-Paths are vault-relative; `activeVault()` throws "No hay un vault abierto." when none is open.
+Paths are vault-relative; `activeVault()` throws «No hay un vault abierto.» when none is open.
 
 | Method | Payload | Result | What it does |
 |---|---|---|---|
@@ -298,6 +298,6 @@ Reply: `{ ok: boolean, message: string }`; for `secret.*` the result text is in 
 - No timeout on renderer requests or on host requests.
 - Text inputs in Mail and Voice call `settings:update` on every keystroke.
 
-See also: [ajustes.md](ajustes.md), [datos.md](datos.md), [docs/modules/configuraciones.md](../modules/configuraciones.md), [docs/modules/aprobaciones.md](../modules/aprobaciones.md), [docs/modules/voz.md](../modules/voz.md), [docs/modules/casa.md](../modules/casa.md), [docs/modules/empresas.md](../modules/empresas.md), [docs/modules/vault-y-conocimiento.md](../modules/vault-y-conocimiento.md).
+See also: [settings.md](settings.md), [data.md](data.md), [docs/modules/settings.md](../modules/settings.md), [docs/modules/approvals.md](../modules/approvals.md), [docs/modules/voice.md](../modules/voice.md), [docs/modules/home.md](../modules/home.md), [docs/modules/companies.md](../modules/companies.md), [docs/modules/vault-and-knowledge.md](../modules/vault-and-knowledge.md).
 
 Written by hand from the code; when you add a row, verify the name in the code

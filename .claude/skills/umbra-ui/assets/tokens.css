@@ -1,6 +1,6 @@
 /* ============================================================
    UMBRA — design tokens
-   Fuente de verdad. Tailwind los expone en index.css (@theme).
+   Source of truth. Tailwind exposes them in index.css (@theme).
    ============================================================ */
 :root {
   /* Color · fondos */
@@ -20,9 +20,9 @@
   --text-on-accent: #ffffff;
 
   /* Color · acentos */
-  --accent: #5b9bff; /* azul eléctrico suave: texto/iconos/halo */
+  --accent: #5b9bff; /* soft electric blue: text/icons/halo */
   --accent-solid: #2f6bff; /* rellenos con texto blanco (4.6:1) */
-  --accent-warm: #ffb347; /* ámbar de las partículas */
+  --accent-warm: #ffb347; /* amber of the particles */
   --focus-ring: #e8f0ff;
 
   /* Color · estados */
@@ -30,7 +30,7 @@
   --warning: #fbbf24;
   --danger: #ff6b6b;
 
-  /* Tipografía */
+  /* Typography */
   --font-sans: 'Outfit Variable', 'Inter', system-ui, sans-serif;
   --fs-display: 4.5rem;
   --fs-title: 2rem;
@@ -66,7 +66,7 @@
   --bw: 1px;
   --touch-min: 44px;
 
-  /* Elevación = glow, no sombras duras */
+  /* Elevation = glow, not hard shadows */
   --glow-soft: 0 0 24px rgb(91 155 255 / 0.25);
   --glow-focus: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--focus-ring), 0 0 36px rgb(91 155 255 / 0.55);
   --glow-warm: 0 0 28px rgb(255 179 71 / 0.35);

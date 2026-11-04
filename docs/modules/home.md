@@ -26,26 +26,26 @@ The document has two halves inside the standard sections: **Part A, engine and d
 
 ## How to use it
 
-**Turn it on.** Settings → Casa: tick "Activar la domótica" ("Turn on home automation", default off). Then choose the mode: "Que Alma lo instale y lo maneje (recomendado)" (Alma installs and manages it) or "Ya tengo un Home Assistant" (I already have one).
+**Turn it on.** Settings → Casa: tick «Activar la domótica» ("Turn on home automation", default off). Then choose the mode: «Que Alma lo instale y lo maneje (recomendado)» (Alma installs and manages it) or "Ya tengo un Home Assistant" (I already have one).
 
-**Install the engine (managed mode).** In Casa (or Settings → Casa) press "Instalar el motor" ("Install the engine"). It downloads about 1.2 GB, needs about 7 GB free, takes about 10 minutes, and you can keep using Alma meanwhile. The card shows the step and a progress bar. Windows needs WSL2; if it is missing the state is `unsupported` with the text "Abrí PowerShell como administrador, corré «wsl --install», reiniciá y probá de nuevo." (open PowerShell as administrator, run `wsl --install`, reboot, retry).
+**Install the engine (managed mode).** In Casa (or Settings → Casa) press "Instalar el motor" ("Install the engine"). It downloads about 1.2 GB, needs about 7 GB free, takes about 10 minutes, and you can keep using Alma meanwhile. The card shows the step and a progress bar. Windows needs WSL2; if it is missing the state is `unsupported` with the text «Abrí PowerShell como administrador, corré wsl --install, reiniciá y probá de nuevo.» (open PowerShell as administrator, run `wsl --install`, reboot, retry).
 
 **Use an existing HA.** Settings → Casa → "Ya tengo un Home Assistant", enter URL (must start with `http://` or `https://`) and a long-lived token, press "Conectar" ("Connect").
 
 **Casa tabs.** Plano (plan), Dispositivos (devices), Reglas (rules). The last tab is remembered in browser local storage (`alma.home.tab`). The sidebar in Casa mode shows "Casa conectada" with device and lit-light counts, the modes as buttons, and an "Agregar dispositivo" shortcut.
 
-**Operate a device.** On Dispositivos, tap the switch of a light, plug, fan or cover. On the plan, tap the icon. Right-click or select it to open the device panel: editable name, brightness slider, warm/neutral/cool buttons (2700/4000/6000 K), 8 color swatches, volume, cover position, fan speed, climate setpoint, room selector, sensors, "Quitar dispositivo" (remove). Locks and alarm panels have buttons in the panel only, each behind a native `confirm` ("¿Abrir «x»?"). Unavailable devices show no controls.
+**Operate a device.** On Dispositivos, tap the switch of a light, plug, fan or cover. On the plan, tap the icon. Right-click or select it to open the device panel: editable name, brightness slider, warm/neutral/cool buttons (2700/4000/6000 K), 8 color swatches, volume, cover position, fan speed, climate setpoint, room selector, sensors, "Quitar dispositivo" (remove). Locks and alarm panels have buttons in the panel only, each behind a native `confirm` («¿Abrir x?»). Unavailable devices show no controls.
 
 **Ask Alma.** Example phrases:
 
-- "prendeme la luz de la cocina" (turn on the kitchen light)
-- "poné la luz del living al 30 % y cálida" (living-room light at 30%, warm)
-- "¿qué luces quedaron prendidas?" (which lights are still on?)
-- "agregá el foco Moes" (add the Moes bulb; Alma guides you with `home_add_device`)
-- "armá el plano de mi casa con esta imagen" (build the plan from this picture; paste the picture in chat first)
-- "¿qué se ve en la cámara del living?" (what does the living-room camera see?)
-- "vigilá la puerta la próxima hora y avisame si llega un paquete" (watch the door for an hour, tell me if a package arrives)
-- "armame un modo Noche…" (make me a Night mode) and "a las 23 apagá todo" (at 23:00 turn everything off)
+- «prendeme la luz de la cocina» (turn on the kitchen light)
+- «poné la luz del living al 30 % y cálida» (living-room light at 30%, warm)
+- «¿qué luces quedaron prendidas?» (which lights are still on?)
+- «agregá el foco Moes» (add the Moes bulb; Alma guides you with `home_add_device`)
+- «armá el plano de mi casa con esta imagen» (build the plan from this picture; paste the picture in chat first)
+- «¿qué se ve en la cámara del living?» (what does the living-room camera see?)
+- «vigilá la puerta la próxima hora y avisame si llega un paquete» (watch the door for an hour, tell me if a package arrives)
+- "armame un modo Noche…" (make me a Night mode) and «a las 23 apagá todo» (at 23:00 turn everything off)
 
 ### How to add a device (by brand family)
 
@@ -55,15 +55,15 @@ The forms are not hand-coded per brand: `flow.ts` turns any HA config-flow step 
 
 | Brand family | Domain | What to do |
 |---|---|---|
-| **Tuya / Smart Life** (Moes and others) | `tuya` | The device must already be in the Smart Life or Tuya Smart app (not only the Moes app). Pick the brand, type the user code (in the app: Yo → Configuración → Cuenta y seguridad → Código de usuario), press "Siguiente". The dialog draws a QR: scan it with the phone app ("Abrí la app del fabricante en el celular y escaneá este código. Después tocá «Siguiente».") and press "Siguiente". |
+| **Tuya / Smart Life** (Moes and others) | `tuya` | The device must already be in the Smart Life or Tuya Smart app (not only the Moes app). Pick the brand, type the user code (in the app: «Yo → Configuración → Cuenta y seguridad → Código de usuario»), press «Siguiente». The dialog draws a QR: scan it with the phone app («Abrí la app del fabricante en el celular y escaneá este código. Después tocá Siguiente.») and press «Siguiente». |
 | **Sonoff / eWeLink** | `sonoff` | Uses the SonoffLAN custom component that Alma copies into `/config/custom_components/sonoff` at install (v3.13.1). Pick the brand, enter eWeLink user and password. The brand hint recommends a second eWeLink account with the devices shared to it, because using one account in several systems logs you out elsewhere. If SonoffLAN failed to download at install time, eWeLink is simply not offered (install still succeeds; see below). |
-| **Tapo / ONVIF cameras** | `onvif` (or `tplink`) | Create the "camera account" in the Tapo app (camera → Ajustes → Avanzado) and give the camera a fixed IP in the router. Pick "Cámara ONVIF", enter the IP, port 2020 and that account. TP-Link/Kasa/Tapo plugs and bulbs (`tplink`) ask for the TP-Link account. The plan document says the official TP-Link integration may not support the C200C; no Tapo Control custom component is installed. |
+| **Tapo / ONVIF cameras** | `onvif` (or `tplink`) | Create the "camera account" in the Tapo app (camera → Ajustes → Avanzado) and give the camera a fixed IP in the router. Pick «Cámara ONVIF», enter the IP, port 2020 and that account. TP-Link/Kasa/Tapo plugs and bulbs (`tplink`) ask for the TP-Link account. The plan document says the official TP-Link integration may not support the C200C; no Tapo Control custom component is installed. |
 | **Hue** | `hue` | Press the bridge button when the form asks. |
-| **Chromecast / Nest, WiZ, Shelly** | `cast`, `wiz`, `shelly` | Hints say "se descubren solos en la red" (discovered automatically). Under WSL's NAT, mDNS/SSDP discovery does not work, so expect to supply an IP or an account instead. |
+| **Chromecast / Nest, WiZ, Shelly** | `cast`, `wiz`, `shelly` | Hints say «se descubren solos en la red» (discovered automatically). Under WSL's NAT, mDNS/SSDP discovery does not work, so expect to supply an IP or an account instead. |
 | **ESPHome, Xiaomi Miio, Zigbee (ZHA)** | `esphome`, `xiaomi_miio`, `zha` | ESPHome: device IP. Xiaomi: Xiaomi account, or IP and token. ZHA: needs a USB Zigbee adapter. |
 | **Anything else HA supports** | any | Search by name or domain. Every HA integration with a config flow is listed, plus custom ones that expose one. |
 
-After "Listo, se agregó <title>" ("Done, <title> added") the device appears under its room, or under "Sin habitación" (no room). Move it with the room selector or with `home_edit_device`. When a flow ends, devices the person had hidden earlier for that integration are re-enabled.
+After «Listo, se agregó <title>» ("Done, <title> added") the device appears under its room, or under «Sin habitación» (no room). Move it with the room selector or with `home_edit_device`. When a flow ends, devices the person had hidden earlier for that integration are re-enabled.
 
 ## How it works
 
@@ -112,7 +112,7 @@ Pieces:
 
 **Config flows.** `startFlow` POSTs the handler with `show_advanced_options: false`; each step is mapped to `form`, `menu`, `progress` (polled every 1.5 s, up to 40 times), `external` (URL), `done` or `abort`. Schema fields become typed fields (password detection by selector type and names matching password/token/secret; sections flattened to `section.field` and nested back on send; QR selector becomes the step's QR). Text uses HA's Spanish translations when it has them. A step type Alma does not know becomes an abort pointing to the advanced HA UI. Custom integrations (SonoffLAN) are not in HA's `flow_handlers`; they are found through the WebSocket `integration/descriptions`.
 
-**Window messages.** Requests `home.status|install|start|stop|uninstall|connectExternal|advanced|snapshot|control|thing.update|thing.remove|integrations|entries|flow.start|flow.step|flow.abort|entry.remove` (full list in [mensajes-ipc.md](../references/mensajes-ipc.md)); events `home.engine`, `home.snapshot`, `home.flow`. The coordinator does these with no approval: the person is the actor.
+**Window messages.** Requests `home.status|install|start|stop|uninstall|connectExternal|advanced|snapshot|control|thing.update|thing.remove|integrations|entries|flow.start|flow.step|flow.abort|entry.remove` (full list in [ipc-messages.md](../references/ipc-messages.md)); events `home.engine`, `home.snapshot`, `home.flow`. The coordinator does these with no approval: the person is the actor.
 
 ### Part B: plan, cameras and rules
 
@@ -128,23 +128,23 @@ Pieces:
 
 **Plan.** Units are centimetres, x right, y down. Every read and write is sanitized (at least one floor, polygons of 3+ points, unique ids, one position per device, integer coordinates). The empty plan is one floor "Planta baja" (`piso-1`). Writes go to `plan.json.tmp` and are renamed over `plan.json`. When a plan is saved and the hub is connected, every room gets an HA area (found by name or created), a renamed room renames its area, and a device moved into a room with an area is moved to that area; failures there are swallowed. Removing a room never deletes its area. On every snapshot, devices whose HA area matches a room's `areaId` and that are not on the plan are placed in it (`autoPlace`); the rest wait in "Sin ubicar" (unplaced tray).
 
-**Plan from a drawing.** Each rectangle, diamond or closed line becomes a room named by its bound text, or the text whose center falls inside; unnamed ones are "Habitación n". A shape containing two or more other shapes is dropped as the house outline. The result is scaled so the floor is 1200 cm on its longest side from 0,0. Replacing a floor replaces its rooms and doors; a new room with the same name keeps the old HA area.
+**Plan from a drawing.** Each rectangle, diamond or closed line becomes a room named by its bound text, or the text whose center falls inside; unnamed ones are «Habitación n». A shape containing two or more other shapes is dropped as the house outline. The result is scaled so the floor is 1200 cm on its longest side from 0,0. Replacing a floor replaces its rooms and doors; a new room with the same name keeps the old HA area.
 
 **Plan from an image.** `vision.look` is asked (`PLAN_QUESTION`) for JSON polygons on a 0-100 grid; `extractJson` takes the first valid JSON object; x is stretched by width/height (read from PNG/GIF/WebP/JPEG headers) and the result scaled to 1200 cm.
 
-**Vision.** `loadPicture` accepts a path only inside the inbox, the active vault root or the thread's working folder; JPG/JPEG/PNG/WebP/GIF only; at most 8 MB. The model that looks is, in order: the provider+model set in Settings → Casa; the model of the agent chosen for the house; the default agent; any agent whose provider has a key; the first agent. It is called once, effort `low`, no tools, a Spanish system prompt ("Sos los ojos de Alma…"). The agent's conversation never carries the image, only the text answer.
+**Vision.** `loadPicture` accepts a path only inside the inbox, the active vault root or the thread's working folder; JPG/JPEG/PNG/WebP/GIF only; at most 8 MB. The model that looks is, in order: the provider+model set in Settings → Casa; the model of the agent chosen for the house; the default agent; any agent whose provider has a key; the first agent. It is called once, effort `low`, no tools, a Spanish system prompt («Sos los ojos de Alma…»). The agent's conversation never carries the image, only the text answer.
 
 **Cameras.** A still is HA's camera proxy, 20 s timeout, retried up to 5 more times 2 s apart (many cameras allow one video connection at a time); on failure the error advises closing the live view. `camera_look` saves the still to `<dataDir>/inbox/<entity>-<timestamp>.jpg`, asks the vision model and returns the answer; with `send_telegram` the photo goes to Telegram too. `camera_photo` sends the photo without vision. The device panel shows the live MJPEG picture.
 
 **Watches.** `camera_watch start` creates a watch in `rules.json`; the first look is 1 s later. At each look the still goes to the vision model with the condition and it must answer `{"match": true|false, "note": "…"}`. On a match the person gets a desktop notification and a Telegram message with the photo; without `repeat` the watch ends, with `repeat` it waits at least 120 s and five times the interval. Saved watches resume 5 s after app start.
 
-**Judgment rules.** `triggers.ts` listens to hub state changes. A rule fires only if enabled, same entity, the state really changed, the new state equals `to` (when set), the time is in the window (may cross midnight), and the last firing is older than the cooldown. Last-fired is saved before the agent starts. Firing creates a new conversation "Casa · <rule> · <dd/mm hh:mm>" for the agent chosen in Settings → Casa (the default agent otherwise), tells it which device changed from what to what, the rule's prompt, and to notify with `send_telegram` only if it matters. In that run `camera_look` is auto-approved (the person approved the rule's text when creating it); every other tool follows the agent's normal approval policy. A failing run notifies "La regla «name» falló" ("The rule «name» failed") linked to the conversation. Nothing fires when the engine is off, the hub is disconnected, or Alma is closed.
+**Judgment rules.** `triggers.ts` listens to hub state changes. A rule fires only if enabled, same entity, the state really changed, the new state equals `to` (when set), the time is in the window (may cross midnight), and the last firing is older than the cooldown. Last-fired is saved before the agent starts. Firing creates a new conversation "Casa · <rule> · <dd/mm hh:mm>" for the agent chosen in Settings → Casa (the default agent otherwise), tells it which device changed from what to what, the rule's prompt, and to notify with `send_telegram` only if it matters. In that run `camera_look` is auto-approved (the person approved the rule's text when creating it); every other tool follows the agent's normal approval policy. A failing run notifies «La regla name falló» ("The rule «name» failed") linked to the conversation. Nothing fires when the engine is off, the hub is disconnected, or Alma is closed.
 
 **Simple rules and modes.** `home_rules create_automation` and `home_modes create` write HA automations and scenes through the REST config API (ids `alma_<base36 time>`), which only load because the generated `configuration.yaml` includes those files. A simple rule runs inside HA and spends no tokens.
 
 ## Tools for agents
 
-Offered only when the feature is on and the agent is not working in a company; `look_at_image` is offered to every agent. A `home` risk never asks (it is blocked only in the read-only approval mode); `write` follows the approval mode and "always allow"; `publish` asks on every call. Source: `src/coordinator/tools/home.ts`. See also [herramientas.md](../references/herramientas.md).
+Offered only when the feature is on and the agent is not working in a company; `look_at_image` is offered to every agent. A `home` risk never asks (it is blocked only in the read-only approval mode); `write` follows the approval mode and "always allow"; `publish` asks on every call. Source: `src/coordinator/tools/home.ts`. See also [tools.md](../references/tools.md).
 
 | Tool | Risk | Asks approval | Purpose |
 |---|---|---|---|
@@ -171,7 +171,7 @@ Offered only when the feature is on and the agent is not working in a company; `
 
 ## Settings and data
 
-Setting `home` (defaults in `src/shared/defaults.ts`; merged in `src/main/settings.ts`). Reference: [ajustes.md](../references/ajustes.md).
+Setting `home` (defaults in `src/shared/defaults.ts`; merged in `src/main/settings.ts`). Reference: [settings.md](../references/settings.md).
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -182,7 +182,7 @@ Setting `home` (defaults in `src/shared/defaults.ts`; merged in `src/main/settin
 | `agentId` | `''` | Agent that answers judgment rules (default agent if empty or removed). |
 | `visionProvider`, `visionModel` | `''` | Model that looks at pictures; empty falls back as described above. |
 
-Data (reference: [datos.md](../references/datos.md)):
+Data (reference: [data.md](../references/data.md)):
 
 | Where | What |
 |---|---|
@@ -225,19 +225,19 @@ Plumbing integrations not listed as connected accounts: sun, radio_browser, goog
 
 - **Asks first:** locks, alarms, sirens and garage/gate/door covers, on every call (`home_secure_control` is `publish`). Camera, add/edit/remove, modes and rules tools follow the approval mode. The Casa window asks with a native `confirm` before operating a lock or alarm.
 - **Blocks:** `home_control` refuses sensitive things and calls nothing, not even for the other matches; `home_call_service` refuses the `lock`, `alarm_control_panel` and `siren` domains. Company agents get no `home_*` tools.
-- **Stores:** the HA token and owner password are sealed with the OS keychain (`auth.json`). Pictures from cameras stay in `<data>/inbox/`; `erasePersonalFiles` empties it ([seguridad.md](seguridad.md)).
+- **Stores:** the HA token and owner password are sealed with the OS keychain (`auth.json`). Pictures from cameras stay in `<data>/inbox/`; `erasePersonalFiles` empties it ([security.md](security.md)).
 - **Leaves the machine:** camera stills and plan photos go to the configured vision provider (a third party) and, when asked or when a watch matches, to Telegram. The engine downloads crane and SonoffLAN from GitHub and the HA image from `ghcr.io`. Brand accounts (Tuya code, eWeLink password) travel from the person to HA; when an agent drives `home_add_device`, the tool says the person types them in chat, so they pass through the model provider.
 - **Network:** HA listens on all interfaces inside WSL, reachable from the Windows host; LAN exposure depends on WSL networking.
 - **Unattended runs:** a judgment-rule run has nobody watching. Only `home`, `read`, `memory` tools and `camera_look` run unasked; other `write` tools wait for an approval.
-- The spec flags the HA engine, the downloads, and the stored owner credentials as items for `docs/security/` ([RIESGOS.md](../security/RIESGOS.md), [CONTROLES.md](../security/CONTROLES.md), [PRIVACIDAD.md](../security/PRIVACIDAD.md)).
+- The spec flags the HA engine, the downloads, and the stored owner credentials as items for `docs/security/` ([RISKS.md](../security/RISKS.md), [CONTROLS.md](../security/CONTROLS.md), [PRIVACY.md](../security/PRIVACY.md)).
 
 ## How it is tested
 
 - `tests/home.test.ts` (31 cases) covers the pure parts: thing building, search, sensitivity, `home_control` and `home_secure_control` behavior, `home_overview`, flow field translation, plan sanitizing/operations/geometry/persistence, drawing and vision to plan, header sizes, `extractJson`, rule matching and time windows, `camera_photo`, disabled/disconnected messages.
 - `tests/home-live.test.ts` (3 cases) talks to a real HA; skipped unless `ALMA_HA_URL` is set. The install, start, stop, restart, uninstall case also needs `ALMA_HOME_INSTALL=1`; onboarding needs `ALMA_HA_ONBOARD`.
 - Not covered: the real install path in CI, engine recovery and adoption, hub reconnect, config flow mapping beyond field translation, vision picture loading, camera stills and watches, judgment-rule launching, HA area sync, and the whole renderer (no component tests).
-- By hand: Settings → Casa in every engine state (off, missing, installing, error); Casa → Dispositivos with the demo engine (`ALMA_HOME_DEMO=1` adds HA's `demo:`); drag devices, rooms and corners in edit mode and reload; add a Tuya device and scan the QR; start a watch from chat and stop it in Reglas; paste a picture in chat and ask "¿qué ves?" (see Known limits before trusting this).
-- Per the design note, the real Tuya, eWeLink and Tapo devices were not tested with the user's accounts at the time (nota de diseño); everything else was checked against HA's demo integration.
+- By hand: Settings → Casa in every engine state (off, missing, installing, error); Casa → Dispositivos with the demo engine (`ALMA_HOME_DEMO=1` adds HA's `demo:`); drag devices, rooms and corners in edit mode and reload; add a Tuya device and scan the QR; start a watch from chat and stop it in Reglas; paste a picture in chat and ask «¿qué ves?» (see Known limits before trusting this).
+- Per the design note, the real Tuya, eWeLink and Tapo devices were not tested with the user's accounts at the time (design note); everything else was checked against HA's demo integration.
 
 ## Known limits
 
@@ -252,9 +252,9 @@ Plumbing integrations not listed as connected accounts: sun, radio_browser, goog
 9. **A woken run may wait for an approval no one gives** (for example `camera_photo` with Telegram, risk `write`).
 10. **`loadPicture` root check is a plain `startsWith`** (no separator, no real path), so `C:\work-secret` passes for root `C:\work`.
 11. **"Sacar del plano" is undone** by the next state change when the device's area matches a room.
-12. **Smaller items:** `home_control` with an unknown `temperature` word sends NaN instead of failing; `home_secure_control` does not check the action against the thing's domain; the removal result ("Quedó oculto.") is never seen because the panel closes; an agent's QR step does not switch the window to Casa; inconsistent size numbers 1.2 / 6.5 / 3 GB, and the plan said about 2 GB; `mirrored` is dead. In 014: replacing a floor deletes its doors, the end-of-watch text always says "No pasó nada.", plan icons are not keyboard/gamepad focusable, any window edit sets `source` to `manual` and `rename_room` allows duplicates.
+12. **Smaller items:** `home_control` with an unknown `temperature` word sends NaN instead of failing; `home_secure_control` does not check the action against the thing's domain; the removal result («Quedó oculto.») is never seen because the panel closes; an agent's QR step does not switch the window to Casa; inconsistent size numbers 1.2 / 6.5 / 3 GB, and the plan said about 2 GB; `mirrored` is dead. In 014: replacing a floor deletes its doors, the end-of-watch text always says «No pasó nada.», plan icons are not keyboard/gamepad focusable, any window edit sets `source` to `manual` and `rename_room` allows duplicates.
 
-### What `docs/DOMOTICA-PLAN.md` promised and is not built
+### What `docs/HOME-AUTOMATION-PLAN.md` promised and is not built
 
 The plan's own status block already records some deviations (no mirrored network, no HA floors, vision model chosen in Settings → Casa). Comparing the rest against the specs and code:
 
@@ -265,11 +265,11 @@ The plan's own status block already records some deviations (no mirrored network
 | Settings → Casa with "reparar, reiniciar, actualizar", backups (§4.5) | Engine card has install, retry, stop, start, uninstall, advanced; no repair, update or backups. |
 | `mirrored` networking switch (§4.1) | Setting exists, nothing reads it; documented in the plan status as not implemented. |
 | HA floors synced (§4.2) | Not built (plan status says so); only rooms/areas sync. |
-| Cost tracking: "el gasto queda registrado" for judgment rules, estimated cost on the `camera_watch` approval card, cut-off button from the plan (H5.3, H6.3, §4.4) | **Not built.** `look()` returns token usage but nothing records it for the house; the approval card has no cost estimate. Watches can be stopped from chat and from Reglas. |
+| Cost tracking: «el gasto queda registrado» for judgment rules, estimated cost on the `camera_watch` approval card, cut-off button from the plan (H5.3, H6.3, §4.4) | **Not built.** `look()` returns token usage but nothing records it for the house; the approval card has no cost estimate. Watches can be stopped from chat and from «Reglas». |
 | Camera thumbnails refreshing on the plan (§4.5) | Not built; cameras are icons only. Live MJPEG exists in the device panel. |
 | Keyboard and gamepad navigation on the plan (§4.5) | Not built. |
 | Door editing in the window | Not built; doors come from a photo or `home_plan_edit`. (The plan did list doors in edit mode.) |
-| Camera PTZ ("mirá hacia la ventana", H5.5) | Not built; no tool for it. |
+| Camera PTZ («mirá hacia la ventana», H5.5) | Not built; no tool for it. |
 | Photos in `send_telegram` / `send_whatsapp` (stage 3) | Telegram has `image_path` (and camera tools send photos). WhatsApp not verified here; check [whatsapp.md](whatsapp.md). |
 | Audio: `home_speak`, microphones, voice satellites (stage 5, H7) | Not built, deliberately deferred until hardware exists. |
 | `home_edit_device` can "ocultar" (hide) | Removal falls back to hiding when the integration refuses; no explicit hide action. |
@@ -280,10 +280,10 @@ The plan's own status block already records some deviations (no mirrored network
 
 ## See also
 
-- [aprobaciones.md](aprobaciones.md) for how `home`, `write` and `publish` are treated.
-- [configuraciones.md](configuraciones.md) for the Settings dialog and where settings are stored.
-- [telegram.md](telegram.md) and [whatsapp.md](whatsapp.md) for where photos and alerts go; [voz.md](voz.md) for voice control.
-- [agentes.md](agentes.md) and [empresas.md](empresas.md) (company agents get no home tools); [rutinas.md](rutinas.md) for time-based wake-ups.
-- [vault-y-conocimiento.md](vault-y-conocimiento.md) and [office-y-dibujos.md](office-y-dibujos.md) for `.excalidraw` files; [imagenes.md](imagenes.md); [providers.md](providers.md) for the vision model; [seguridad.md](seguridad.md).
-- Reference: [herramientas.md](../references/herramientas.md), [ajustes.md](../references/ajustes.md), [datos.md](../references/datos.md), [mensajes-ipc.md](../references/mensajes-ipc.md), [limites.md](../references/limites.md).
-- [DOMOTICA-PLAN.md](../DOMOTICA-PLAN.md) (original plan and build status).
+- [approvals.md](approvals.md) for how `home`, `write` and `publish` are treated.
+- [settings.md](settings.md) for the Settings dialog and where settings are stored.
+- [telegram.md](telegram.md) and [whatsapp.md](whatsapp.md) for where photos and alerts go; [voice.md](voice.md) for voice control.
+- [agents.md](agents.md) and [companies.md](companies.md) (company agents get no home tools); [routines.md](routines.md) for time-based wake-ups.
+- [vault-and-knowledge.md](vault-and-knowledge.md) and [office-and-drawings.md](office-and-drawings.md) for `.excalidraw` files; [images.md](images.md); [providers.md](providers.md) for the vision model; [security.md](security.md).
+- Reference: [tools.md](../references/tools.md), [settings.md](../references/settings.md), [data.md](../references/data.md), [ipc-messages.md](../references/ipc-messages.md), [limits.md](../references/limits.md).
+- [HOME-AUTOMATION-PLAN.md](../HOME-AUTOMATION-PLAN.md) (original plan and build status).

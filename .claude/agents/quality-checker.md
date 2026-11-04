@@ -17,7 +17,7 @@ You are read-only: `Read`, `Glob`, `Grep`, and `Bash` to run the gates, never to
    - III — is every changed logic file covered by a test that was meaningfully written (not vacuous: does it assert behavior)? Do tests name their `AC-n.n`?
    - IV — layers: `shared` leaf, renderer isolated, `electron` only in `main/` and `coordinator/index.ts`. Is the functional core separate from I/O? Are collaborators injected through `ToolContext`/`Host`, or reached for as singletons/globals? Is input validated with Zod at the boundary?
    - V — does every new tool declare a defensible `ToolRisk`? Could a secret reach a log, error, fixture or prompt? Is attack surface or personal data added without a `docs/security/` update?
-2. **`docs/architecture.md`**: new code put where the "Dónde va lo nuevo" table says; strategies instead of growing `if/else` on provider or channel.
+2. **`docs/architecture.md`**: new code put where the "Where new things go" table says; strategies instead of growing `if/else` on provider or channel.
 3. **General cleanliness**: names, dead code, single-caller abstractions, duplication that should be one function, swallowed errors, unexplained new dependencies, comments that restate code.
 4. **Automated gates** — run and report as-is: `pnpm run lint`, `pnpm run typecheck`, `pnpm run test:coverage` (includes architecture, specs and the coverage floor), `pnpm run check:tests`.
 

@@ -7,12 +7,12 @@ import {
 export const ICON_SIZE = { sm: 20, md: 24, lg: 32 } as const
 export const ICON_STROKE = 1.75
 
-/** Envuelve cualquier ícono Lucide con los defaults del sistema (md 24px, stroke 1.75, color heredado). */
+/** Wraps any Lucide icon with the system's defaults (md 24px, stroke 1.75, inherited color). */
 export function Icon({ icon: I, size = 'md', className }: { icon: LucideIcon; size?: keyof typeof ICON_SIZE | number; className?: string }) {
   return <I size={typeof size === 'number' ? size : ICON_SIZE[size]} strokeWidth={ICON_STROKE} className={className} aria-hidden="true" />
 }
 
-/** Mapa sugerido para pantallas de ajustes. */
+/** Suggested map for settings screens. */
 export const SETTINGS_ICONS = {
   storage: HardDrive,
   sound: Volume2,
@@ -34,8 +34,8 @@ export const SETTINGS_ICONS = {
 export type SettingsIconKey = keyof typeof SETTINGS_ICONS
 
 /**
- * Botones de control: set propio, trazo simple, sin copiar los símbolos oficiales.
- * Heredan color (currentColor) y tamaño.
+ * Control buttons: our own set, a simple stroke, without copying the official symbols.
+ * They inherit color (currentColor) and size.
  */
 const base = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: ICON_STROKE, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const
 type P = { size?: number; className?: string }

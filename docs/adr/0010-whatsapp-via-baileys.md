@@ -4,7 +4,7 @@ status: accepted
 
 # WhatsApp goes through Baileys, the unofficial protocol, on the person's own number
 
-Alma links to the person's own WhatsApp number as one more linked device (QR scan, like WhatsApp Web) using `baileys` 6.7.24 (`src/coordinator/channels/whatsapp.ts`). The channel is deliberately narrow: Alma answers only the owner's **self chat** ("Mensajes para mí", "Messages to me"), prefixes its own messages with a robot mark, never initiates, and every `send_whatsapp` to someone else is a `publish` call that asks on every use.
+Alma links to the person's own WhatsApp number as one more linked device (QR scan, like WhatsApp Web) using `baileys` 6.7.24 (`src/coordinator/channels/whatsapp.ts`). The channel is deliberately narrow: Alma answers only the owner's **self chat** («Mensajes para mí», "Messages to me"), prefixes its own messages with a robot mark, never initiates, and every `send_whatsapp` to someone else is a `publish` call that asks on every use.
 
 ## Why
 
@@ -13,7 +13,7 @@ Design note "integrations-design": the user chose Baileys **over the Meta Cloud 
 ## Considered options
 
 - **Meta Cloud API** (official): rejected by the user in favor of Baileys; the reason beyond that is Rationale not documented.
-- Evaluating the official WhatsApp Business API if Alma is ever used with clients: suggested in R-05 of [RIESGOS.md](../security/RIESGOS.md).
+- Evaluating the official WhatsApp Business API if Alma is ever used with clients: suggested in R-05 of [RISKS.md](../security/RISKS.md).
 
 ## Consequences
 

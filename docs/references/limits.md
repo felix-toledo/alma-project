@@ -4,7 +4,7 @@ Every constant that shapes behavior: timeouts, caps, sizes, iteration limits, in
 thresholds and default values that act as limits. Grouped by module. Each row was read in the code; `file:line` is relative to
 `src/` and points at the line where the number lives (a declared constant, a Zod bound, or an inline literal). Units are in
 the "value" column. For what each module does, see [the module docs](../modules/); for the tools themselves see
-[herramientas.md](herramientas.md).
+[tools.md](tools.md).
 
 Columns: **value** · **what it limits** · **module** · **file:line**.
 
@@ -12,11 +12,11 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| 80 model turns | `MAX_ITERATIONS`: one run stops after 80 turns, even if the model keeps calling tools. Also what bounds how many approvals a run can ask for | [agents](../modules/agentes.md) | `coordinator/agent.ts:23` |
+| 80 model turns | `MAX_ITERATIONS`: one run stops after 80 turns, even if the model keeps calling tools. Also what bounds how many approvals a run can ask for | [agents](../modules/agents.md) | `coordinator/agent.ts:23` |
 | 1 level | Delegation depth: `delegate_task` is only offered at depth 0, so a subagent cannot delegate | agents | `coordinator/agent.ts:260` |
 | 60,000 characters | `MAX_RESULT_CHARS`: any tool result sent to the model is cut in the middle (first and last half kept). Error results from thrown errors are not cut | agents | `coordinator/tools/types.ts:85`, `coordinator/agent.ts:427` |
-| effort `low` | Voice conversations at top level run with low effort whatever the profile says | agents / [voice](../modules/voz.md) | `coordinator/agent.ts:277` |
-| 6 tools | `COMPANY_AUTO_APPROVE`: tools a company agent runs without asking | [approvals](../modules/aprobaciones.md) | `coordinator/agent.ts:25` |
+| effort `low` | Voice conversations at top level run with low effort whatever the profile says | agents / [voice](../modules/voice.md) | `coordinator/agent.ts:277` |
+| 6 tools | `COMPANY_AUTO_APPROVE`: tools a company agent runs without asking | [approvals](../modules/approvals.md) | `coordinator/agent.ts:25` |
 | 4,000 characters | Task context the auto-review reviewer sees (the user's latest request) | approvals | `coordinator/approval.ts:83` |
 | 8,000 characters | Tool input (as JSON) the reviewer sees; same cut for the boss review | approvals | `coordinator/approval.ts:84`, `coordinator/approval.ts:126` |
 | 3,000 / 4,000 characters | Boss's own instructions / the request shown to the boss in a boss review | approvals | `coordinator/approval.ts:124`, `coordinator/approval.ts:125` |
@@ -29,7 +29,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| 2 MiB | `MAX_READ_BYTES`: largest file `read_file` opens | [files and commands](../modules/archivos-y-comandos.md) | `coordinator/tools/fs.ts:8` |
+| 2 MiB | `MAX_READ_BYTES`: largest file `read_file` opens | [files and commands](../modules/files-and-commands.md) | `coordinator/tools/fs.ts:8` |
 | 1 MiB | `MAX_SEARCH_FILE_BYTES`: `search_files` skips bigger files | files and commands | `coordinator/tools/fs.ts:9` |
 | 8,000 bytes | A file is "binary" if a NUL byte appears in its first 8,000 bytes | files and commands | `coordinator/tools/fs.ts:12` |
 | 2,000 lines (default), 1 to 5,000 | Lines `read_file` returns (`limit`) | files and commands | `coordinator/tools/fs.ts:62`, `coordinator/tools/fs.ts:64` |
@@ -45,7 +45,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| 20 s | `TIMEOUT_MS`: each web request (combined with the run's cancel signal) | [web and mail](../modules/web-y-correo.md) | `coordinator/tools/web.ts:9`, `coordinator/tools/web.ts:82` |
+| 20 s | `TIMEOUT_MS`: each web request (combined with the run's cancel signal) | [web and mail](../modules/web-and-mail.md) | `coordinator/tools/web.ts:9`, `coordinator/tools/web.ts:82` |
 | 5 redirects | `MAX_REDIRECTS` for `fetch_url`; each hop is checked against private hosts | web and mail | `coordinator/tools/web.ts:10`, `coordinator/tools/web.ts:109` |
 | 1 to 10 results (default 6) | `web_search` `max_results` | web and mail | `coordinator/tools/web.ts:123` |
 | 1,000 to 60,000 characters (default 15,000) | `fetch_url` `max_chars` | web and mail | `coordinator/tools/web.ts:152`, `coordinator/tools/web.ts:154` |
@@ -63,8 +63,8 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 64,000 tokens | `max_tokens` of every Anthropic chat turn | [providers](../modules/providers.md) | `coordinator/providers/anthropic.ts:104` |
 | 4,096 tokens | `max_tokens` of an Anthropic review call (auto-review and boss review) | providers | `coordinator/providers/anthropic.ts:164` |
 | 3 attempts | A failed Anthropic stream that is not an API error and not an abort is re-issued, up to the third attempt. API errors are never retried | providers | `coordinator/providers/anthropic.ts:123`, `coordinator/providers/anthropic.ts:155` |
-| per-provider prices | USD per million tokens (input / output / cache read), used for company budgets: Anthropic 5 / 25 / 0.5, xAI 3 / 15 / 0.75, DeepSeek 0.3 / 1.2 / 0.03, Vercel 3 / 15 / 0.3, Meta 1.25 / 4.25 / 0.15 | providers / [companies](../modules/empresas.md) | `shared/company.ts:70` |
-| 8 MB | Largest picture the vision helper reads | [images](../modules/imagenes.md) | `coordinator/vision.ts:44`, `coordinator/vision.ts:72` |
+| per-provider prices | USD per million tokens (input / output / cache read), used for company budgets: Anthropic 5 / 25 / 0.5, xAI 3 / 15 / 0.75, DeepSeek 0.3 / 1.2 / 0.03, Vercel 3 / 15 / 0.3, Meta 1.25 / 4.25 / 0.15 | providers / [companies](../modules/companies.md) | `shared/company.ts:70` |
+| 8 MB | Largest picture the vision helper reads | [images](../modules/images.md) | `coordinator/vision.ts:44`, `coordinator/vision.ts:72` |
 
 ## MCP
 
@@ -82,7 +82,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 300 ms | Debounce before a thread is written to disk; files are written atomically with mode 0600 | [chat](../modules/chat.md) | `coordinator/store.ts:71`, `coordinator/store.ts:79` |
 | 57 characters + "…" (when over 60) | Auto title taken from the first message | chat | `coordinator/index.ts:196` |
 | 60 minutes | `VOICE_SESSION_MS`: the voice conversation thread is reused for this long | chat / voice | `coordinator/index.ts:481` |
-| 0 days (keep forever) | `privacy.threadRetentionDays` default; the menu offers 30, 90, 180 and 365 days | [security](../modules/seguridad.md) | `shared/defaults.ts:208`, `renderer/src/components/SettingsDialog.tsx:767-770` |
+| 0 days (keep forever) | `privacy.threadRetentionDays` default; the menu offers 30, 90, 180 and 365 days | [security](../modules/security.md) | `shared/defaults.ts:208`, `renderer/src/components/SettingsDialog.tsx:767-770` |
 | 12 h | How often the retention cleanup runs (also at start and on every settings change) | security | `coordinator/index.ts:746` |
 | 15,000 characters | Each vault attachment in the chat is clipped | chat | `renderer/src/lib/attachments.ts:16` |
 | 80 px | The chat follows new output only while you are within 80 px of the end | chat | `renderer/src/components/ChatView.tsx:154` |
@@ -92,7 +92,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| 5 MiB | `MAX_NOTE_BYTES`: bigger notes are not opened or indexed | [vault and knowledge](../modules/vault-y-conocimiento.md) | `coordinator/knowledge/base.ts:16`, `coordinator/knowledge/base.ts:162`, `coordinator/knowledge/base.ts:296` |
+| 5 MiB | `MAX_NOTE_BYTES`: bigger notes are not opened or indexed | [vault and knowledge](../modules/vault-and-knowledge.md) | `coordinator/knowledge/base.ts:16`, `coordinator/knowledge/base.ts:162`, `coordinator/knowledge/base.ts:296` |
 | 4,000 characters | `MAX_MEMORY_CHARS`: all memories together when adding with `remember` | vault and knowledge | `coordinator/knowledge/base.ts:22`, `coordinator/knowledge/base.ts:358` |
 | 3 to 300 characters | One `remember` input | vault and knowledge | `coordinator/knowledge/tools.ts:61` |
 | 1,600 / 200 characters | Largest chunk / chunks below 200 are merged with the next | vault and knowledge | `coordinator/knowledge/markdown.ts:12`, `coordinator/knowledge/markdown.ts:13` |
@@ -109,7 +109,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 700 ms | Editor autosave delay after the last keystroke | vault and knowledge | `renderer/src/vault/useVault.ts:16` |
 | 50 results | Quick switcher list | vault and knowledge | `renderer/src/vault/panels.tsx:17`, `renderer/src/vault/panels.tsx:22` |
 | 250 ms | Search panel debounce | vault and knowledge | `renderer/src/vault/panels.tsx:91` |
-| 500 rows | Spreadsheet preview cap per sheet | [office and drawings](../modules/office-y-dibujos.md) | `renderer/src/vault/DocumentPreview.tsx:11` |
+| 500 rows | Spreadsheet preview cap per sheet | [office and drawings](../modules/office-and-drawings.md) | `renderer/src/vault/DocumentPreview.tsx:11` |
 
 ## Office documents
 
@@ -136,7 +136,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 30 hashtags | `HASHTAG_LIMIT` | Instagram | `coordinator/tools/media.ts:12`, `coordinator/tools/media.ts:98` |
 | `testMode: true` | Default: the automation never clicks "Compartir" | Instagram | `shared/defaults.ts:205` |
 | 30 s | Page loaded; "Crear" button; each "Siguiente" | Instagram | `main/instagram.ts:254`, `main/instagram.ts:256`, `main/instagram.ts:266` |
-| 5 s / 20 s / 20 s | "Publicación" menu option / file input / caption box | Instagram | `main/instagram.ts:259`, `main/instagram.ts:262`, `main/instagram.ts:271` |
+| 5 s / 20 s / 20 s | «Publicación» menu option / file input / caption box | Instagram | `main/instagram.ts:259`, `main/instagram.ts:262`, `main/instagram.ts:271` |
 | 20 s | "Compartir" button must be stable before the one click | Instagram | `main/instagram.ts:286` |
 | 180 s | Wait for the success confirmation | Instagram | `main/instagram.ts:289` |
 | 3 tries, 6 s each | A click that did not change the screen is retried up to 3 times; "Compartir" is clicked once and never retried | Instagram | `main/instagram.ts:184`, `main/instagram.ts:190` |
@@ -162,7 +162,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| 30 s | `TICK_MS`: how often the runner checks the schedule (and once 5 s after start) | [routines](../modules/rutinas.md) | `coordinator/routines.ts:6`, `coordinator/routines.ts:35` |
+| 30 s | `TICK_MS`: how often the runner checks the schedule (and once 5 s after start) | [routines](../modules/routines.md) | `coordinator/routines.ts:6`, `coordinator/routines.ts:35` |
 | 5 minutes | Minimum of an interval routine created by a tool | routines | `coordinator/tools/routines.ts:18` |
 | 60 s | A `once` date may be at most this far in the past | routines | `coordinator/tools/routines.ts:33` |
 | 2 / 3 / 10 characters | Minimum reminder message / routine name / routine task | routines | `coordinator/tools/routines.ts:57`, `coordinator/tools/routines.ts:85`, `coordinator/tools/routines.ts:86` |
@@ -174,7 +174,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| 2 revisions | `MAX_REVISIONS`: a task sent back from review more than twice is blocked and the person is notified | [companies](../modules/empresas.md) | `coordinator/company/engine.ts:19`, `coordinator/company/engine.ts:226` |
+| 2 revisions | `MAX_REVISIONS`: a task sent back from review more than twice is blocked and the person is notified | [companies](../modules/companies.md) | `coordinator/company/engine.ts:19`, `coordinator/company/engine.ts:226` |
 | 30 s | `TICK_MS`: the engine checks tasks and meetings; first check 8 s after start | companies | `coordinator/company/engine.ts:20`, `coordinator/company/engine.ts:53-54` |
 | 15 s | A review whose creator is busy retries after this | companies | `coordinator/company/engine.ts:265` |
 | 2 hours (default), 0 to 48 | Meeting preparation lead time (`prep_hours`; the window form defaults to 2 too) | companies | `coordinator/tools/company.ts:125`, `coordinator/tools/company.ts:127`, `renderer/src/companies/CompaniesView.tsx:551` |
@@ -191,7 +191,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| `2026.10.1` | `HA_VERSION`: pinned Home Assistant version | [home](../modules/casa.md) | `coordinator/home/engine.ts:13` |
+| `2026.10.1` | `HA_VERSION`: pinned Home Assistant version | [home](../modules/home.md) | `coordinator/home/engine.ts:13` |
 | 6.5 GB | `NEEDED_BYTES`: free disk required to install | home | `coordinator/home/engine.ts:21` |
 | 2.6 GB | `ROOTFS_BYTES`: assumed size, for the progress bar | home | `coordinator/home/engine.ts:19` |
 | 8123, then 18123 | `DEFAULT_PORT`, `ALT_PORT` | home | `coordinator/home/engine.ts:22-23` |
@@ -214,7 +214,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 10 minutes (default), at least 1 | Cooldown between wake-ups of a judgment rule | home | `coordinator/tools/home.ts:608`, `coordinator/home/triggers.ts:71` |
 | 1 to 168 hours (default 24) | `home_history` window | home | `coordinator/tools/home.ts:659` |
 | 0 to 100 | Brightness, position, volume, fan speed | home | `coordinator/tools/home.ts:76-82` |
-| 2700 / 4000 / 6000 K | "cálida" / "neutra" / "fría" color temperatures | home | `coordinator/tools/home.ts:71` |
+| 2700 / 4000 / 6000 K | «cálida» / "neutra" / «fría» color temperatures | home | `coordinator/tools/home.ts:71` |
 | 1200 cm | A drawing or an image is scaled so the floor's longest side measures this | home | `shared/home.ts:328`, `shared/home.ts:342`, `shared/home.ts:413` |
 | 15 % | A closed line in a drawing needs its ends within 15 % of its size | home | `shared/home.ts:355` |
 | `enabled: false` | Home is off by default | home | `shared/defaults.ts:234` |
@@ -223,7 +223,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| 80 ms | Audio chunk length | [voice](../modules/voz.md) | `coordinator/voice/speech.ts:87` |
+| 80 ms | Audio chunk length | [voice](../modules/voice.md) | `coordinator/voice/speech.ts:87` |
 | 25 chunks (2 s) / 8 chunks | Ring kept for the speaker check / pre-roll when interrupting | voice | `coordinator/voice/assistant.ts:15-16` |
 | 120 s | `PLAYBACK_TIMEOUT_MS`: wait for the window to report the end of playback | voice | `coordinator/voice/assistant.ts:17` |
 | 4 s / 15 s | Wait for speech to start / maximum length of one recording | voice | `coordinator/voice/speech.ts:94` |
@@ -241,7 +241,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 
 | value | what it limits | module | file:line |
 |---|---|---|---|
-| 13 months | `AUDIT_RETENTION_MONTHS`: audit files older than this are dropped | [security](../modules/seguridad.md) | `shared/audit.ts:25` |
+| 13 months | `AUDIT_RETENTION_MONTHS`: audit files older than this are dropped | [security](../modules/security.md) | `shared/audit.ts:25` |
 | 300 characters | `DETAIL_LIMIT`: any string detail in an audit entry | security | `shared/audit.ts:27` |
 | 60 s | Identical audit events within this window are not written twice | security | `shared/audit.ts:77` |
 | 1280x820 (minimum 860x560) | Main window size | [app shell](../modules/app-shell.md) | `main/index.ts:223-226` |
