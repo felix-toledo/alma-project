@@ -1,23 +1,21 @@
 import { Check, Loader2, Mic, Square, Volume2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { PublicSettings, VoiceStatus } from '../../../shared/types'
+import { useT } from '../i18n/useT'
 import { onEvent, request } from '../lib/coordinator'
 import { Icon } from '../umbra/Icon'
 import { chime, Player, startCapture, type Capture } from './audio'
 
-const LABELS: Partial<Record<VoiceStatus['state'], string>> = {
-  recording: 'Te escucho…',
-  transcribing: 'Entendiendo…',
-  thinking: 'Pensando…',
-  speaking: 'Hablando',
-  loading: 'Preparando la voz…'
-}
+type Labelled = 'recording' | 'transcribing' | 'thinking' | 'speaking' | 'loading'
+const LABELLED = new Set<VoiceStatus['state']>(['recording', 'transcribing', 'thinking', 'speaking', 'loading'])
+const isLabelled = (state: VoiceStatus['state']): state is Labelled => LABELLED.has(state)
 
 /**
  * Keeps the microphone streaming to the coordinator while voice is on, plays what Alma says and shows a small
  * overlay during a request. Mounted once for the whole app (the window stays alive in the tray).
  */
 export function VoiceLayer({ settings, status }: { settings: PublicSettings; status: VoiceStatus }): React.JSX.Element | null {
+  const t = useT()
   const { enabled, micDeviceId } = settings.voice
   const [micError, setMicError] = useState('')
   const player = useRef<Player | null>(null)
@@ -30,7 +28,7 @@ export function VoiceLayer({ settings, status }: { settings: PublicSettings; sta
     setMicError('')
     startCapture(micDeviceId, (pcm) => window.desktop.coordinator.sendAudio(pcm))
       .then((c) => (cancelled ? c.stop() : (capture = c)))
-      .catch((error: Error) => setMicError(error.name === 'NotAllowedError' ? 'Windows no le da acceso al micrófono a Alma (Configuración de Windows → Privacidad → Micrófono).' : error.message))
+      .catch((error: Error) => setMicError(error.name === 'NotAllowedError' ? t('voice.micDenied') : error.message))
     return () => {
       cancelled = true
       capture?.stop()
@@ -64,7 +62,7 @@ export function VoiceLayer({ settings, status }: { settings: PublicSettings; sta
   }, [enabled, busy])
 
   if (!enabled) return null
-  const label = LABELS[status.state]
+  const label = isLabelled(status.state) ? t(`voice.state.${status.state}`) : undefined
   if (micError) return <div className="voice-overlay error">{micError}</div>
   if (!label) return null
   return (
@@ -79,11 +77,11 @@ export function VoiceLayer({ settings, status }: { settings: PublicSettings; sta
         {status.detail && <div className="small muted">{status.detail}</div>}
       </div>
       {(status.state === 'speaking' || status.state === 'recording') && (
-        <button className="icon-button" title={status.state === 'speaking' ? 'Callar' : 'Listo, ya terminé'} onClick={() => void request({ method: 'voice.trigger' })}>
+        <button className="icon-button" title={status.state === 'speaking' ? t('sidebar.voice.speaking') : t('voice.done')} onClick={() => void request({ method: 'voice.trigger' })}>
           <Icon icon={status.state === 'speaking' ? Square : Check} size="sm" />
         </button>
       )}
-      <button className="icon-button" title="Cancelar (Esc): no se envía nada" onClick={() => void request({ method: 'voice.cancel' })}>
+      <button className="icon-button" title={t('voice.cancelTitle')} onClick={() => void request({ method: 'voice.cancel' })}>
         <Icon icon={X} size="sm" />
       </button>
     </div>

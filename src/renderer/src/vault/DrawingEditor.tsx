@@ -5,6 +5,7 @@ import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw
 import { MessageSquarePlus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { parseDrawing, type DrawingElement, type DrawingFile } from '../../../shared/excalidraw'
+import { useLanguage, useT } from '../i18n/useT'
 import { drawingAttachment, type Attachment } from '../lib/attachments'
 import { Icon } from '../umbra/Icon'
 import { applyOps, isDark, loadExcalidraw } from './drawing'
@@ -35,6 +36,8 @@ const serialize = (elements: readonly ExcalidrawElement[], appState: Partial<App
 
 /** A .excalidraw file in the vault: draw by hand, see what agents drew, and hand a selection to the chat. */
 export default function DrawingEditor({ path, content, onChange, onAsk }: Props): React.JSX.Element {
+  const t = useT()
+  const language = useLanguage()
   const theme = useTheme()
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null)
   const [scene, setScene] = useState<DrawingFile | null>(null)
@@ -66,11 +69,11 @@ export default function DrawingEditor({ path, content, onChange, onAsk }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, api])
 
-  if (!scene) return <div className="vault-empty muted">Cargando dibujo…</div>
+  if (!scene) return <div className="vault-empty muted">{t('vault.drawing.loading')}</div>
 
   const ask = (): void => {
     const elements = (api?.getSceneElements() ?? []) as unknown as DrawingElement[]
-    onAsk(drawingAttachment(path, elements, selected))
+    onAsk(drawingAttachment(path, elements, selected.length ? { ids: selected, label: t('attachment.drawingElements', { count: new Set(selected).size }) } : undefined))
   }
 
   return (
@@ -80,11 +83,11 @@ export default function DrawingEditor({ path, content, onChange, onAsk }: Props)
         excalidrawAPI={setApi}
         initialData={{ elements: scene.elements as unknown as ExcalidrawElement[], appState: { ...scene.appState, theme }, files: scene.files as never, scrollToContent: true }}
         theme={theme}
-        langCode="es-ES"
+        langCode={language === 'es' ? 'es-ES' : 'en'}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false } }}
         renderTopRightUI={() => (
-          <button className="primary small drawing-ask" onClick={ask} title="Pasarle al chat lo seleccionado (o todo el dibujo)">
-            <Icon icon={MessageSquarePlus} size={14} /> {selected.length ? `Preguntar por ${selected.length}` : 'Preguntarle a Alma'}
+          <button className="primary small drawing-ask" onClick={ask} title={t('vault.drawing.askTitle')}>
+            <Icon icon={MessageSquarePlus} size={14} /> {selected.length ? t('vault.drawing.askCount', { count: selected.length }) : t('vault.drawing.askAlma')}
           </button>
         )}
         onChange={(elements, appState, files) => {

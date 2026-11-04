@@ -1,7 +1,8 @@
 import JSZip from 'jszip'
 import { ExternalLink, RefreshCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { notesText, shapeTexts, slideRefs, tableRows, type XmlNode } from '../../../shared/pptx'
+import { notesText, PresentationError, shapeTexts, slideRefs, tableRows, type XmlNode } from '../../../shared/pptx'
+import { useT } from '../i18n/useT'
 import { Icon } from '../umbra/Icon'
 import { noteName } from './vaultLib'
 import './documents.css'
@@ -88,6 +89,7 @@ function Table({ rows }: { rows: string[][] }): React.JSX.Element {
 }
 
 export default function DocumentPreview({ path, url, onOpen }: { path: string; url: string; onOpen(): void }): React.JSX.Element {
+  const t = useT()
   const ext = path.split('.').pop()!.toLowerCase()
   const docxHost = useRef<HTMLDivElement>(null)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
@@ -102,7 +104,7 @@ export default function DocumentPreview({ path, url, onOpen }: { path: string; u
     setError('')
     void (async () => {
       const response = await fetch(url, { cache: 'no-store' })
-      if (!response.ok) throw new Error(`No se pudo abrir el archivo (${response.status}).`)
+      if (!response.ok) throw new Error(t('vault.doc.openFailed', { status: response.status }))
       const buffer = await response.arrayBuffer()
       if (cancelled) return
       if (ext === 'docx') {
@@ -118,7 +120,7 @@ export default function DocumentPreview({ path, url, onOpen }: { path: string; u
         const sheets = await loadSheets(buffer, ext === 'csv')
         if (!cancelled) (setSheet(0), setLoaded({ kind: 'sheets', sheets }))
       }
-    })().catch((e: Error) => !cancelled && setError(e.message || 'No se pudo mostrar el archivo.'))
+    })().catch((e: Error) => !cancelled && setError(e instanceof PresentationError ? t('vault.doc.badPresentation') : e.message || t('vault.doc.showFailed')))
     return () => {
       cancelled = true
     }
@@ -141,12 +143,12 @@ export default function DocumentPreview({ path, url, onOpen }: { path: string; u
         )}
         <span className="grow" />
         {ext !== 'pdf' && (
-          <button className="ghost small" onClick={() => setReload((n) => n + 1)} title="Volver a leer el archivo del disco">
-            <Icon icon={RefreshCw} size={14} /> Recargar
+          <button className="ghost small" onClick={() => setReload((n) => n + 1)} title={t('vault.doc.reloadTitle')}>
+            <Icon icon={RefreshCw} size={14} /> {t('vault.doc.reload')}
           </button>
         )}
         <button className="ghost small" onClick={onOpen}>
-          <Icon icon={ExternalLink} size={14} /> Abrir con la app del sistema
+          <Icon icon={ExternalLink} size={14} /> {t('vault.openSystem')}
         </button>
       </div>
 
@@ -155,13 +157,13 @@ export default function DocumentPreview({ path, url, onOpen }: { path: string; u
       ) : (
         <div className="doc-preview-body">
           {error && <div className="vault-empty text-danger">{error}</div>}
-          {!error && !loaded && <div className="vault-empty muted">Cargando vista previa…</div>}
+          {!error && !loaded && <div className="vault-empty muted">{t('vault.loadingPreview')}</div>}
           {/* docx-preview renders into this node itself. */}
           <div ref={docxHost} className="doc-preview-docx" hidden={ext !== 'docx' || !!error} />
           {current && (
             <div className="doc-preview-sheet">
-              {current.rows.length ? <Table rows={current.rows} /> : <p className="muted">Hoja vacía.</p>}
-              {current.total > current.rows.length && <p className="muted small">Se muestran las primeras {MAX_ROWS} filas de {current.total}.</p>}
+              {current.rows.length ? <Table rows={current.rows} /> : <p className="muted">{t('vault.doc.emptySheet')}</p>}
+              {current.total > current.rows.length && <p className="muted small">{t('vault.doc.rowsShown', { shown: MAX_ROWS, total: current.total })}</p>}
             </div>
           )}
           {loaded?.kind === 'slides' && (
@@ -169,7 +171,7 @@ export default function DocumentPreview({ path, url, onOpen }: { path: string; u
               {loaded.slides.map((slide, i) => (
                 <li key={i} className="doc-preview-slide">
                   <h3>
-                    <span className="muted">{i + 1}.</span> {slide.title || 'Sin título'}
+                    <span className="muted">{i + 1}.</span> {slide.title || t('vault.doc.untitled')}
                   </h3>
                   {slide.lines.length > 0 && (
                     <ul>
@@ -181,7 +183,7 @@ export default function DocumentPreview({ path, url, onOpen }: { path: string; u
                   {slide.tables.map((rows, j) => (
                     <Table key={j} rows={rows} />
                   ))}
-                  {slide.notes && <p className="doc-preview-notes small">Notas: {slide.notes}</p>}
+                  {slide.notes && <p className="doc-preview-notes small">{t('vault.doc.notes', { notes: slide.notes })}</p>}
                 </li>
               ))}
             </ol>

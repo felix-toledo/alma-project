@@ -4,6 +4,7 @@ import type { ExcalidrawElementSkeleton } from '@excalidraw/excalidraw/data/tran
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { DrawingElement, DrawingFile, DrawingSkeleton } from '../../../shared/excalidraw'
 import { parseDrawing } from '../../../shared/excalidraw'
+import type { T } from '../i18n/useT'
 
 type Library = typeof import('@excalidraw/excalidraw')
 let library: Promise<Library> | null = null
@@ -19,7 +20,7 @@ export const isDark = (): boolean => document.documentElement.dataset.theme !== 
 
 // Text is measured when agent ops are converted; without the hand-drawn font loaded, labels get the width of the
 // fallback font and wrap ("Lanzamient o"). Excalidraw only registers its fonts once its editor mounts, so a drawing
-// seen first embedded in a note needs this. The file is Excalifont's Latin subset (accents and ñ) in 0.18.1.
+// seen first embedded in a note needs this. The file is Excalifont's Latin subset (accents and `ñ`) in 0.18.1.
 let font: Promise<unknown> | null = null
 function ensureFont(): Promise<unknown> {
   font ??= (async () => {
@@ -149,9 +150,9 @@ export async function applyOps(drawing: DrawingFile): Promise<{ drawing: Drawing
 }
 
 /** A drawing embedded in a note (![[Plan.excalidraw]]), as an SVG in the current theme. */
-export async function drawingSvg(url: string): Promise<SVGSVGElement> {
+export async function drawingSvg(url: string, t: T): Promise<SVGSVGElement> {
   const response = await fetch(url)
-  if (!response.ok) throw new Error(`No se pudo leer el dibujo (${response.status}).`)
+  if (!response.ok) throw new Error(t('vault.drawing.readFailed', { status: response.status }))
   const { drawing } = await applyOps(parseDrawing(await response.text()))
   const { exportToSvg } = await loadExcalidraw()
   return exportToSvg({

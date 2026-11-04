@@ -4,6 +4,7 @@ import { DRAWING_EXT } from '../../../shared/excalidraw'
 import type { KnowledgeStatus, PublicSettings } from '../../../shared/types'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { Markdown } from '../components/Markdown'
+import { useT } from '../i18n/useT'
 import { fileAttachment, textAttachment, type Attachment } from '../lib/attachments'
 import { Icon } from '../umbra/Icon'
 import { NoteEditor } from './NoteEditor'
@@ -35,6 +36,7 @@ interface Props {
 const READ_KEY = 'alma.vault.reading'
 
 export function VaultView({ settings, vault, status, version, panel, onPanel, onAsk, chat, onToggleChat }: Props): React.JSX.Element {
+  const t = useT()
   const { tabs, active, docs, entries } = vault
   const selection = useRef<{ text: string; lines: [number, number] } | null>(null)
   useEffect(() => {
@@ -91,8 +93,8 @@ export function VaultView({ settings, vault, status, version, panel, onPanel, on
     if (!active) {
       return (
         <div className="vault-empty muted">
-          <p>Abrí una nota del panel izquierdo.</p>
-          <p className="small">Ctrl+O abrir · Ctrl+N nueva nota · Ctrl+Shift+F buscar · Ctrl+E leer/editar</p>
+          <p>{t('vault.openHint')}</p>
+          <p className="small">{t('vault.shortcuts')}</p>
         </div>
       )
     }
@@ -104,16 +106,16 @@ export function VaultView({ settings, vault, status, version, panel, onPanel, on
       )
     }
     if (DRAWING_EXT.test(active)) {
-      if (!doc || doc.loading) return <div className="vault-empty muted">Cargando…</div>
+      if (!doc || doc.loading) return <div className="vault-empty muted">{t('common.loading')}</div>
       return (
-        <Suspense fallback={<div className="vault-empty muted">Cargando Excalidraw…</div>}>
+        <Suspense fallback={<div className="vault-empty muted">{t('vault.loadingExcalidraw')}</div>}>
           <DrawingEditor key={active} path={active} content={doc.content} onChange={(content) => vault.edit(active, content)} onAsk={onAsk} />
         </Suspense>
       )
     }
     if (DOCUMENT_EXT.test(active)) {
       return (
-        <Suspense fallback={<div className="vault-empty muted">Cargando vista previa…</div>}>
+        <Suspense fallback={<div className="vault-empty muted">{t('vault.loadingPreview')}</div>}>
           <DocumentPreview key={active} path={active} url={assetUrl(active)} onOpen={() => void window.desktop.openPath(absolute)} />
         </Suspense>
       )
@@ -121,14 +123,14 @@ export function VaultView({ settings, vault, status, version, panel, onPanel, on
     if (!active.toLowerCase().endsWith('.md')) {
       return (
         <div className="vault-empty muted">
-          <p>Este archivo no es una nota.</p>
+          <p>{t('vault.notNote')}</p>
           <button className="ghost" onClick={() => void window.desktop.openPath(absolute)}>
-            <Icon icon={ExternalLink} size="sm" /> Abrir con la app del sistema
+            <Icon icon={ExternalLink} size="sm" /> {t('vault.openSystem')}
           </button>
         </div>
       )
     }
-    if (!doc || doc.loading) return <div className="vault-empty muted">Cargando…</div>
+    if (!doc || doc.loading) return <div className="vault-empty muted">{t('common.loading')}</div>
     if (doc.error && !doc.disk && !doc.content) return <div className="vault-empty text-danger">{doc.error}</div>
     if (reading) {
       return (
@@ -168,8 +170,8 @@ export function VaultView({ settings, vault, status, version, panel, onPanel, on
                 onAuxClick={(e) => e.button === 1 && vault.close(path)}
               >
                 <span className="ellipsis">{noteName(path)}</span>
-                {dirty && <span className="dot" title="Guardando…" />}
-                <button className="icon-button" title="Cerrar (Ctrl+W)" onClick={(e) => (e.stopPropagation(), vault.close(path))}>
+                {dirty && <span className="dot" title={t('vault.saving')} />}
+                <button className="icon-button" title={t('vault.closeTab')} onClick={(e) => (e.stopPropagation(), vault.close(path))}>
                   <Icon icon={X} size={12} />
                 </button>
               </div>
@@ -178,19 +180,19 @@ export function VaultView({ settings, vault, status, version, panel, onPanel, on
           <span className="grow" />
           {active?.toLowerCase().endsWith('.md') && (
             <>
-              <button className="ghost small" onClick={askAboutNote} title="Pasarle al chat el texto seleccionado, o la nota entera (Ctrl+L)">
-                <Icon icon={MessageSquarePlus} size={14} /> Preguntar
+              <button className="ghost small" onClick={askAboutNote} title={t('vault.askTitle')}>
+                <Icon icon={MessageSquarePlus} size={14} /> {t('vault.ask')}
               </button>
-              <button className="ghost small" onClick={() => setReading(!reading)} title="Alternar lectura / edición (Ctrl+E)">
-                <Icon icon={reading ? PencilLine : BookOpen} size={14} /> {reading ? 'Editar' : 'Leer'}
+              <button className="ghost small" onClick={() => setReading(!reading)} title={t('vault.toggleTitle')}>
+                <Icon icon={reading ? PencilLine : BookOpen} size={14} /> {reading ? t('routines.edit') : t('vault.read')}
               </button>
             </>
           )}
-          <button className={`ghost small${chat ? ' active' : ''}`} onClick={onToggleChat} title={chat ? 'Cerrar el chat' : 'Abrir el chat al costado'} aria-pressed={!!chat}>
-            <Icon icon={MessageSquare} size={14} /> Chat
+          <button className={`ghost small${chat ? ' active' : ''}`} onClick={onToggleChat} title={chat ? t('app.vaultChat.closeTitle') : t('vault.openChat')} aria-pressed={!!chat}>
+            <Icon icon={MessageSquare} size={14} /> {t('sidebar.mode.chat')}
           </button>
         </div>
-        {doc?.error && (doc.disk || doc.content) && <div className="error-banner small">No se pudo guardar: {doc.error}</div>}
+        {doc?.error && (doc.disk || doc.content) && <div className="error-banner small">{t('vault.saveFailed', { error: doc.error })}</div>}
         <div className="vault-body">
           <ErrorBoundary resetKey={active ?? ''}>{body()}</ErrorBoundary>
         </div>

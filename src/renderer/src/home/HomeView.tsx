@@ -4,6 +4,7 @@ import { Camera, Home, Loader2, Pencil, Plus, Power, Settings as SettingsIcon, T
 import { useEffect, useMemo, useState } from 'react'
 import { newId, pointInPolygon, rectPolygon, spotIn, type HomePlan, type HomeThing, type PlanFloor } from '../../../shared/home'
 import type { PublicSettings, VaultEntry } from '../../../shared/types'
+import { useT } from '../i18n/useT'
 import { request } from '../lib/coordinator'
 import { Icon } from '../umbra/Icon'
 import { AddDevice } from './AddDevice'
@@ -40,15 +41,16 @@ const savedTab = (): Tab => {
 
 /** The engine isn't ready: say where it stands and offer the next step. */
 function EngineCard({ settings, home, onUpdateSettings, onOpenSettings }: Pick<Props, 'settings' | 'home' | 'onUpdateSettings' | 'onOpenSettings'>): React.JSX.Element {
+  const t = useT()
   const engine = home.engine
   if (!settings.home.enabled) {
     return (
       <main className="home-view empty-state">
         <Icon icon={Home} size="lg" />
-        <h1>Casa</h1>
-        <p>Armá el mapa de tu casa, prendé luces, mirá las cámaras y armá modos y reglas. Alma lo maneja con vos: desde acá o por chat, voz y Telegram.</p>
+        <h1>{t('sidebar.mode.home')}</h1>
+        <p>{t('home.intro')}</p>
         <button className="primary" onClick={() => void onUpdateSettings({ home: { ...settings.home, enabled: true } })}>
-          <Icon icon={Power} size="sm" /> Activar la domótica
+          <Icon icon={Power} size="sm" /> {t('home.enable')}
         </button>
       </main>
     )
@@ -57,38 +59,38 @@ function EngineCard({ settings, home, onUpdateSettings, onOpenSettings }: Pick<P
   return (
     <main className="home-view empty-state">
       <Icon icon={Home} size="lg" />
-      <h1>Casa</h1>
+      <h1>{t('sidebar.mode.home')}</h1>
       {!engine && (
         <p>
-          <Icon icon={Loader2} size={16} className="spin" /> Conectando…
+          <Icon icon={Loader2} size={16} className="spin" /> {t('channels.state.connecting')}
         </p>
       )}
       {engine?.state === 'missing' && (
         <>
           {external ? (
-            <p>Falta la dirección y el token de tu Home Assistant. Se cargan en Configuración → Casa.</p>
+            <p>{t('home.missingExternal')}</p>
           ) : (
             <>
               <p>
-                Para manejar los dispositivos Alma instala su propio motor (Home Assistant) dentro de un Linux oculto de Windows (WSL2). Hace falta una sola vez: baja unos <b>1,2 GB</b>, ocupa unos <b>3 GB</b> y tarda unos 10 minutos.
+                {t('home.install.a')} <b>{t('home.install.download')}</b>, {t('home.install.b')} <b>{t('home.install.disk')}</b> {t('home.install.c')}
               </p>
               <button className="primary" onClick={() => void request({ method: 'home.install' })}>
-                Instalar el motor
+                {t('home.installEngine')}
               </button>
             </>
           )}
           <button className="ghost" onClick={onOpenSettings}>
-            <Icon icon={SettingsIcon} size="sm" /> {external ? 'Configurar' : 'Usar un Home Assistant que ya tengo'}
+            <Icon icon={SettingsIcon} size="sm" /> {external ? t('home.configure') : t('home.useOwn')}
           </button>
         </>
       )}
       {(engine?.state === 'installing' || engine?.state === 'starting') && (
         <div className="home-progress" role="status">
           <p>
-            <Icon icon={Loader2} size={16} className="spin" /> {engine.step ?? 'Trabajando…'}
+            <Icon icon={Loader2} size={16} className="spin" /> {engine.step ?? t('toolcard.working')}
           </p>
           {engine.progress !== undefined && <progress value={engine.progress} max={1} />}
-          <p className="muted small">Podés seguir usando Alma mientras tanto.</p>
+          <p className="muted small">{t('home.keepUsing')}</p>
         </div>
       )}
       {(engine?.state === 'error' || engine?.state === 'unsupported') && (
@@ -97,11 +99,11 @@ function EngineCard({ settings, home, onUpdateSettings, onOpenSettings }: Pick<P
           <div className="row">
             {engine.state === 'error' && (
               <button className="primary" onClick={() => void request({ method: 'home.start' })}>
-                Reintentar
+                {t('error.retry')}
               </button>
             )}
             <button className="ghost" onClick={onOpenSettings}>
-              <Icon icon={SettingsIcon} size="sm" /> Configuración de Casa
+              <Icon icon={SettingsIcon} size="sm" /> {t('home.settingsLink')}
             </button>
           </div>
         </>
@@ -111,6 +113,7 @@ function EngineCard({ settings, home, onUpdateSettings, onOpenSettings }: Pick<P
 }
 
 export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onOpenChat, adding, onAdding: setAdding }: Props): React.JSX.Element {
+  const t = useT()
   const [tab, setTabState] = useState<Tab>(savedTab)
   const setTab = (next: Tab): void => {
     setTabState(next)
@@ -159,7 +162,7 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
     if (!floor) return
     const right = Math.max(0, ...floor.rooms.flatMap((r) => r.polygon.map((p) => p[0])))
     const top = floor.rooms.length ? Math.min(...floor.rooms.flatMap((r) => r.polygon.map((p) => p[1]))) : 0
-    const room = { id: newId('room'), name: `Habitación ${floor.rooms.length + 1}`, areaId: null, polygon: rectPolygon(right, top, 300, 300) }
+    const room = { id: newId('room'), name: t('home.room.new', { n: floor.rooms.length + 1 }), areaId: null, polygon: rectPolygon(right, top, 300, 300) }
     saveFloor({ ...floor, rooms: [...floor.rooms, room] })
     setSelectedRoom(room.id)
   }
@@ -167,7 +170,7 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
     if (floor && selectedRoomObj && name.trim() && name.trim() !== selectedRoomObj.name) saveFloor({ ...floor, rooms: floor.rooms.map((r) => (r.id === selectedRoomObj.id ? { ...r, name: name.trim() } : r)) })
   }
   const removeRoom = (): void => {
-    if (!floor || !selectedRoomObj || !confirm(`¿Borrar la habitación «${selectedRoomObj.name}» del plano? Los dispositivos siguen en la casa.`)) return
+    if (!floor || !selectedRoomObj || !confirm(t('home.room.deleteConfirm', { name: selectedRoomObj.name }))) return
     const rooms = floor.rooms.filter((r) => r.id !== selectedRoomObj.id)
     // Devices that were only in this room leave the plan with it.
     const items = floor.items.filter((i) => !pointInPolygon([i.x, i.y], selectedRoomObj.polygon) || rooms.some((r) => pointInPolygon([i.x, i.y], r.polygon)))
@@ -177,7 +180,7 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
   const place = (thing: HomeThing): void => {
     if (!floor) return
     const room = selectedRoomObj ?? floor.rooms.find((r) => r.areaId && r.areaId === thing.areaId) ?? floor.rooms[0]
-    if (!room) return setMessage('Primero dibujá una habitación.')
+    if (!room) return setMessage(t('home.room.drawFirst'))
     const [x, y] = spotIn(floor, room)
     saveFloor({ ...floor, items: [...floor.items.filter((i) => i.ref !== thing.id), { ref: thing.id, x: Math.round(x), y: Math.round(y) }] })
   }
@@ -186,7 +189,7 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
     setSelected(null)
   }
   const addFloor = (): void => {
-    const name = prompt('Nombre del piso nuevo', `Piso ${plan!.floors.length + 1}`)?.trim()
+    const name = prompt(t('home.floor.newName'), t('home.floor.default', { n: plan!.floors.length + 1 }))?.trim()
     if (!name) return
     const created = { id: newId('piso'), name, rooms: [], doors: [], items: [] }
     void savePlan({ ...plan!, floors: [...plan!.floors, created] })
@@ -194,11 +197,11 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
   }
   const renameFloor = (): void => {
     if (!floor) return
-    const name = prompt('Nombre del piso', floor.name)?.trim()
+    const name = prompt(t('home.floor.name'), floor.name)?.trim()
     if (name) saveFloor({ ...floor, name })
   }
   const removeFloor = (): void => {
-    if (!floor || plan!.floors.length < 2 || !confirm(`¿Borrar el piso «${floor.name}» del plano?`)) return
+    if (!floor || plan!.floors.length < 2 || !confirm(t('home.floor.deleteConfirm', { name: floor.name }))) return
     void savePlan({ ...plan!, floors: plan!.floors.filter((f) => f.id !== floor.id) })
     setFloorId(null)
   }
@@ -219,7 +222,7 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
   const empty = !floor || floor.rooms.length === 0
   const byRoom = new Map<string, HomeThing[]>()
   for (const thing of home.snapshot.things) {
-    const name = home.snapshot.areas.find((a) => a.id === thing.areaId)?.name ?? 'Sin habitación'
+    const name = home.snapshot.areas.find((a) => a.id === thing.areaId)?.name ?? t('home.noRoom')
     byRoom.set(name, [...(byRoom.get(name) ?? []), thing])
   }
 
@@ -228,26 +231,26 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
       <header className="home-header">
         <div className="home-title">
           <Icon icon={Home} size="sm" />
-          <h2>Casa</h2>
-          <span className="badge ok" title={`Home Assistant ${home.engine?.version ?? ''}`}>
-            conectada
+          <h2>{t('sidebar.mode.home')}</h2>
+          <span className="badge ok" title={t('home.haVersion', { version: home.engine?.version ?? '' })}>
+            {t('home.connected')}
           </span>
         </div>
-        <nav className="home-tabs" role="tablist" aria-label="Casa">
-          {(['plan', 'devices', 'rules'] as Tab[]).map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-              {t === 'plan' ? 'Plano' : t === 'devices' ? `Dispositivos (${home.snapshot.things.length})` : `Reglas (${home.rules.automations.length + home.rules.judgment.length})`}
+        <nav className="home-tabs" role="tablist" aria-label={t('sidebar.mode.home')}>
+          {(['plan', 'devices', 'rules'] as Tab[]).map((id) => (
+            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
+              {id === 'plan' ? t('home.tab.plan') : id === 'devices' ? t('home.tab.devices', { count: home.snapshot.things.length }) : t('home.tab.rules', { count: home.rules.automations.length + home.rules.judgment.length })}
             </button>
           ))}
         </nav>
         <div className="row">
           {tab === 'plan' && (
-            <button className={edit ? 'primary' : 'ghost'} onClick={() => (setEdit(!edit), setSelectedRoom(null))} title="Mover habitaciones y dispositivos">
-              <Icon icon={Pencil} size={14} /> {edit ? 'Listo' : 'Editar plano'}
+            <button className={edit ? 'primary' : 'ghost'} onClick={() => (setEdit(!edit), setSelectedRoom(null))} title={t('home.editTitle')}>
+              <Icon icon={Pencil} size={14} /> {edit ? t('teams.done') : t('home.editPlan')}
             </button>
           )}
           <button className="primary" onClick={() => setAdding(true)}>
-            <Icon icon={Plus} size="sm" /> Agregar dispositivo
+            <Icon icon={Plus} size="sm" /> {t('home.addDevice')}
           </button>
         </div>
       </header>
@@ -271,43 +274,43 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
                 {edit && (
                   <>
                     <button className="ghost small" onClick={addFloor}>
-                      <Icon icon={Plus} size={14} /> Piso
+                      <Icon icon={Plus} size={14} /> {t('home.floor.add')}
                     </button>
                     <button className="ghost small" onClick={renameFloor}>
-                      Renombrar piso
+                      {t('home.floor.rename')}
                     </button>
                     {plan.floors.length > 1 && (
                       <button className="ghost small" onClick={removeFloor}>
-                        Borrar piso
+                        {t('home.floor.delete')}
                       </button>
                     )}
                   </>
                 )}
-                {plan.source && plan.source.kind !== 'manual' && <span className="muted small">Plano hecho desde {plan.source.kind === 'excalidraw' ? 'un dibujo' : 'una imagen'}</span>}
+                {plan.source && plan.source.kind !== 'manual' && <span className="muted small">{plan.source.kind === 'excalidraw' ? t('home.plan.fromDrawing') : t('home.plan.fromImage')}</span>}
               </div>
 
               {empty && !edit ? (
                 <div className="home-empty card">
-                  <h3>Todavía no hay plano de {floor.name}</h3>
-                  <p className="muted">Mostrale a Alma cómo es tu casa y arma las habitaciones. Después ubicás los dispositivos en cada una.</p>
+                  <h3>{t('home.plan.none', { name: floor.name })}</h3>
+                  <p className="muted">{t('home.plan.noneHint')}</p>
                   <div className="home-options">
-                    <button onClick={loadDrawings}>Desde un dibujo de Excalidraw</button>
-                    <button onClick={onOpenChat}>Desde una foto o croquis (por chat)</button>
+                    <button onClick={loadDrawings}>{t('home.plan.fromExcalidraw')}</button>
+                    <button onClick={onOpenChat}>{t('home.plan.fromPhoto')}</button>
                     <button
                       onClick={() => {
                         setEdit(true)
                         addRoom()
                       }}
                     >
-                      Dibujarlo a mano
+                      {t('home.plan.byHand')}
                     </button>
                   </div>
                   <p className="muted small">
-                    <Camera size={13} style={{ verticalAlign: '-2px' }} /> Por chat: pegá o arrastrá la foto del plano y pedile «armá el plano de mi casa con esta imagen». También podés mandarle fotos de cada ambiente.
+                    <Camera size={13} style={{ verticalAlign: '-2px' }} /> {t('home.plan.chatHint')}
                   </p>
                   {drawings && (
                     <ul className="home-brands">
-                      {drawings.length === 0 && <li className="muted small">No hay dibujos .excalidraw en el vault activo. Dibujá la casa en Conocimientos (un rectángulo por habitación, con su nombre adentro).</li>}
+                      {drawings.length === 0 && <li className="muted small">{t('home.plan.noDrawings')}</li>}
                       {drawings.map((d) => (
                         <li key={d.path}>
                           <button className="home-brand" onClick={() => void fromDrawing(d.path)}>
@@ -335,24 +338,24 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
                 <div className="home-edit-bar card">
                   <div className="row">
                     <button onClick={addRoom}>
-                      <Icon icon={Plus} size={14} /> Habitación
+                      <Icon icon={Plus} size={14} /> {t('home.room')}
                     </button>
                     {selectedRoomObj ? (
                       <>
-                        <input key={selectedRoomObj.id} className="home-name" defaultValue={selectedRoomObj.name} onBlur={(e) => renameRoom(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} aria-label="Nombre de la habitación" />
+                        <input key={selectedRoomObj.id} className="home-name" defaultValue={selectedRoomObj.name} onBlur={(e) => renameRoom(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} aria-label={t('home.room.nameAria')} />
                         <button className="ghost small danger-text" onClick={removeRoom}>
-                          <Icon icon={Trash2} size={14} /> Borrar habitación
+                          <Icon icon={Trash2} size={14} /> {t('home.room.delete')}
                         </button>
                       </>
                     ) : (
-                      <span className="muted small">Tocá una habitación para moverla, cambiarle el nombre o arrastrar sus esquinas. Arrastrá los dispositivos para ubicarlos.</span>
+                      <span className="muted small">{t('home.editHint')}</span>
                     )}
                   </div>
                   {unplaced.length > 0 && (
                     <div className="home-tray">
-                      <span className="muted small">Sin ubicar{selectedRoomObj ? ` (van a ${selectedRoomObj.name})` : ''}:</span>
+                      <span className="muted small">{selectedRoomObj ? t('home.unplacedTo', { room: selectedRoomObj.name }) : t('home.unplaced')}</span>
                       {unplaced.map((thing) => (
-                        <button key={thing.id} className="chip" onClick={() => place(thing)} title="Ubicar en el plano">
+                        <button key={thing.id} className="chip" onClick={() => place(thing)} title={t('home.placeTitle')}>
                           <Icon icon={KIND_ICON[thing.kind]} size={14} /> {thing.name}
                         </button>
                       ))}
@@ -362,7 +365,7 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
               )}
 
               {!edit && home.snapshot.scenes.length > 0 && (
-                <div className="home-modes row" aria-label="Modos">
+                <div className="home-modes row" aria-label={t('home.modes')}>
                   {home.snapshot.scenes.map((scene) => (
                     <button key={scene.entityId} onClick={() => void control(scene.entityId, 'scene/turn_on')}>
                       {scene.name}
@@ -381,7 +384,7 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
             )}
             {edit && selectedThing && (
               <button className="ghost small home-unplace" onClick={() => unplace(selectedThing.id)}>
-                Sacar del plano
+                {t('home.unplace')}
               </button>
             )}
           </div>
@@ -392,10 +395,10 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
             <section className="home-devices">
               {home.snapshot.things.length === 0 && (
                 <div className="card">
-                  <h3>Todavía no hay dispositivos</h3>
-                  <p className="muted">Agregá los focos, enchufes y cámaras que tengas (Tuya, Sonoff, Tapo y muchas marcas más).</p>
+                  <h3>{t('home.devices.none')}</h3>
+                  <p className="muted">{t('home.devices.noneHint')}</p>
                   <button className="primary" onClick={() => setAdding(true)}>
-                    <Icon icon={Plus} size="sm" /> Agregar dispositivo
+                    <Icon icon={Plus} size="sm" /> {t('home.addDevice')}
                   </button>
                 </div>
               )}
@@ -411,13 +414,13 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
                       </span>
                       <div className="grow">
                         <b>{thing.name}</b>
-                        <div className="muted small">{statusText(thing)}</div>
+                        <div className="muted small">{statusText(thing, t)}</div>
                       </div>
                       {thing.available && (TOGGLEABLE.includes(thing.kind) || thing.kind === 'cover') && (
                         <button
                           role="switch"
                           aria-checked={!!thing.on}
-                          aria-label={`Encender ${thing.name}`}
+                          aria-label={t('home.turnOnName', { name: thing.name })}
                           className={`home-switch${thing.on ? ' on' : ''}`}
                           onClick={(e) => (e.stopPropagation(), void toggleThing(thing))}
                         >
@@ -451,24 +454,25 @@ export function HomeView({ settings, home, onUpdateSettings, onOpenSettings, onO
 
 /** Sidebar of the Casa mode: where the engine is, the modes, and a shortcut to add a device. */
 export function HomeSidebar({ settings, home, onAdd }: { settings: PublicSettings; home: HomeData; onAdd(): void }): React.JSX.Element {
-  if (!settings.home.enabled) return <p className="muted small pad">La domótica está apagada.</p>
+  const t = useT()
+  if (!settings.home.enabled) return <p className="muted small pad">{t('home.off')}</p>
   const on = home.snapshot.things.filter((t) => t.kind === 'light' && t.on).length
   return (
-    <nav className="home-side" aria-label="Casa">
+    <nav className="home-side" aria-label={t('sidebar.mode.home')}>
       <div className="card">
-        <b>{home.engine?.state === 'ready' ? 'Casa conectada' : (home.engine?.step ?? 'Motor ' + (home.engine?.state ?? '…'))}</b>
+        <b>{home.engine?.state === 'ready' ? t('home.sidebar.connected') : (home.engine?.step ?? t('home.sidebar.engine', { state: home.engine?.state ?? '…' }))}</b>
         {home.engine?.state === 'ready' && (
           <span className="muted small">
-            {home.snapshot.things.length} dispositivos · {on} luz{on === 1 ? '' : 'ces'} prendida{on === 1 ? '' : 's'}
+            {t('home.deviceCount', { count: home.snapshot.things.length })} · {t('home.lightsOn', { count: on })}
           </span>
         )}
       </div>
       {home.engine?.state === 'ready' && (
         <>
           <button className="ghost block" onClick={onAdd}>
-            <Icon icon={Plus} size="sm" /> Agregar dispositivo
+            <Icon icon={Plus} size="sm" /> {t('home.addDevice')}
           </button>
-          {home.snapshot.scenes.length > 0 && <h4 className="muted small pad">Modos</h4>}
+          {home.snapshot.scenes.length > 0 && <h4 className="muted small pad">{t('home.modes')}</h4>}
           {home.snapshot.scenes.map((scene) => (
             <button key={scene.entityId} className="ghost block" onClick={() => void control(scene.entityId, 'scene/turn_on')}>
               {scene.name}

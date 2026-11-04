@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ApprovalMode, PendingApproval, PublicSettings, Thread } from '../../../shared/types'
 import { PROVIDER_NAMES } from '../../../shared/defaults'
-import { composeMessage, fileAttachment, type Attachment } from '../lib/attachments'
+import { composeMessage } from '../../../shared/attachments'
+import { fileAttachment, imageAttachment, type Attachment } from '../lib/attachments'
+import { useT } from '../i18n/useT'
 import { request } from '../lib/coordinator'
-import { APPROVAL_MODES, folderName, threadTitle } from '../lib/format'
+import { approvalModes, folderName, threadTitle } from '../lib/format'
 import type { Draft } from '../lib/state'
 import { MessageList } from './MessageList'
 import { ModelPicker } from './ModelPicker'
@@ -30,6 +32,7 @@ interface Props {
 }
 
 export function ChatView({ thread, settings, drafts, running, approvals, error, attachments = [], compact = false, ...props }: Props): React.JSX.Element {
+  const t = useT()
   const [text, setText] = useState('')
   /** Pictures pasted or dropped into this chat: saved in the inbox and handed to the agent by path (look_at_image). */
   const [images, setImages] = useState<Attachment[]>([])
@@ -37,7 +40,8 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
   const scroller = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
   const agent = settings.agents.find((a) => a.id === thread.agentId)
-  const mode = APPROVAL_MODES.find((m) => m.value === settings.approvalMode)
+  const modes = approvalModes(t)
+  const mode = modes.find((m) => m.value === settings.approvalMode)
 
   // Follow new output unless the user scrolled up to read.
   useEffect(() => {
@@ -55,7 +59,7 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
       })
       const name = file.name && file.name !== 'image.png' ? file.name : `imagen-${Date.now()}.png`
       const path = await request<string>({ method: 'files.saveImage', name, base64 })
-      setImages((list) => [...list, { id: path, label: name, path, body: `Imagen adjunta (mirala con look_at_image): ${path}` }])
+      setImages((list) => [...list, imageAttachment(path, name)])
     }
   }
 
@@ -116,8 +120,8 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
             }}
           />
         ) : (
-          <h2 className="ellipsis" onDoubleClick={() => setEditingTitle(true)} title="Doble clic para renombrar">
-            {threadTitle(thread.title)}
+          <h2 className="ellipsis" onDoubleClick={() => setEditingTitle(true)} title={t('chat.rename')}>
+            {threadTitle(thread.title, t)}
           </h2>
         )}
         <div className="header-controls">
@@ -132,9 +136,9 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
             className={`chip${thread.workspace ? '' : ' chip-warn'}`}
             onClick={() => void pickWorkspace()}
             disabled={running}
-            title={thread.workspace || 'Elegí la carpeta donde trabaja el agente'}
+            title={thread.workspace || t('chat.pickFolderTitle')}
           >
-            <Icon icon={Folder} size="sm" /> {thread.workspace ? folderName(thread.workspace) : 'Elegir carpeta'}
+            <Icon icon={Folder} size="sm" /> {thread.workspace ? folderName(thread.workspace) : t('chat.pickFolder')}
           </button>
         </div>
       </header>
@@ -149,14 +153,14 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
       >
         {thread.messages.length === 0 && !running && (
           <div className="welcome">
-            <h3>{agent ? `Hablás con ${agent.name}` : 'Nueva conversación'}</h3>
+            <h3>{agent ? t('chat.talkingTo', { name: agent.name }) : t('common.newConversation')}</h3>
             <p className="muted">{agent?.description}</p>
             {!thread.workspace && (
               <p>
                 <button className="link" onClick={() => void pickWorkspace()}>
-                  Elegí una carpeta de trabajo
+                  {t('chat.needFolder')}
                 </button>{' '}
-                para que el agente pueda leer y modificar archivos.
+                {t('chat.needFolderWhy')}
               </p>
             )}
           </div>
@@ -175,10 +179,10 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
             <div className="row">
               {/api key|autenticaci|authentication|401/i.test(error) && (
                 <button className="ghost small" onClick={props.onOpenSettings}>
-                  Configurar proveedor
+                  {t('chat.configureProvider')}
                 </button>
               )}
-              <button className="icon-button" onClick={props.onDismissError} title="Cerrar">
+              <button className="icon-button" onClick={props.onDismissError} title={t('common.close')}>
                 <Icon icon={X} size="sm" />
               </button>
             </div>
@@ -188,12 +192,12 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
 
       <footer className="composer">
         {(attachments.length > 0 || images.length > 0) && (
-          <div className="attachments" aria-label="Adjuntos">
+          <div className="attachments" aria-label={t('chat.attachments')}>
             {attachments.map((a) => (
               <span key={a.id} className="attachment" title={a.body.slice(0, 400)}>
                 <Icon icon={Paperclip} size={12} />
                 <span className="ellipsis">{a.label}</span>
-                <button className="icon-button" title="Quitar" onClick={() => props.onRemoveAttachment?.(a.id)}>
+                <button className="icon-button" title={t('chat.removeAttachment')} onClick={() => props.onRemoveAttachment?.(a.id)}>
                   <Icon icon={X} size={12} />
                 </button>
               </span>
@@ -202,7 +206,7 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
               <span key={a.id} className="attachment" title={a.path}>
                 <Icon icon={ImageIcon} size={12} />
                 <span className="ellipsis">{a.label}</span>
-                <button className="icon-button" title="Quitar" onClick={() => setImages((list) => list.filter((i) => i.id !== a.id))}>
+                <button className="icon-button" title={t('chat.removeAttachment')} onClick={() => setImages((list) => list.filter((i) => i.id !== a.id))}>
                   <Icon icon={X} size={12} />
                 </button>
               </span>
@@ -213,12 +217,12 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
           value={text}
           placeholder={
             running
-              ? 'El agente está trabajando…'
+              ? t('chat.placeholder.running')
               : attachments.length
-                ? '¿Qué querés saber de lo adjuntado?'
+                ? t('chat.placeholder.attached')
                 : compact
-                  ? 'Preguntale algo, o arrastrá un archivo del vault acá.'
-                  : 'Escribí una tarea. Enter envía, Shift+Enter agrega una línea.'
+                  ? t('chat.placeholder.compact')
+                  : t('chat.placeholder.default')
           }
           rows={compact ? 2 : 3}
           onChange={(e) => setText(e.target.value)}
@@ -238,12 +242,12 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
         />
         <div className="composer-bar">
           <label className="control" title={mode?.hint}>
-            <span>Aprobación</span>
+            <span>{t('chat.approval')}</span>
             <select
               value={settings.approvalMode}
               onChange={(e) => void props.onUpdateSettings({ approvalMode: e.target.value as ApprovalMode })}
             >
-              {APPROVAL_MODES.map((m) => (
+              {modes.map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
                 </option>
@@ -251,24 +255,24 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
             </select>
           </label>
           <label className="control">
-            <span>Agente</span>
+            <span>{t('chat.agent')}</span>
             <select value={thread.agentId} disabled={running} onChange={(e) => void request({ method: 'threads.update', threadId: thread.id, agentId: e.target.value })}>
               {settings.agents.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.companyId ? `${settings.companies.find((co) => co.id === a.companyId)?.name ?? 'Empresa'} · ` : ''}
+                  {a.companyId ? `${settings.companies.find((co) => co.id === a.companyId)?.name ?? t('chat.companyFallback')} · ` : ''}
                   {a.name}
                 </option>
               ))}
             </select>
           </label>
-          <span className="muted small grow ellipsis">{agent ? `${thread.model ? `${PROVIDER_NAMES[thread.model.provider]} · ${thread.model.model}` : agent.model || 'modelo automático'} · esfuerzo ${agent.effort}` : ''}</span>
+          <span className="muted small grow ellipsis">{agent ? t('chat.modelLine', { model: thread.model ? `${PROVIDER_NAMES[thread.model.provider]} · ${thread.model.model}` : agent.model || t('chat.autoModel'), effort: agent.effort }) : ''}</span>
           {running ? (
             <button className="danger" onClick={() => void request({ method: 'chat.stop', threadId: thread.id })}>
-              <Icon icon={Square} size="sm" /> Detener
+              <Icon icon={Square} size="sm" /> {t('chat.stop')}
             </button>
           ) : (
             <button className="primary" onClick={() => void send()} disabled={!text.trim()}>
-              Enviar <Icon icon={CornerDownLeft} size="sm" />
+              {t('chat.send')} <Icon icon={CornerDownLeft} size="sm" />
             </button>
           )}
         </div>

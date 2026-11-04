@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CLAUDE_MODELS, isChatModel, PROVIDER_NAMES } from '../../../shared/defaults'
 import type { AgentProfile, ModelChoice, ProviderId, PublicSettings } from '../../../shared/types'
+import { useT } from '../i18n/useT'
 import { request } from '../lib/coordinator'
 
 const ORDER: ProviderId[] = ['meta', 'anthropic', 'xai', 'deepseek', 'vercel']
@@ -24,6 +25,7 @@ const keyOf = (c: ModelChoice): string => `${c.provider}|${c.model}`
 
 /** "Who answers": the model of this conversation, over the agent's own. */
 export function ModelPicker({ settings, agent, value, disabled, onChange }: { settings: PublicSettings; agent?: AgentProfile; value?: ModelChoice; disabled: boolean; onChange(choice: ModelChoice | null): void }): React.JSX.Element {
+  const t = useT()
   const [models, setModels] = useState<Partial<Record<ProviderId, string[]>>>({})
   useEffect(() => {
     for (const provider of ORDER) {
@@ -40,7 +42,7 @@ export function ModelPicker({ settings, agent, value, disabled, onChange }: { se
 
   return (
     <label className="control">
-      <span>Modelo</span>
+      <span>{t('model.label')}</span>
       <select
         value={value ? keyOf(value) : ''}
         disabled={disabled}
@@ -49,7 +51,7 @@ export function ModelPicker({ settings, agent, value, disabled, onChange }: { se
           onChange(e.target.value ? { provider: provider as ProviderId, model: rest.join('|') } : null)
         }}
       >
-        <option value="">{agent ? `El de ${agent.name} · ${PROVIDER_NAMES[agent.provider]} ${agent.model || '(automático)'}` : 'El del agente'}</option>
+        <option value="">{agent ? t('model.agentDefault', { name: agent.name, provider: PROVIDER_NAMES[agent.provider], model: agent.model || t('model.auto') }) : t('model.noAgent')}</option>
         {groups.map((g) => (
           <optgroup key={g.provider} label={PROVIDER_NAMES[g.provider]}>
             {g.ids.map((id) => (

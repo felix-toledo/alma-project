@@ -1,4 +1,6 @@
+import type { Language } from '../../../shared/i18n/language'
 import type { VoicePlayback } from '../../../shared/types'
+import { windowsVoices } from '../../../shared/voices'
 import workletUrl from './capture-worklet.js?url'
 
 export interface Capture {
@@ -102,17 +104,17 @@ export class Player {
         void audio.play().catch(done)
       })
     }
-    return speak(playback.text, playback.voice)
+    return speak(playback.text, playback.voice, playback.language)
   }
 }
 
 /** Windows' own voices (Helena, Sabina…): free, offline and instant. */
-export function speak(text: string, voiceName: string): Promise<void> {
+export function speak(text: string, voiceName: string, language: Language = 'es'): Promise<void> {
   return new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text)
     const voices = speechSynthesis.getVoices()
-    utterance.voice = voices.find((v) => v.name === voiceName) ?? voices.find((v) => v.lang.startsWith('es')) ?? null
-    utterance.lang = utterance.voice?.lang ?? 'es-ES'
+    utterance.voice = voices.find((v) => v.name === voiceName) ?? windowsVoices(voices, language)[0] ?? null
+    utterance.lang = utterance.voice?.lang ?? (language === 'en' ? 'en-US' : 'es-ES')
     utterance.onend = () => resolve()
     utterance.onerror = () => resolve()
     speechSynthesis.speak(utterance)

@@ -1,3 +1,5 @@
+import { compareText } from '../../../shared/i18n/format'
+import type { Language } from '../../../shared/i18n/language'
 import type { VaultEntry } from '../../../shared/types'
 
 export interface TreeNode {
@@ -37,7 +39,7 @@ export function vaultPathOf(url: string): string {
 }
 
 /** Folders first, then files, both alphabetically (like a file explorer). */
-export function buildTree(entries: VaultEntry[]): TreeNode[] {
+export function buildTree(entries: VaultEntry[], language: Language): TreeNode[] {
   const root: TreeNode = { name: '', path: '', kind: 'folder', children: [] }
   const folders = new Map<string, TreeNode>([['', root]])
   const sorted = [...entries].sort((a, b) => a.path.split('/').length - b.path.split('/').length)
@@ -47,8 +49,9 @@ export function buildTree(entries: VaultEntry[]): TreeNode[] {
     parent.children.push(node)
     if (entry.kind === 'folder') folders.set(entry.path, node)
   }
+  const compare = compareText(language)
   const sort = (node: TreeNode): void => {
-    node.children.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name, 'es', { numeric: true }) : a.kind === 'folder' ? -1 : 1))
+    node.children.sort((a, b) => (a.kind === b.kind ? compare(a.name, b.name) : a.kind === 'folder' ? -1 : 1))
     node.children.forEach(sort)
   }
   sort(root)

@@ -1,5 +1,6 @@
 import { Activity, Blinds, Camera, CircleHelp, Fan, Lightbulb, Lock, Plug, ShieldAlert, Speaker, Thermometer, type LucideIcon } from 'lucide-react'
 import type { DeviceKind, HomeThing } from '../../../shared/home'
+import type { T } from '../i18n/useT'
 import { request } from '../lib/coordinator'
 
 export const KIND_ICON: Record<DeviceKind, LucideIcon> = {
@@ -16,40 +17,28 @@ export const KIND_ICON: Record<DeviceKind, LucideIcon> = {
   other: CircleHelp
 }
 
-export const KIND_LABEL: Record<DeviceKind, string> = {
-  light: 'Luz',
-  switch: 'Enchufe',
-  camera: 'Cámara',
-  speaker: 'Parlante',
-  cover: 'Persiana',
-  fan: 'Ventilador',
-  climate: 'Clima',
-  lock: 'Cerradura',
-  alarm: 'Alarma',
-  sensor: 'Sensor',
-  other: 'Otro'
-}
+export const kindLabel = (kind: DeviceKind, t: T): string => t(`home.kind.${kind}`)
 
 /** Things a tap turns on and off. */
 export const TOGGLEABLE: DeviceKind[] = ['light', 'switch', 'fan']
 
-export function statusText(thing: HomeThing): string {
-  if (!thing.available) return 'sin conexión'
+export function statusText(thing: HomeThing, t: T): string {
+  if (!thing.available) return t('home.status.offline')
   switch (thing.kind) {
     case 'light':
-      return thing.on ? `encendida${typeof thing.attrs.brightness === 'number' ? ` · ${Math.round((thing.attrs.brightness / 255) * 100)}%` : ''}` : 'apagada'
+      return thing.on ? `${t('home.status.lightOn')}${typeof thing.attrs.brightness === 'number' ? ` · ${Math.round((thing.attrs.brightness / 255) * 100)}%` : ''}` : t('home.status.lightOff')
     case 'cover':
-      return thing.on ? 'abierta' : 'cerrada'
+      return thing.on ? t('home.status.open') : t('home.status.closed')
     case 'lock':
-      return thing.on ? 'abierta' : 'cerrada con llave'
+      return thing.on ? t('home.status.open') : t('home.status.locked')
     case 'camera':
-      return 'cámara'
+      return t('home.status.camera')
     case 'speaker':
-      return thing.state === 'playing' ? `suena${thing.attrs.media_title ? ` «${thing.attrs.media_title}»` : ''}` : thing.on ? 'encendido' : 'apagado'
+      return thing.state === 'playing' ? `${t('home.status.playing')}${thing.attrs.media_title ? ` «${thing.attrs.media_title}»` : ''}` : thing.on ? t('home.status.on') : t('home.status.off')
     case 'climate':
       return thing.attrs.current_temperature !== undefined ? `${thing.attrs.current_temperature}°` : thing.state
     default:
-      return thing.on === null ? thing.state : thing.on ? 'encendido' : 'apagado'
+      return thing.on === null ? thing.state : thing.on ? t('home.status.on') : t('home.status.off')
   }
 }
 

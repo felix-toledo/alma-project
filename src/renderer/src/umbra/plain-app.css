@@ -1,12 +1,12 @@
 /* ============================================================
-   Adaptador para apps SIN Tailwind (CSS plano).
-   Importar después de tokens.css y base.css. Re-tematiza los elementos
-   nativos para que botones, inputs y listas ya existentes adopten el diseño
-   sin tocar el JSX. Ajustar los selectores de clase a la app (.thread-item, .modal…).
+   Adapter for apps WITHOUT Tailwind (plain CSS).
+   Import after tokens.css and base.css. It re-themes the native
+   elements so that existing buttons, inputs and lists adopt the design
+   without touching the JSX. Adjust the class selectors to the app (.thread-item, .modal…).
    ============================================================ */
 
 :root {
-  /* Alias: si la app ya usa estas variables, pasan a los tokens de Umbra */
+  /* Aliases: if the app already uses these variables, they move to Umbra's tokens */
   --bg: var(--bg-base);
   --bg-elev: var(--surface-glass);
   --bg-elev-2: var(--surface-glass);
@@ -20,13 +20,13 @@
   --warn: var(--warning);
   --font: var(--font-sans);
   --touch-min: 32px; /* app de escritorio: controles compactos */
-  /* Botón enfocado estilo consola: se "enciende" en blanco con texto oscuro */
+  /* Console-style focused button: it "lights up" white with dark text */
   --btn-lit-bg: #f2f5fb;
   --btn-lit-fg: #05070d;
   color-scheme: dark;
 }
 body { background: var(--bg-base); font-weight: var(--fw-regular); -webkit-font-smoothing: antialiased; }
-/* El fondo (z-index:-1) queda detrás: la raíz crea el contexto de apilamiento */
+/* The background (z-index:-1) stays behind: the root creates the stacking context */
 .app { position: relative; z-index: 1; }
 .msg.user .bubble { background: var(--surface-glass-hover); border-color: var(--border-glass); }
 
@@ -41,8 +41,8 @@ body { background: var(--bg-base); font-weight: var(--fw-regular); -webkit-font-
 .modal-backdrop { background: rgb(0 0 0 / 0.55); backdrop-filter: blur(var(--blur-modal)); }
 
 /* ---------- Botones ----------
-   Reposo: píldora de vidrio. Hover = foco: se enciende (relleno claro, texto oscuro),
-   crece un poco y aparece el halo. Primario: vidrio con tinte azul. Peligro: tinte rojo. */
+   Resting: a glass pill. Hover = focus: it lights up (light fill, dark text),
+   grows a little and the halo appears. Primary: glass with a blue tint. Danger: a red tint. */
 button {
   display: inline-flex;
   align-items: center;
@@ -84,7 +84,7 @@ button.block { width: 100%; }
 button:active:not(:disabled) { transform: scale(0.97); }
 button:disabled { opacity: var(--op-disabled); cursor: not-allowed; }
 
-/* Botones de lista y de texto: no se encienden en blanco, solo vidrio + halo suave */
+/* List and text buttons: they do not light up white, only glass + a soft halo */
 :is(.tabs button, .split-list button, .tool-head, .thinking-toggle, .day-picker button) {
   justify-content: flex-start;
   border-radius: var(--r-sm);
@@ -146,13 +146,13 @@ input, select, textarea {
 }
 input::placeholder, textarea::placeholder { color: var(--text-disabled); }
 select { color-scheme: dark; cursor: pointer; }
-/* La lista desplegable nativa: fondo oscuro y texto claro (antes salía gris sobre blanco) */
+/* The native dropdown list: dark background and light text (it used to come out gray on white) */
 select option, select optgroup { background: var(--bg-elevated); color: var(--text-primary); }
 select option:checked { background: var(--accent-solid); color: #fff; }
 .control select { color: var(--text-primary); }
 input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--focus-ring); box-shadow: var(--glow-focus); outline: none; }
 
-/* Volumen general (música + sonidos) */
+/* Overall volume (music + sounds) */
 .ambience-volume { display: flex; align-items: center; gap: 12px; width: 240px; color: var(--text-secondary); }
 .ambience-volume-value { width: 38px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
 .ambience-volume input[type='range'] {
@@ -178,7 +178,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { border-color
 .ambience-volume input[type='range']:is(:hover, :focus-visible)::-webkit-slider-thumb { transform: scale(1.25); box-shadow: var(--glow-focus); }
 .ambience-volume input[type='range']:focus-visible { box-shadow: none; outline: none; }
 
-/* Filas de ajustes con interruptor (pestaña Sonido y ambiente) */
+/* Settings rows with a switch («Sonido y ambiente» tab) */
 .setting-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: var(--bw) solid var(--border-glass); }
 .card h3 + .setting-row { border-top: none; }
 .setting-icon { color: var(--accent); flex-shrink: 0; }

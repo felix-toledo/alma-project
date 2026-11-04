@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { Block, PendingApproval, Thread, ToolState } from '../../../shared/types'
+import { shownToolText } from '../../../shared/i18n/messages'
+import { useLanguage, useT, type T } from '../i18n/useT'
 import { request } from '../lib/coordinator'
-import { generatedImagePath, knowledgeNotePath, toolLabel, toolSummary } from '../lib/format'
+import { generatedImagePath, reviewerReasonShown } from '../../../shared/cards'
+import { knowledgeNotePath, toolLabel, toolSummary } from '../lib/format'
 import { openNote } from '../vault/vaultLib'
 import type { Draft } from '../lib/state'
 // biome-ignore lint/suspicious/noImportCycles: tool cards render nested message lists (sub-agent runs)
@@ -20,14 +23,7 @@ interface Props {
   approvals: PendingApproval[]
 }
 
-const STATUS_TEXT: Record<ToolState['status'], string> = {
-  'pending-approval': 'Esperando tu aprobación',
-  reviewing: 'Auto-review evaluando…',
-  running: 'Ejecutando…',
-  done: 'Listo',
-  denied: 'No ejecutado',
-  error: 'Error'
-}
+const statusText = (status: ToolState['status'], t: T): string => t(`toolcard.status.${status}`)
 
 function statusIcon(status: ToolState['status'] | undefined): React.JSX.Element {
   switch (status) {
@@ -101,6 +97,10 @@ function Elapsed({ from, to }: { from: number; to?: number }): React.JSX.Element
 }
 
 export function ToolCard({ thread, use, result, state, approval, drafts, approvals }: Props): React.JSX.Element {
+  const t = useT()
+  const language = useLanguage()
+  // What Alma wrote for the card follows the language of the moment (a live switch included); older results show as stored.
+  const shown = result ? shownToolText(result, language) : undefined
   const isDelegate = use.name === 'delegate_task'
   const run = isDelegate ? thread.subagents[use.id] : undefined
   const [open, setOpen] = useState(false)
@@ -109,7 +109,7 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
   const expanded = open || subagentNeedsApproval
   const status = approval ? 'pending-approval' : state?.status
   const generatedPath = (use.name === 'generate_image' || use.name === 'compose_image') && result && !result.is_error ? generatedImagePath(result.content) : undefined
-  const notePath = result && !result.is_error ? knowledgeNotePath(use.name, use.input, result.content) : undefined
+  const notePath = result && !result.is_error ? knowledgeNotePath(use.name, use.input, result.content, language) : undefined
   const respond = (decision: 'allow' | 'deny' | 'always'): void => {
     if (approval) void request({ method: 'approval.respond', approvalId: approval.approvalId, decision })
   }
@@ -118,8 +118,8 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
     <div className={`tool-card status-${status ?? 'unknown'}${isDelegate ? ' delegate' : ''}`}>
       <button className="tool-head" onClick={() => setOpen(!expanded)} aria-expanded={expanded}>
         {statusIcon(status)}
-        <strong>{isDelegate && run ? `${run.agentName}` : toolLabel(use.name)}</strong>
-        <span className="tool-summary ellipsis">{toolSummary(use.name, use.input)}</span>
+        <strong>{isDelegate && run ? `${run.agentName}` : toolLabel(use.name, t)}</strong>
+        <span className="tool-summary ellipsis">{toolSummary(use.name, use.input, t)}</span>
         {run && <Elapsed from={run.startedAt} to={run.endedAt} />}
         <span className="muted small">{expanded ? <Icon icon={ChevronDown} size={14} /> : <Icon icon={ChevronRight} size={14} />}</span>
       </button>
@@ -128,8 +128,8 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
 
       {notePath && (use.name === 'save_knowledge' || use.name === 'remember') && (
         <div className="tool-foot small knowledge-saved">
-          <span className="ellipsis">{result?.content}</span>
-          <button className="link" onClick={() => openNote(notePath)}>Abrir nota</button>
+          <span className="ellipsis">{shown}</span>
+          <button className="link" onClick={() => openNote(notePath)}>{t('toolcard.openNote')}</button>
         </div>
       )}
 
@@ -138,19 +138,19 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
           <div>
             {approval.flagged ? (
               <>
-                <strong>Auto-review marcó esta acción como potencialmente peligrosa.</strong>
-                {approval.reason && <div className="small">{approval.reason}</div>}
+                <strong>{t('toolcard.flagged')}</strong>
+                {reviewerReasonShown(approval) && <div className="small">{reviewerReasonShown(approval)}</div>}
               </>
             ) : (
               <>
-                <strong>¿Permitir esta acción?</strong>
-                {approval.reason && <div className="small muted">{approval.reason}</div>}
+                <strong>{t('toolcard.allowQuestion')}</strong>
+                {reviewerReasonShown(approval) && <div className="small muted">{reviewerReasonShown(approval)}</div>}
               </>
             )}
           </div>
           {approval.preview ? (
             <PostPreview
-              image={approval.preview.imageDataUrl ? <img className="post-image" src={approval.preview.imageDataUrl} alt="Imagen del post" /> : undefined}
+              image={approval.preview.imageDataUrl ? <img className="post-image" src={approval.preview.imageDataUrl} alt={t('toolcard.postImage')} /> : undefined}
               caption={approval.preview.caption}
               note={approval.preview.note}
             />
@@ -159,15 +159,15 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
           )}
           <div className="row">
             <button className="primary small" onClick={() => respond('allow')}>
-              {use.name === 'instagram_publish' ? 'Publicar' : 'Permitir'}
+              {use.name === 'instagram_publish' ? t('toolcard.publish') : t('toolcard.allow')}
             </button>
             {approval.allowAlways && (
-              <button className="ghost small" onClick={() => respond('always')} title={`No volver a preguntar por ${toolLabel(use.name)}`}>
-                Siempre permitir
+              <button className="ghost small" onClick={() => respond('always')} title={t('toolcard.alwaysTitle', { tool: toolLabel(use.name, t) })}>
+                {t('toolcard.always')}
               </button>
             )}
             <button className="danger small" onClick={() => respond('deny')}>
-              Rechazar
+              {t('toolcard.deny')}
             </button>
           </div>
         </div>
@@ -177,9 +177,9 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
         <div className="tool-body">
           {isDelegate && run ? (
             <>
-              <div className="detail-label">Tarea</div>
+              <div className="detail-label">{t('toolcard.task')}</div>
               <div className="subagent-task">{run.task}</div>
-              <div className="detail-label">Trabajo del subagente</div>
+              <div className="detail-label">{t('toolcard.subagentWork')}</div>
               <div className="subagent-transcript">
                 <MessageList
                   thread={thread}
@@ -196,8 +196,8 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
           )}
           {result && (
             <>
-              <div className="detail-label">{result.is_error ? 'Error' : 'Resultado'}</div>
-              <pre className={`code output${result.is_error ? ' error' : ''}`}>{result.content}</pre>
+              <div className="detail-label">{result.is_error ? t('toolcard.status.error') : t('toolcard.result')}</div>
+              <pre className={`code output${result.is_error ? ' error' : ''}`}>{shown}</pre>
             </>
           )}
         </div>
@@ -205,7 +205,7 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
 
       {state?.note && !approval && (
         <div className="tool-foot muted small">
-          {STATUS_TEXT[state.status]} · {state.note}
+          {statusText(state.status, t)} · {state.note}
         </div>
       )}
       {isDelegate && run?.status === 'running' && !expanded && <SubagentPeek draft={drafts[`${thread.id}:${run.id}`]} />}
@@ -215,11 +215,12 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
 
 /** Live one-liner under a collapsed subagent card, so parallel agents are visible at a glance. */
 function SubagentPeek({ draft }: { draft?: Draft }): React.JSX.Element {
+  const t = useT()
   const lastTool = draft?.tools[draft.tools.length - 1]
   const text = draft?.text.trim().split('\n').pop()
   return (
     <div className="tool-foot muted small ellipsis">
-      <span className="spinner" /> {lastTool ? toolLabel(lastTool.name) : text || 'Trabajando…'}
+      <span className="spinner" /> {lastTool ? toolLabel(lastTool.name, t) : text || t('toolcard.working')}
     </div>
   )
 }

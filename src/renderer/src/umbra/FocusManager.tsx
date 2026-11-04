@@ -4,12 +4,12 @@ import { playUISound } from './useUISound'
 /**
  * Foco espacial tipo consola.
  * - Todo elemento navegable lleva `data-focusable`.
- * - <FocusScope> agrupa (menú, modal): recuerda el último foco y, si `trap`, confina la navegación.
+ * - <FocusScope> groups (menu, modal): it remembers the last focus and, with `trap`, confines navigation.
  * - Teclado: flechas / Enter / Esc. Gamepad: D-pad o stick izq. / A(0) / B(1).
- * - Esc o B disparan el evento `umbra:back` (lo escucha cada Modal/Select abierto).
+ * - Esc or B fire the `umbra:back` event (each open Modal/Select listens to it).
  */
 type Dir = 'up' | 'down' | 'left' | 'right'
-// Funciona con `data-focusable` (componentes nuevos) y con botones/links nativos (apps existentes sin marcar nada)
+// It works with `data-focusable` (new components) and with native buttons/links (existing apps with nothing marked)
 const SELECTOR = ':is([data-focusable], button, [role="button"], [role="tab"], a[href], summary, input[type="range"]):not([aria-disabled="true"]):not(:disabled)'
 const ScopeCtx = createContext<{ id: string } | null>(null)
 
@@ -41,8 +41,8 @@ export function move(dir: Dir) {
     const dy = b.top + b.height / 2 - ac.y
     const [main, cross] = dir === 'left' || dir === 'right' ? [dx, dy] : [dy, dx]
     const sign = dir === 'right' || dir === 'down' ? 1 : -1
-    if (main * sign <= 1) continue // no está en esa dirección
-    const score = Math.abs(main) + Math.abs(cross) * 2.5 // penaliza desvío lateral
+    if (main * sign <= 1) continue // it is not in that direction
+    const score = Math.abs(main) + Math.abs(cross) * 2.5 // penalizes lateral deviation
     if (score < bestScore) (bestScore = score), (best = el)
   }
   if (best) {
@@ -72,7 +72,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     }
     window.addEventListener('keydown', onKey)
 
-    // Gamepad: sondeo con rAF, con repetición al mantener
+    // Gamepad: polling with rAF, with repeat while held
     let raf = 0
     const held: Record<string, number> = {}
     const press = (name: string, on: boolean, fire: () => void, now: number) => {
@@ -103,7 +103,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-/** Grupo de foco con memoria. `trap` = modal (confina la navegación y devuelve el foco al cerrar). */
+/** A focus group with memory. `trap` = modal (it confines navigation and returns focus on close). */
 export function FocusScope({
   id,
   trap = false,
@@ -143,7 +143,7 @@ export function FocusScope({
 
 export const useFocusScope = () => useContext(ScopeCtx)
 
-/** Escucha "atrás" (Esc / botón B). */
+/** Listens for "back" (Esc / B button). */
 export function useBack(handler: () => void, active = true) {
   const h = useRef(handler)
   h.current = handler

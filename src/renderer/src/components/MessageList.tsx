@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { Block, ChatMessage, PendingApproval, Thread } from '../../../shared/types'
 import type { Draft } from '../lib/state'
-import { splitMessage } from '../lib/attachments'
+import { splitMessage } from '../../../shared/attachments'
+import { useT } from '../i18n/useT'
 import { Markdown } from './Markdown'
 // biome-ignore lint/suspicious/noImportCycles: tool cards render nested message lists (sub-agent runs)
 import { ToolCard } from './ToolCard'
@@ -20,11 +21,12 @@ interface Props {
 }
 
 function Thinking({ text, live }: { text: string; live?: boolean }): React.JSX.Element {
+  const t = useT()
   const [open, setOpen] = useState(false)
   return (
     <div className="thinking">
       <button className="thinking-toggle" onClick={() => setOpen(!open)}>
-        {live ? <span className="spinner" /> : <Icon icon={Sparkles} size="sm" />} Razonamiento {open ? <Icon icon={ChevronDown} size="sm" /> : <Icon icon={ChevronRight} size="sm" />}
+        {live ? <span className="spinner" /> : <Icon icon={Sparkles} size="sm" />} {t('chat.reasoning')} {open ? <Icon icon={ChevronDown} size="sm" /> : <Icon icon={ChevronRight} size="sm" />}
       </button>
       {open && <div className="thinking-body">{text}</div>}
     </div>
@@ -32,6 +34,7 @@ function Thinking({ text, live }: { text: string; live?: boolean }): React.JSX.E
 }
 
 export function MessageList({ thread, messages, draft, drafts, approvals, running }: Props): React.JSX.Element {
+  const t = useT()
   const results = useMemo(() => {
     const map = new Map<string, ToolResult>()
     for (const message of messages) {
@@ -74,7 +77,7 @@ export function MessageList({ thread, messages, draft, drafts, approvals, runnin
                 {sent.text}
                 {sent.count > 0 && (
                   <details className="sent-attachments">
-                    <summary>📎 {sent.count} adjunto(s) del vault</summary>
+                    <summary>{t('chat.attachmentsFolded', { count: sent.count })}</summary>
                     <pre>{sent.attachments}</pre>
                   </details>
                 )}
@@ -104,7 +107,7 @@ export function MessageList({ thread, messages, draft, drafts, approvals, runnin
             .map((tool) => (
               <div key={tool.id} className="tool-card pending">
                 <div className="tool-head">
-                  <span className="spinner" /> <strong>{tool.name}</strong> <span className="muted">preparando…</span>
+                  <span className="spinner" /> <strong>{tool.name}</strong> <span className="muted">{t('chat.preparing')}</span>
                 </div>
               </div>
             ))}
@@ -114,7 +117,7 @@ export function MessageList({ thread, messages, draft, drafts, approvals, runnin
       {waitingForModel && (
         <div className="msg assistant">
           <div className="working">
-            <span className="spinner" /> Pensando…
+            <span className="spinner" /> {t('chat.thinking')}
           </div>
         </div>
       )}

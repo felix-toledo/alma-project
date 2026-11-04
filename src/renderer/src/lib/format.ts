@@ -1,21 +1,23 @@
+import type { Language } from '../../../shared/i18n/language'
+import { isMessageKey, type MessageKey } from '../../../shared/i18n/messages'
+import { namesOf } from '../../../shared/i18n/names'
 import type { AgentProfile, ApprovalMode } from '../../../shared/types'
+import type { T } from '../i18n/useT'
 
-export const APPROVAL_MODES: { value: ApprovalMode; label: string; hint: string }[] = [
-  { value: 'needs-approval', label: 'Pedir aprobación', hint: 'Te pregunta antes de escribir archivos, ejecutar comandos o usar MCP.' },
-  { value: 'auto-review', label: 'Auto-review', hint: 'Un modelo revisor evalúa cada acción; solo te pregunta si la marca como riesgosa.' },
-  { value: 'always-allow', label: 'Permitir todo', hint: 'Ejecuta todo sin preguntar. Usalo solo en carpetas de prueba.' },
-  { value: 'blocked', label: 'Solo lectura', hint: 'Bloquea escrituras, comandos y MCP; el agente solo puede leer.' }
-]
+const MODES: ApprovalMode[] = ['needs-approval', 'auto-review', 'always-allow', 'blocked']
 
-export function relativeTime(ts: number): string {
+export const approvalModes = (t: T): { value: ApprovalMode; label: string; hint: string }[] =>
+  MODES.map((value) => ({ value, label: t(`approval.${value}.label`), hint: t(`approval.${value}.hint`) }))
+
+export function relativeTime(ts: number, t: T): string {
   const seconds = Math.round((Date.now() - ts) / 1000)
-  if (seconds < 60) return 'ahora'
+  if (seconds < 60) return t('time.now')
   const minutes = Math.round(seconds / 60)
-  if (minutes < 60) return `hace ${minutes} min`
+  if (minutes < 60) return t('time.minutes', { count: minutes })
   const hours = Math.round(minutes / 60)
-  if (hours < 24) return `hace ${hours} h`
+  if (hours < 24) return t('time.hours', { count: hours })
   const days = Math.round(hours / 24)
-  return days === 1 ? 'ayer' : `hace ${days} días`
+  return days === 1 ? t('time.yesterday') : t('time.days', { count: days })
 }
 
 export function agentName(agents: AgentProfile[], id: string): string {
@@ -26,66 +28,26 @@ export function folderName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path
 }
 
-const TOOL_LABELS: Record<string, string> = {
-  read_file: 'Leer archivo',
-  list_dir: 'Listar carpeta',
-  search_files: 'Buscar',
-  write_file: 'Escribir archivo',
-  edit_file: 'Editar archivo',
-  run_command: 'Ejecutar comando',
-  delegate_task: 'Delegar',
-  generate_image: 'Generar imagen',
-  compose_image: 'Componer imagen',
-  instagram_publish: 'Publicar en Instagram',
-  search_knowledge: 'Buscar en el vault',
-  read_note: 'Leer nota',
-  save_knowledge: 'Guardar conocimiento',
-  remember: 'Recordar',
-  forget: 'Olvidar',
-  web_search: 'Buscar en internet',
-  fetch_url: 'Abrir página',
-  send_telegram: 'Mandar por Telegram',
-  email_search: 'Buscar mails',
-  email_read: 'Leer mail',
-  email_send: 'Mandar mail',
-  send_whatsapp: 'Mandar WhatsApp',
-  whatsapp_recent: 'Ver WhatsApps',
-  office_read: 'Leer documento',
-  office_create: 'Crear documento',
-  office_edit: 'Editar documento',
-  excalidraw_read: 'Leer dibujo',
-  excalidraw_draw: 'Dibujar',
-  assign_task: 'Asignar tarea',
-  update_task: 'Entregar tarea',
-  review_task: 'Revisar tarea',
-  list_tasks: 'Ver tareas',
-  ask_colleague: 'Consultar a un colega',
-  escalate: 'Escalar',
-  schedule_meeting: 'Convocar reunión'
-}
-
 /** The vault note a knowledge tool call is about, so the chat can link to it. */
-export function knowledgeNotePath(name: string, input: unknown, result: string | undefined): string | undefined {
+export function knowledgeNotePath(name: string, input: unknown, result: string | undefined, language: Language = 'es'): string | undefined {
   const data = (input ?? {}) as Record<string, unknown>
   if (name === 'read_note' && typeof data.path === 'string') return data.path
-  if (name === 'remember' || name === 'forget') return result ? 'Alma/Recuerdos.md' : undefined
+  // `remember` says which file it wrote; otherwise the memory file under the app language's name.
+  if (name === 'remember' || name === 'forget') return result ? (/\bin (Alma\/[^\s)]+\.md)\)\.?$/.exec(result)?.[1] ?? `Alma/${namesOf('names.memoryFile')[language]}`) : undefined
   if (name === 'save_knowledge') return result ? /(\S+\.md)\b/.exec(result)?.[1] : undefined
   return undefined
 }
 
-/** The workspace path a generate_image result points to, if it succeeded. */
-export function generatedImagePath(result: string | undefined): string | undefined {
-  return result ? /^Imagen guardada: (.+)$/m.exec(result)?.[1]?.trim() : undefined
-}
-
-export function toolLabel(name: string): string {
-  if (TOOL_LABELS[name]) return TOOL_LABELS[name]
+export function toolLabel(name: string, t: T): string {
+  const key = `toolLabel.${name}`
+  // Only the tool labels take no params, so the cast is safe for any key under `toolLabel.`
+  if (isMessageKey(key)) return t(key as Extract<MessageKey, `toolLabel.${string}`>)
   const mcp = /^mcp__(.+?)__(.+)$/.exec(name)
   return mcp ? `${mcp[1]} · ${mcp[2]}` : name
 }
 
 /** One-line summary of a tool call's input for the collapsed card. */
-export function toolSummary(name: string, input: unknown): string {
+export function toolSummary(name: string, input: unknown, t: T): string {
   const data = (input ?? {}) as Record<string, unknown>
   const pick = (key: string): string => (typeof data[key] === 'string' ? (data[key] as string) : '')
   switch (name) {
@@ -126,7 +88,7 @@ export function toolSummary(name: string, input: unknown): string {
     case 'escalate':
       return pick('message').slice(0, 140)
     case 'email_search':
-      return pick('query') || 'últimos mails'
+      return pick('query') || t('toolSummary.recentMails')
     case 'email_send':
       return `${pick('to')} · ${pick('subject')}`.slice(0, 140)
     case 'send_whatsapp':
@@ -147,5 +109,5 @@ export function toolSummary(name: string, input: unknown): string {
   }
 }
 
-/** Títulos viejos de rutinas empezaban con un emoji; se muestran sin él. */
-export const threadTitle = (title: string): string => title.replace(/^\u{1F501}\s*/u, 'Rutina · ')
+/** Old routine titles started with an emoji; they are shown without it. */
+export const threadTitle = (title: string, t: T): string => title.replace(/^\u{1F501}\s*/u, t('thread.routinePrefix'))

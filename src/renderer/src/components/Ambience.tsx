@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { getPrefs, setPrefs, subscribe } from '../lib/ambience'
 import { Moon, Music, Sun, Volume2, VolumeX, Waves } from 'lucide-react'
+import { useT } from '../i18n/useT'
 import { Icon } from '../umbra/Icon'
 
 // One seamless period is 1440 wide; the path holds two so sliding it by half loops without a seam.
@@ -27,21 +28,22 @@ export function Backdrop(): React.JSX.Element {
 
 /** Quick toggles: theme, background motion, UI sounds and music. */
 export function AmbienceControls(): React.JSX.Element {
+  const tr = useT()
   const prefs = useSyncExternalStore(subscribe, getPrefs)
   const toggles = [
     {
       on: prefs.theme === 'dark',
       icon: prefs.theme === 'dark' ? Moon : Sun,
-      title: prefs.theme === 'dark' ? 'Tema oscuro (cambiar a claro)' : 'Tema claro (cambiar a oscuro)',
+      title: prefs.theme === 'dark' ? tr('ambience.theme.dark') : tr('ambience.theme.light'),
       toggle: () => setPrefs({ theme: prefs.theme === 'dark' ? 'light' : 'dark' }),
       alwaysLit: true
     },
-    { on: prefs.motion, icon: Waves, title: 'Fondo en movimiento', toggle: () => setPrefs({ motion: !prefs.motion }) },
-    { on: prefs.sounds, icon: prefs.sounds ? Volume2 : VolumeX, title: 'Sonidos de interfaz', toggle: () => setPrefs({ sounds: !prefs.sounds }) },
-    { on: prefs.music, icon: Music, title: 'Música de fondo', toggle: () => setPrefs({ music: !prefs.music }) }
+    { on: prefs.motion, icon: Waves, title: tr('ambience.motion.label'), toggle: () => setPrefs({ motion: !prefs.motion }) },
+    { on: prefs.sounds, icon: prefs.sounds ? Volume2 : VolumeX, title: tr('ambience.ui.label'), toggle: () => setPrefs({ sounds: !prefs.sounds }) },
+    { on: prefs.music, icon: Music, title: tr('ambience.music.label'), toggle: () => setPrefs({ music: !prefs.music }) }
   ]
   return (
-    <div className="ambience-controls" role="group" aria-label="Ambiente">
+    <div className="ambience-controls" role="group" aria-label={tr('ambience.group')}>
       {toggles.map((t) => (
         <button
           key={t.title}

@@ -2,7 +2,8 @@
 // from the step itself (text, passwords, lists, a QR to scan), so every brand Home Assistant knows works here.
 import { ArrowLeft, ExternalLink, Loader2, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { POPULAR_INTEGRATIONS, type FlowField, type FlowStep, type HomeIntegration } from '../../../shared/home'
+import { popularIntegrations, type FlowField, type FlowStep, type HomeIntegration } from '../../../shared/home'
+import { useLanguage, useT } from '../i18n/useT'
 import { request } from '../lib/coordinator'
 import { Markdown } from '../components/Markdown'
 import { Icon } from '../umbra/Icon'
@@ -81,6 +82,8 @@ function Field({ field, value, onChange, error }: { field: FlowField; value: unk
 }
 
 export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
+  const t = useT()
+  const language = useLanguage()
   const [step, setStep] = useState<FlowStep | null>(initialStep ?? null)
   const [values, setValues] = useState<Record<string, unknown>>(initialStep ? defaultsOf(initialStep) : {})
   const [integrations, setIntegrations] = useState<HomeIntegration[] | null>(null)
@@ -126,15 +129,15 @@ export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="modal home-add" role="dialog" aria-label="Agregar dispositivo">
+      <div className="modal home-add" role="dialog" aria-label={t('home.addDevice')}>
         <header className="modal-header">
           {step && step.kind !== 'done' && (
-            <button className="icon-button" title="Elegir otra marca" onClick={() => (open && void request({ method: 'home.flow.abort', flowId: step.flowId }).catch(() => undefined), setStep(null))}>
+            <button className="icon-button" title={t('home.pickBrand')} onClick={() => (open && void request({ method: 'home.flow.abort', flowId: step.flowId }).catch(() => undefined), setStep(null))}>
               <Icon icon={ArrowLeft} size="sm" />
             </button>
           )}
-          <h2>{step ? step.title : 'Agregar dispositivo'}</h2>
-          <button className="icon-button" onClick={close} title="Cerrar">
+          <h2>{step ? step.title : t('home.addDevice')}</h2>
+          <button className="icon-button" onClick={close} title={t('common.close')}>
             <Icon icon={X} size="sm" />
           </button>
         </header>
@@ -143,18 +146,18 @@ export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
 
           {!step && (
             <>
-              <p className="muted small">Elegí la marca. Alma le pregunta a Home Assistant qué necesita y te lo pide acá; las cuentas se usan solo para conectar tus dispositivos.</p>
+              <p className="muted small">{t('home.brands.intro')}</p>
               <label className="field home-search">
                 <Icon icon={Search} size={16} />
-                <input autoFocus placeholder="Buscar marca (Tuya, Sonoff, Tapo, Hue, Chromecast…)" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <input autoFocus placeholder={t('home.brands.search')} value={query} onChange={(e) => setQuery(e.target.value)} />
               </label>
               {!integrations && !error && (
                 <p className="muted small">
-                  <Icon icon={Loader2} size={14} className="spin" /> Cargando marcas…
+                  <Icon icon={Loader2} size={14} className="spin" /> {t('home.brands.loading')}
                 </p>
               )}
               <ul className="home-brands">
-                {(query ? matches.map((i) => ({ domain: i.domain, name: i.name, hint: '' })) : POPULAR_INTEGRATIONS.filter((p) => !integrations || available.has(p.domain) || p.domain === 'sonoff')).map((brand) => (
+                {(query ? matches.map((i) => ({ domain: i.domain, name: i.name, hint: '' })) : popularIntegrations(language).filter((p) => !integrations || available.has(p.domain) || p.domain === 'sonoff')).map((brand) => (
                   <li key={brand.domain}>
                     <button className="home-brand" disabled={busy} onClick={() => void call(() => request<FlowStep>({ method: 'home.flow.start', domain: brand.domain }))}>
                       <b>{brand.name}</b>
@@ -163,7 +166,7 @@ export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
                   </li>
                 ))}
               </ul>
-              {query && integrations && matches.length === 0 && <p className="muted small">No hay una marca con ese nombre. Probá con otra palabra.</p>}
+              {query && integrations && matches.length === 0 && <p className="muted small">{t('home.brands.none')}</p>}
             </>
           )}
 
@@ -182,8 +185,8 @@ export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
               )}
               {step.qr && (
                 <div className="home-qr">
-                  <img src={step.qr} alt="Código QR para escanear con la app del fabricante" />
-                  <p className="muted small">Abrí la app del fabricante en el celular y escaneá este código. Después tocá «Siguiente».</p>
+                  <img src={step.qr} alt={t('home.qrAlt')} />
+                  <p className="muted small">{t('home.qrHint')}</p>
                 </div>
               )}
               {step.errors[''] && <p className="small text-danger">{step.errors['']}</p>}
@@ -192,9 +195,9 @@ export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
               ))}
               <div className="row">
                 <button className="primary" type="submit" disabled={busy || missing.length > 0}>
-                  {busy ? <Icon icon={Loader2} size={14} className="spin" /> : null} Siguiente
+                  {busy ? <Icon icon={Loader2} size={14} className="spin" /> : null} {t('home.next')}
                 </button>
-                {missing.length > 0 && <span className="muted small">Falta: {missing.map((f) => f.label ?? f.name).join(', ')}</span>}
+                {missing.length > 0 && <span className="muted small">{t('home.missing', { fields: missing.map((f) => f.label ?? f.name).join(', ') })}</span>}
               </div>
             </form>
           )}
@@ -225,10 +228,10 @@ export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
               </div>
               <div className="row">
                 <a className="button primary" href={step.url} target="_blank" rel="noreferrer">
-                  <Icon icon={ExternalLink} size={14} /> Abrir la página
+                  <Icon icon={ExternalLink} size={14} /> {t('home.openPage')}
                 </a>
                 <button disabled={busy} onClick={() => void call(() => request<FlowStep>({ method: 'home.flow.step', flowId: step.flowId }))}>
-                  Ya lo hice
+                  {t('home.didIt')}
                 </button>
               </div>
             </div>
@@ -240,19 +243,21 @@ export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
                 <Icon icon={Loader2} size={14} className="spin" /> {step.description}
               </p>
               <button disabled={busy} onClick={() => void call(() => request<FlowStep>({ method: 'home.flow.step', flowId: step.flowId }))}>
-                Revisar de nuevo
+                {t('home.checkAgain')}
               </button>
             </div>
           )}
 
           {step?.kind === 'done' && (
             <div className="column">
-              <p className="home-desc">✔ Listo, se agregó <b>{step.title}</b>. Los dispositivos aparecen en unos segundos; después podés ponerles nombre y ubicarlos en el plano.</p>
+              <p className="home-desc">
+                {t('home.added.before')} <b>{step.title}</b>. {t('home.added.after')}
+              </p>
               <div className="row">
                 <button className="primary" onClick={onClose}>
-                  Cerrar
+                  {t('common.close')}
                 </button>
-                <button onClick={() => setStep(null)}>Agregar otro</button>
+                <button onClick={() => setStep(null)}>{t('home.addAnother')}</button>
               </div>
             </div>
           )}
@@ -260,7 +265,7 @@ export function AddDevice({ onClose, initialStep }: Props): React.JSX.Element {
           {step?.kind === 'abort' && (
             <div className="column">
               <p className="home-desc text-danger">{step.reason}</p>
-              <button onClick={() => setStep(null)}>Volver</button>
+              <button onClick={() => setStep(null)}>{t('home.back')}</button>
             </div>
           )}
         </div>

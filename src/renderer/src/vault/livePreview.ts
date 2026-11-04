@@ -4,12 +4,18 @@ import { syntaxTree } from '@codemirror/language'
 import { type EditorState, Facet } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view'
 import { DRAWING_EXT } from '../../../shared/excalidraw'
+import type { T } from '../i18n/useT'
 import { drawingSvg } from './drawing'
 import { openNote, vaultPathOf } from './vaultLib'
 
 /** Maps an image reference in the note to a URL the renderer can load (alma-vault://…), or null if unknown. */
 export const assetResolver = Facet.define<(target: string) => string | null, (target: string) => string | null>({
   combine: (values) => values[0] ?? (() => null)
+})
+
+/** The translator for the texts a widget draws itself (CodeMirror widgets live outside React). */
+export const translator = Facet.define<T, T>({
+  combine: (values) => values[0] ?? (((key: string) => key) as unknown as T)
 })
 
 const HIDDEN_MARKS = new Set(['HeaderMark', 'EmphasisMark', 'CodeMark', 'StrikethroughMark', 'QuoteMark'])
@@ -34,7 +40,7 @@ class ImageWidget extends WidgetType {
 
 /** ![[Plan.excalidraw]]: the drawing itself, rendered in the current theme; double click opens it. */
 class DrawingWidget extends WidgetType {
-  constructor(private src: string) {
+  constructor(private src: string, private t: T) {
     super()
   }
   eq(other: DrawingWidget): boolean {
@@ -43,17 +49,17 @@ class DrawingWidget extends WidgetType {
   toDOM(): HTMLElement {
     const box = document.createElement('div')
     box.className = 'cm-drawing'
-    box.textContent = 'Cargando dibujo…'
-    box.title = 'Doble clic para abrir el dibujo'
+    box.textContent = this.t('vault.drawing.loading')
+    box.title = this.t('vault.drawing.openTitle')
     box.addEventListener('dblclick', () => openNote(vaultPathOf(this.src)))
-    drawingSvg(this.src)
+    drawingSvg(this.src, this.t)
       .then((svg) => box.replaceChildren(svg))
       .catch((error: Error) => (box.textContent = error.message))
     return box
   }
 }
 
-const embedWidget = (src: string, alt: string): WidgetType => (DRAWING_EXT.test(src) ? new DrawingWidget(src) : new ImageWidget(src, alt))
+const embedWidget = (src: string, alt: string, t: T): WidgetType => (DRAWING_EXT.test(src) ? new DrawingWidget(src, t) : new ImageWidget(src, alt))
 
 class BulletWidget extends WidgetType {
   eq(): boolean {
@@ -118,6 +124,7 @@ function build(view: EditorView): DecorationSet {
   const { state } = view
   const active = activeLines(state)
   const resolve = state.facet(assetResolver)
+  const t = state.facet(translator)
   const ranges: { from: number; to: number; deco: Decoration }[] = []
   const isActive = (pos: number): boolean => active.has(state.doc.lineAt(pos).number)
 
@@ -171,7 +178,7 @@ function build(view: EditorView): DecorationSet {
         } else if (node.name === 'Image') {
           const match = /^!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?/.exec(state.doc.sliceString(node.from, node.to))
           const src = match && resolve(decodeURI(match[2]))
-          if (src) ranges.push({ from: node.from, to: node.to, deco: Decoration.replace({ widget: embedWidget(src, match[1]) }) })
+          if (src) ranges.push({ from: node.from, to: node.to, deco: Decoration.replace({ widget: embedWidget(src, match[1], t) }) })
           return false
         } else if (node.name === 'ListMark') {
           const mark = state.doc.sliceString(node.from, node.to)
@@ -195,7 +202,7 @@ function build(view: EditorView): DecorationSet {
         for (const match of line.text.matchAll(/!\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g)) {
           const src = resolve(match[1].trim())
           const start = line.from + match.index!
-          if (src) ranges.push({ from: start, to: start + match[0].length, deco: Decoration.replace({ widget: embedWidget(src, match[1]) }) })
+          if (src) ranges.push({ from: start, to: start + match[0].length, deco: Decoration.replace({ widget: embedWidget(src, match[1], t) }) })
         }
       }
       pos = line.to + 1

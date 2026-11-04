@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DRAWING_EXT, emptyDrawing } from '../../../shared/excalidraw'
+import { newFileName } from '../../../shared/i18n/names'
 import type { VaultEntry } from '../../../shared/types'
+import { useLanguage } from '../i18n/useT'
 import { request } from '../lib/coordinator'
 import { join, parentOf } from './vaultLib'
 
@@ -31,6 +33,7 @@ const isDocument = (path: string): boolean => path.toLowerCase().endsWith('.md')
 
 /** Tree, open tabs and their documents for the active vault. `version` bumps whenever the vault changes on disk. */
 export function useVault(vault: string, version: number) {
+  const language = useLanguage()
   const [entries, setEntries] = useState<VaultEntry[]>([])
   const [{ tabs, active }, setTabs] = useState(() => loadTabs(vault))
   const [docs, setDocs] = useState<Record<string, OpenDoc>>({})
@@ -151,25 +154,23 @@ export function useVault(vault: string, version: number) {
     setDocs((d) => Object.fromEntries(Object.entries(d).filter(([p]) => !gone(p))))
   }, [])
 
-  /** "Sin título.md", "Sin título 2.md"… next to the open note (or at the root). */
+  /** "Untitled.md", "Untitled 2.md"… (in the app language) next to the open note or at the root. */
   const createNote = useCallback(async () => {
     const folder = active ? parentOf(active) : ''
     const taken = new Set(entries.map((e) => e.path.toLowerCase()))
-    let path = join(folder, 'Sin título.md')
-    for (let n = 2; taken.has(path.toLowerCase()); n++) path = join(folder, `Sin título ${n}.md`)
+    const path = join(folder, newFileName(language, 'note', (name) => taken.has(join(folder, name).toLowerCase())))
     await request({ method: 'vault.create', path, entry: 'file' })
     open(path)
-  }, [active, entries, open])
+  }, [active, entries, language, open])
 
-  /** "Dibujo.excalidraw", "Dibujo 2.excalidraw"… next to the open file. */
+  /** "Drawing.excalidraw", "Drawing 2.excalidraw"… (in the app language) next to the open file. */
   const createDrawing = useCallback(async () => {
     const folder = active ? parentOf(active) : ''
     const taken = new Set(entries.map((e) => e.path.toLowerCase()))
-    let path = join(folder, 'Dibujo.excalidraw')
-    for (let n = 2; taken.has(path.toLowerCase()); n++) path = join(folder, `Dibujo ${n}.excalidraw`)
+    const path = join(folder, newFileName(language, 'drawing', (name) => taken.has(join(folder, name).toLowerCase())))
     await request({ method: 'vault.write', path, content: JSON.stringify(emptyDrawing(), null, 2) })
     open(path)
-  }, [active, entries, open])
+  }, [active, entries, language, open])
 
   return { entries, tabs, active, docs, jump, open, close, edit, save, renamed, deleted, createNote, createDrawing, setActive: (path: string) => setTabs((t) => ({ ...t, active: path })) }
 }

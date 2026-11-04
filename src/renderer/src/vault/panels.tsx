@@ -2,14 +2,14 @@ import { FileText, FolderOpen, Plus, Search, Sparkles, Trash2, X } from 'lucide-
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KnowledgeOverview, KnowledgeStatus, SearchHit, VaultEntry } from '../../../shared/types'
 import { request } from '../lib/coordinator'
+import { useT } from '../i18n/useT'
 import { relativeTime } from '../lib/format'
 import { Icon } from '../umbra/Icon'
 import { fuzzyScore, noteName } from './vaultLib'
 
-const MEMORY_FILE = 'Alma/Recuerdos.md'
-
 /** Ctrl+O: jump to any note by typing part of its name. */
 export function QuickSwitcher({ entries, onOpen, onClose }: { entries: VaultEntry[]; onOpen(path: string): void; onClose(): void }): React.JSX.Element {
+  const t = useT()
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState(0)
   const results = useMemo(() => {
@@ -33,10 +33,10 @@ export function QuickSwitcher({ entries, onOpen, onClose }: { entries: VaultEntr
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="modal quick-switcher" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label="Abrir nota">
+      <div className="modal quick-switcher" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label={t('vault.openNote')}>
         <input
           autoFocus
-          placeholder="Buscá una nota por nombre…"
+          placeholder={t('vault.switcher.placeholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -60,7 +60,7 @@ export function QuickSwitcher({ entries, onOpen, onClose }: { entries: VaultEntr
               <span className="muted small ellipsis">{file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : ''}</span>
             </div>
           ))}
-          {results.length === 0 && <p className="muted small pad">No hay notas con ese nombre.</p>}
+          {results.length === 0 && <p className="muted small pad">{t('vault.switcher.none')}</p>}
         </div>
       </div>
     </div>
@@ -69,6 +69,7 @@ export function QuickSwitcher({ entries, onOpen, onClose }: { entries: VaultEntr
 
 /** Full-text and semantic search across the vault (same hybrid search the agents use). */
 export function SearchPanel({ entries, onOpen, onClose }: { entries: VaultEntry[]; onOpen(path: string, line?: number): void; onClose(): void }): React.JSX.Element {
+  const t = useT()
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [busy, setBusy] = useState(false)
@@ -107,15 +108,15 @@ export function SearchPanel({ entries, onOpen, onClose }: { entries: VaultEntry[
   return (
     <section className="vault-panel">
       <header className="vault-panel-head">
-        <h2><Icon icon={Search} size="sm" /> Buscar en el vault</h2>
-        <button className="icon-button" title="Cerrar" onClick={onClose}><Icon icon={X} size="sm" /></button>
+        <h2><Icon icon={Search} size="sm" /> {t('vault.searchTitle')}</h2>
+        <button className="icon-button" title={t('common.close')} onClick={onClose}><Icon icon={X} size="sm" /></button>
       </header>
-      <input autoFocus className="search-input" placeholder="Palabras o una pregunta: «qué decidí sobre el viaje»…" value={query} onChange={(e) => setQuery(e.target.value)} />
-      <p className="muted small">Combina coincidencias de palabras con búsqueda por significado (bge-m3).{busy && ' Buscando…'}</p>
+      <input autoFocus className="search-input" placeholder={t('vault.search.placeholder')} value={query} onChange={(e) => setQuery(e.target.value)} />
+      <p className="muted small">{t('vault.search.hint')}{busy && ` ${t('vault.search.busy')}`}</p>
       {error && <p className="text-danger small">{error}</p>}
       {byName.length > 0 && (
         <div className="search-group">
-          <div className="detail-label">Por nombre</div>
+          <div className="detail-label">{t('vault.search.byName')}</div>
           {byName.map((file) => (
             <button key={file.path} className="search-hit" onClick={() => onOpen(file.path)}>
               <strong>{noteName(file.path)}</strong>
@@ -125,18 +126,18 @@ export function SearchPanel({ entries, onOpen, onClose }: { entries: VaultEntry[
         </div>
       )}
       <div className="search-group">
-        {hits.length > 0 && <div className="detail-label">En el contenido</div>}
+        {hits.length > 0 && <div className="detail-label">{t('vault.search.inContent')}</div>}
         {hits.map((hit, i) => (
           <button key={`${hit.path}:${hit.line}:${i}`} className="search-hit" onClick={() => onOpen(hit.path, hit.line)}>
             <span className="row space">
               <strong className="ellipsis">{noteName(hit.path)}{hit.heading ? ` › ${hit.heading}` : ''}</strong>
-              {hit.similarity !== undefined && <span className="badge" title="Similitud semántica">{Math.round(hit.similarity * 100)}%</span>}
+              {hit.similarity !== undefined && <span className="badge" title={t('vault.search.similarity')}>{Math.round(hit.similarity * 100)}%</span>}
             </span>
             <span className="search-snippet">{hit.snippet}</span>
             <span className="muted small">{hit.path}:{hit.line}</span>
           </button>
         ))}
-        {query.trim().length >= 2 && !busy && hits.length === 0 && byName.length === 0 && !error && <p className="muted small">Sin resultados.</p>}
+        {query.trim().length >= 2 && !busy && hits.length === 0 && byName.length === 0 && !error && <p className="muted small">{t('vault.search.none')}</p>}
       </div>
     </section>
   )
@@ -144,7 +145,8 @@ export function SearchPanel({ entries, onOpen, onClose }: { entries: VaultEntry[
 
 /** What Alma knows: the always-on memories and the notes it wrote. Everything is editable or removable. */
 export function KnowledgePanel({ status, version, onOpen, onClose }: { status: KnowledgeStatus | null; version: number; onOpen(path: string): void; onClose(): void }): React.JSX.Element {
-  const [overview, setOverview] = useState<KnowledgeOverview>({ memories: [], notes: [] })
+  const t = useT()
+  const [overview, setOverview] = useState<KnowledgeOverview>({ memories: [], memoryFile: '', notes: [] })
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -158,7 +160,7 @@ export function KnowledgePanel({ status, version, onOpen, onClose }: { status: K
   }
 
   const deleteNote = (path: string): void => {
-    if (!confirm(`¿Mover «${noteName(path)}» a la papelera?`)) return
+    if (!confirm(t('vault.trashFile', { name: noteName(path) }))) return
     request({ method: 'vault.delete', path })
       .then(() => setOverview((o) => ({ ...o, notes: o.notes.filter((n) => n.path !== path) })))
       .catch((e: Error) => setError(e.message))
@@ -166,53 +168,61 @@ export function KnowledgePanel({ status, version, onOpen, onClose }: { status: K
 
   const model = status?.model
   const modelText =
-    model?.state === 'ready' ? 'listo' : model?.state === 'downloading' ? `descargando ${model.progress ?? 0}%` : model?.state === 'loading' ? 'cargando' : model?.state === 'error' ? `error: ${model.error}` : 'en espera'
+    model?.state === 'ready'
+      ? t('vault.model.ready')
+      : model?.state === 'downloading'
+        ? t('vault.model.downloading', { percent: model.progress ?? 0 })
+        : model?.state === 'loading'
+          ? t('vault.model.loading')
+          : model?.state === 'error'
+            ? t('vault.model.error', { message: model.error ?? '' })
+            : t('vault.model.waiting')
 
   return (
     <section className="vault-panel">
       <header className="vault-panel-head">
-        <h2><Icon icon={Sparkles} size="sm" /> Lo que sabe Alma</h2>
-        <button className="icon-button" title="Cerrar" onClick={onClose}><Icon icon={X} size="sm" /></button>
+        <h2><Icon icon={Sparkles} size="sm" /> {t('vault.knowledge')}</h2>
+        <button className="icon-button" title={t('common.close')} onClick={onClose}><Icon icon={X} size="sm" /></button>
       </header>
       {error && <p className="text-danger small">{error}</p>}
 
       <div className="card">
         <div className="row space">
-          <h3>Recuerdos</h3>
-          <button className="ghost small" onClick={() => onOpen(MEMORY_FILE)}>Editar Recuerdos.md</button>
+          <h3>{t('vault.memories')}</h3>
+          <button className="ghost small" onClick={() => overview.memoryFile && onOpen(overview.memoryFile)}>{t('vault.editMemories')}</button>
         </div>
-        <p className="muted small">Datos cortos sobre vos que van en todas las conversaciones. Alma los agrega con «remember»; podés borrarlos o editarlos.</p>
-        {overview.memories.length === 0 && <p className="muted small">Todavía no recuerda nada.</p>}
+        <p className="muted small">{t('vault.memoriesHint')}</p>
+        {overview.memories.length === 0 && <p className="muted small">{t('vault.memoriesNone')}</p>}
         <ul className="memory-list">
           {overview.memories.map((memory) => (
             <li key={memory}>
               <span>{memory}</span>
-              <button className="icon-button" title="Olvidar" onClick={() => forget(memory)}><Icon icon={Trash2} size={14} /></button>
+              <button className="icon-button" title={t('vault.forget')} onClick={() => forget(memory)}><Icon icon={Trash2} size={14} /></button>
             </li>
           ))}
         </ul>
       </div>
 
       <div className="card">
-        <h3>Conocimientos ({overview.notes.length})</h3>
-        <p className="muted small">Notas que escribió Alma en Alma/Conocimientos. Son markdown común: editalas, movelas o borralas.</p>
-        {overview.notes.length === 0 && <p className="muted small">Todavía no guardó conocimientos.</p>}
+        <h3>{t('vault.knowledgeTitle', { count: overview.notes.length })}</h3>
+        <p className="muted small">{t('vault.knowledgeHint')}</p>
+        {overview.notes.length === 0 && <p className="muted small">{t('vault.knowledgeNone')}</p>}
         {overview.notes.map((note) => (
           <div key={note.path} className="knowledge-item">
             <button className="link ellipsis" onClick={() => onOpen(note.path)}>
               <Icon icon={FileText} size={14} /> {note.title}
             </button>
-            <span className="muted small">{relativeTime(note.mtime)}</span>
-            <button className="icon-button" title="Mover a la papelera" onClick={() => deleteNote(note.path)}><Icon icon={Trash2} size={14} /></button>
+            <span className="muted small">{relativeTime(note.mtime, t)}</span>
+            <button className="icon-button" title={t('vault.trashTitle')} onClick={() => deleteNote(note.path)}><Icon icon={Trash2} size={14} /></button>
           </div>
         ))}
       </div>
 
       {status && (
         <div className="card small">
-          <h3>Índice</h3>
+          <h3>{t('vault.index')}</h3>
           <div className="muted">
-            {status.files} notas · {status.chunks} fragmentos · {status.pending > 0 ? `${status.pending} por embeber` : 'todo embebido'} · modelo bge-m3: {modelText}
+            {t('vault.index.line', { files: status.files, chunks: status.chunks, embed: status.pending > 0 ? t('vault.index.pending', { count: status.pending }) : t('vault.index.done'), model: modelText })}
           </div>
           <div className="muted ellipsis" title={status.vault}>{status.vault}</div>
         </div>
@@ -223,18 +233,19 @@ export function KnowledgePanel({ status, version, onOpen, onClose }: { status: K
 
 /** No vault yet: create the default one or open any folder (any folder of notes works as is). */
 export function VaultWelcome({ onCreate, onOpenFolder }: { onCreate(): void; onOpenFolder(): void }): React.JSX.Element {
+  const t = useT()
   const [defaultPath, setDefaultPath] = useState('')
   useEffect(() => void window.desktop.defaultVaultPath().then(setDefaultPath), [])
   return (
     <main className="empty-state">
-      <h1>Tu vault</h1>
-      <p>Una carpeta de notas en markdown que Alma lee, busca y completa con lo que aprende.</p>
+      <h1>{t('vault.welcome.title')}</h1>
+      <p>{t('vault.welcome.about')}</p>
       <button className="primary" onClick={onCreate}>
-        <Icon icon={Plus} size="sm" /> Crear vault nuevo
+        <Icon icon={Plus} size="sm" /> {t('vault.welcome.create')}
       </button>
       <p className="hint small muted">{defaultPath}</p>
       <button className="ghost" onClick={onOpenFolder}>
-        <Icon icon={FolderOpen} size="sm" /> Abrir una carpeta como vault
+        <Icon icon={FolderOpen} size="sm" /> {t('vault.welcome.open')}
       </button>
     </main>
   )

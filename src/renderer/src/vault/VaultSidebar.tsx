@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, FilePlus, FileText, Folder, FolderOpen, Fold
 import { useEffect, useMemo, useState } from 'react'
 import { DRAWING_EXT } from '../../../shared/excalidraw'
 import type { KnowledgeStatus, PublicSettings, VaultEntry } from '../../../shared/types'
+import { useLanguage, useT } from '../i18n/useT'
 import { request } from '../lib/coordinator'
 import { Icon } from '../umbra/Icon'
 import { baseName, buildTree, IMAGE_EXT, join, noteName, parentOf, type TreeNode } from './vaultLib'
@@ -38,8 +39,10 @@ function loadExpanded(vault: string): Set<string> {
 
 export function VaultSidebar(props: Props): React.JSX.Element {
   const { settings, entries } = props
+  const t = useT()
+  const language = useLanguage()
   const vault = settings.activeVault
-  const tree = useMemo(() => buildTree(entries), [entries])
+  const tree = useMemo(() => buildTree(entries, language), [entries, language])
   const [expanded, setExpanded] = useState(() => loadExpanded(vault))
   const [editing, setEditing] = useState<Editing | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
@@ -103,8 +106,8 @@ export function VaultSidebar(props: Props): React.JSX.Element {
   }
 
   const remove = (node: TreeNode): void => {
-    const what = node.kind === 'folder' ? `la carpeta «${node.name}» y todo su contenido` : `«${noteName(node.path)}»`
-    if (!confirm(`¿Mover ${what} a la papelera?`)) return
+    const question = node.kind === 'folder' ? t('vault.trashFolder', { name: node.name }) : t('vault.trashFile', { name: noteName(node.path) })
+    if (!confirm(question)) return
     run(request({ method: 'vault.delete', path: node.path }).then(() => props.onDeleted(node.path)))
   }
 
@@ -160,7 +163,7 @@ export function VaultSidebar(props: Props): React.JSX.Element {
             e.preventDefault()
             setDropTarget(node.path)
           }}
-          onDragLeave={() => setDropTarget((t) => (t === node.path ? null : t))}
+          onDragLeave={() => setDropTarget((current) => (current === node.path ? null : current))}
           onDrop={(e) => {
             e.preventDefault()
             setDropTarget(null)
@@ -181,23 +184,23 @@ export function VaultSidebar(props: Props): React.JSX.Element {
           <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
             {isFolder && (
               <>
-                <button className="icon-button" title="Nueva nota" onClick={() => startNew('new-file', node.path)}>
+                <button className="icon-button" title={t('vault.newNote')} onClick={() => startNew('new-file', node.path)}>
                   <Icon icon={FilePlus} size={14} />
                 </button>
-                <button className="icon-button" title="Nueva carpeta" onClick={() => startNew('new-folder', node.path)}>
+                <button className="icon-button" title={t('vault.newFolder')} onClick={() => startNew('new-folder', node.path)}>
                   <Icon icon={FolderPlus} size={14} />
                 </button>
               </>
             )}
             {!isFolder && (
-              <button className="icon-button" title="Preguntarle a Alma sobre este archivo" onClick={() => props.onAsk(node.path)}>
+              <button className="icon-button" title={t('vault.askFile')} onClick={() => props.onAsk(node.path)}>
                 <Icon icon={MessageSquarePlus} size={14} />
               </button>
             )}
-            <button className="icon-button" title="Renombrar (F2)" onClick={() => setEditing({ mode: 'rename', path: node.path })}>
+            <button className="icon-button" title={t('vault.rename')} onClick={() => setEditing({ mode: 'rename', path: node.path })}>
               <Icon icon={Pencil} size={14} />
             </button>
-            <button className="icon-button" title="Mover a la papelera (Supr)" onClick={() => remove(node)}>
+            <button className="icon-button" title={t('vault.trash')} onClick={() => remove(node)}>
               <Icon icon={Trash2} size={14} />
             </button>
           </span>
@@ -205,7 +208,7 @@ export function VaultSidebar(props: Props): React.JSX.Element {
         {isFolder && open && (
           <>
             {editing && editing.mode !== 'rename' && editing.parent === node.path &&
-              renderInput(editing.mode === 'new-file' ? 'Sin título' : 'Nueva carpeta', depth + 1, editing.mode === 'new-file' ? FileText : Folder)}
+              renderInput(editing.mode === 'new-file' ? t('names.untitledNote') : t('vault.newFolder'), depth + 1, editing.mode === 'new-file' ? FileText : Folder)}
             {node.children.map((child) => renderNode(child, depth + 1))}
           </>
         )}
@@ -227,38 +230,38 @@ export function VaultSidebar(props: Props): React.JSX.Element {
             else if (value === '__open') props.onOpenFolder()
             else props.onSwitchVault(value)
           }}
-          aria-label="Vault activo"
+          aria-label={t('vault.active')}
         >
           {settings.vaults.map((path) => (
             <option key={path} value={path} title={path}>
               {path.split(/[\\/]/).pop()}
             </option>
           ))}
-          <option value="__new">＋ Crear vault nuevo (Documentos\Alma\Vault)</option>
-          <option value="__open">Abrir carpeta como vault…</option>
+          <option value="__new">{t('vault.createNew')}</option>
+          <option value="__open">{t('vault.openFolder')}</option>
         </select>
       </div>
       <div className="vault-toolbar">
-        <button className="icon-button" title="Nueva nota (Ctrl+N)" onClick={() => startNew('new-file', '')}>
+        <button className="icon-button" title={t('vault.newNoteKey')} onClick={() => startNew('new-file', '')}>
           <Icon icon={FilePlus} size={16} />
         </button>
-        <button className="icon-button" title="Nueva carpeta" onClick={() => startNew('new-folder', '')}>
+        <button className="icon-button" title={t('vault.newFolder')} onClick={() => startNew('new-folder', '')}>
           <Icon icon={FolderPlus} size={16} />
         </button>
-        <button className="icon-button" title="Nuevo dibujo (Excalidraw)" onClick={props.onNewDrawing}>
+        <button className="icon-button" title={t('vault.newDrawing')} onClick={props.onNewDrawing}>
           <Icon icon={PenTool} size={16} />
         </button>
-        <button className="icon-button" title="Buscar (Ctrl+Shift+F)" onClick={props.onSearch}>
+        <button className="icon-button" title={t('vault.search')} onClick={props.onSearch}>
           <Icon icon={Search} size={16} />
         </button>
-        <button className="icon-button" title="Lo que sabe Alma" onClick={props.onKnowledge}>
+        <button className="icon-button" title={t('vault.knowledge')} onClick={props.onKnowledge}>
           <Icon icon={Sparkles} size={16} />
         </button>
       </div>
       {error && <div className="text-danger small pad">{error}</div>}
       <nav
         className="vault-tree"
-        aria-label="Archivos del vault"
+        aria-label={t('vault.files')}
         onDragOver={(e) => {
           e.preventDefault()
           setDropTarget('')
@@ -271,19 +274,19 @@ export function VaultSidebar(props: Props): React.JSX.Element {
         }}
       >
         {editing && editing.mode !== 'rename' && editing.parent === '' &&
-          renderInput(editing.mode === 'new-file' ? 'Sin título' : 'Nueva carpeta', 0, editing.mode === 'new-file' ? FileText : Folder)}
+          renderInput(editing.mode === 'new-file' ? t('names.untitledNote') : t('vault.newFolder'), 0, editing.mode === 'new-file' ? FileText : Folder)}
         {tree.map((node) => renderNode(node, 0))}
-        {tree.length === 0 && !editing && <p className="muted small pad">El vault está vacío.</p>}
+        {tree.length === 0 && !editing && <p className="muted small pad">{t('vault.empty')}</p>}
       </nav>
       <div className="vault-status small muted" aria-live="polite">
         {model?.state === 'downloading'
-          ? `Descargando bge-m3… ${model.progress ?? 0}%`
+          ? t('vault.status.downloading', { percent: model.progress ?? 0 })
           : model?.state === 'error'
-            ? <span className="text-danger" title={model.error}>Búsqueda semántica no disponible</span>
+            ? <span className="text-danger" title={model.error}>{t('vault.status.noSemantic')}</span>
             : pending > 0
-              ? `Indexando: faltan ${pending} fragmentos`
+              ? t('vault.status.indexing', { count: pending })
               : props.status
-                ? `${props.status.files} notas indexadas`
+                ? t('vault.status.indexed', { count: props.status.files })
                 : ''}
       </div>
     </div>

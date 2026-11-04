@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import type { KnowledgeStatus, McpServerStatus, PendingApproval, PublicSettings, RoutineState, TelegramStatus, WhatsAppStatus, Thread, ThreadSummary, VoiceStatus } from '../../shared/types'
 import { VoiceLayer } from './voice/VoiceLayer'
+import { useLanguageSync } from './i18n/I18nProvider'
+import { useT } from './i18n/useT'
 import { AlarmClock, MessageSquarePlus, X } from 'lucide-react'
 import { Backdrop } from './umbra/Backdrop'
 import { Icon } from './umbra/Icon'
@@ -37,6 +39,8 @@ function savedMode(): AppMode {
 export function App(): React.JSX.Element {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [settings, setSettings] = useState<PublicSettings | null>(null)
+  useLanguageSync(settings?.language)
+  const t = useT()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>()
   const [companyId, setCompanyIdState] = useState<string | null>(() => {
@@ -270,11 +274,11 @@ export function App(): React.JSX.Element {
               onOpenFolder={() => void openFolderAsVault()}
             />
           ) : (
-            <p className="muted small pad">Todavía no hay un vault.</p>
+            <p className="muted small pad">{t('app.noVault')}</p>
           )
         }
         companiesPane={
-          <nav className="company-list" aria-label="Empresas">
+          <nav className="company-list" aria-label={t('common.companies')}>
             {companies.map((c) => (
               <button
                 key={c.id}
@@ -288,7 +292,7 @@ export function App(): React.JSX.Element {
               </button>
             ))}
             <button className="ghost small" onClick={() => openSettings('teams')}>
-              ＋ Nueva empresa / editar equipos
+              {t('app.newCompany')}
             </button>
           </nav>
         }
@@ -352,12 +356,12 @@ export function App(): React.JSX.Element {
             onToggleChat={() => setVaultChat(!vaultChat)}
             chat={
               vaultChat ? (
-                <aside className="vault-chat" aria-label="Chat con Alma">
+                <aside className="vault-chat" aria-label={t('app.vaultChat.aria')}>
                   <div className="vault-chat-bar">
-                    <button className="ghost small" onClick={() => void newThread()} title="Empezar otra conversación">
-                      <Icon icon={MessageSquarePlus} size={14} /> Nueva
+                    <button className="ghost small" onClick={() => void newThread()} title={t('app.vaultChat.newTitle')}>
+                      <Icon icon={MessageSquarePlus} size={14} /> {t('app.vaultChat.new')}
                     </button>
-                    <button className="icon-button" onClick={() => setVaultChat(false)} title="Cerrar el chat">
+                    <button className="icon-button" onClick={() => setVaultChat(false)} title={t('app.vaultChat.closeTitle')}>
                       <Icon icon={X} size="sm" />
                     </button>
                   </div>
@@ -382,7 +386,7 @@ export function App(): React.JSX.Element {
                   ) : (
                     <div className="vault-empty muted">
                       <button className="primary" onClick={() => void newThread()}>
-                        Nueva conversación
+                        {t('common.newConversation')}
                       </button>
                     </div>
                   )}
@@ -397,14 +401,18 @@ export function App(): React.JSX.Element {
         renderChat(chatThread)
       ) : (
         <main className="empty-state">
-          <h1>Alma</h1>
-          <p>Agentes con Claude, Grok, DeepSeek o Vercel AI Gateway que trabajan en tu computadora, delegan en subagentes y usan conectores MCP.</p>
+          <h1>{t('common.appName')}</h1>
+          <p>{t('app.empty.tagline')}</p>
           <button className="primary" onClick={() => void newThread()}>
-            Nueva conversación
+            {t('common.newConversation')}
           </button>
           {settings && (['anthropic', 'xai', 'deepseek', 'vercel', 'meta'] as const).every((p) => !settings.providers[p].hasKey && !settings.providers[p].fromEnv) && (
             <p className="hint">
-              Primero cargá una API key en <button className="link" onClick={() => setSettingsOpen(true)}>Configuración</button>.
+              {t('app.empty.firstKey')}{' '}
+              <button className="link" onClick={() => setSettingsOpen(true)}>
+                {t('common.settings')}
+              </button>
+              .
             </p>
           )}
         </main>
@@ -419,7 +427,7 @@ export function App(): React.JSX.Element {
                 <strong>{reminder.title}</strong>
                 <div>{reminder.body}</div>
               </div>
-              <button className="icon-button" title="Cerrar" onClick={() => setReminders((list) => list.filter((r) => r.id !== reminder.id))}>
+              <button className="icon-button" title={t('common.close')} onClick={() => setReminders((list) => list.filter((r) => r.id !== reminder.id))}>
                 <Icon icon={X} size="sm" />
               </button>
             </div>

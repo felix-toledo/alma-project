@@ -2,6 +2,7 @@
 // room in its own colour. In edit mode rooms, their corners and the devices can be dragged.
 import { useMemo, useRef, useState } from 'react'
 import { bbox, centroid, pointInPolygon, type HomeThing, type PlanFloor, type Point } from '../../../shared/home'
+import { useT } from '../i18n/useT'
 import { Icon } from '../umbra/Icon'
 import { brightnessOf, KIND_ICON, lightColor, TOGGLEABLE, toggleThing } from './homeLib'
 
@@ -27,6 +28,7 @@ const snap = (n: number, step = SNAP): number => Math.round(n / step) * step
 const PAD = 90
 
 export function FloorPlan({ floor, things, edit, selected, selectedRoom, onSelect, onSelectRoom, onChange }: Props): React.JSX.Element {
+  const t = useT()
   const svg = useRef<SVGSVGElement>(null)
   const [draft, setDraft] = useState<PlanFloor | null>(null)
   const drag = useRef<Drag | null>(null)
@@ -109,7 +111,7 @@ export function FloorPlan({ floor, things, edit, selected, selectedRoom, onSelec
         onSelectRoom(null)
       }}
       role="img"
-      aria-label={`Plano de ${floor.name}`}
+      aria-label={t('home.plan.aria', { name: floor.name })}
     >
       <defs>
         {shown.rooms.map((room) => (
@@ -171,7 +173,7 @@ export function FloorPlan({ floor, things, edit, selected, selectedRoom, onSelec
               {room.name}
             </text>
             <text className="plan-dims" x={cx} y={box.y + 68} textAnchor="middle">
-              {(box.w / 100).toFixed(1)} × {(box.h / 100).toFixed(1)} m
+              {(box.w / 100).toFixed(1)} × {(box.h / 100).toFixed(1)} {t('home.unitMeters')}
             </text>
           </g>
         )

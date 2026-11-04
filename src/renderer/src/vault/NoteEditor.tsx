@@ -8,7 +8,8 @@ import { drawSelection, EditorView, keymap, placeholder } from '@codemirror/view
 import { classHighlighter } from '@lezer/highlight'
 import { useEffect, useRef } from 'react'
 import type { VaultEntry } from '../../../shared/types'
-import { assetResolver, livePreview } from './livePreview'
+import { useLanguage, useT } from '../i18n/useT'
+import { assetResolver, livePreview, translator } from './livePreview'
 import { resolveAsset } from './vaultLib'
 
 interface Props {
@@ -25,6 +26,8 @@ interface Props {
 }
 
 export function NoteEditor({ path, content, entries, jump, onChange, onSave, onSelection }: Props): React.JSX.Element {
+  const t = useT()
+  const language = useLanguage()
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const latest = useRef({ entries, onChange, onSave, onSelection, path })
@@ -44,7 +47,8 @@ export function NoteEditor({ path, content, entries, jump, onChange, onSave, onS
           highlightSelectionMatches(),
           livePreview,
           assetResolver.of((target) => resolveAsset(target, latest.current.path, latest.current.entries)),
-          placeholder('Escribí acá…'),
+          translator.of(t),
+          placeholder(t('vault.editorPlaceholder')),
           keymap.of([
             { key: 'Mod-s', run: () => (latest.current.onSave(), true) },
             indentWithTab,
@@ -71,7 +75,7 @@ export function NoteEditor({ path, content, entries, jump, onChange, onSave, onS
     }
     // A new note gets a fresh editor (and undo history); content updates are handled below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path])
+  }, [path, language])
 
   useEffect(() => {
     const editor = view.current

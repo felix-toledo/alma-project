@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
+import { formatDateTime } from '../../../shared/i18n/format'
+import type { Language } from '../../../shared/i18n/language'
 import { describeSchedule, nextRun } from '../../../shared/schedule'
 import type { PublicSettings, Routine, RoutineState } from '../../../shared/types'
+import { useLanguage, useT, type T } from '../i18n/useT'
 import { request } from '../lib/coordinator'
 import { agentName, folderName, relativeTime } from '../lib/format'
 import { Folder, Play, X } from 'lucide-react'
@@ -14,15 +17,7 @@ interface Props {
   onClose(): void
 }
 
-const DAYS = [
-  { value: 1, label: 'L' },
-  { value: 2, label: 'M' },
-  { value: 3, label: 'X' },
-  { value: 4, label: 'J' },
-  { value: 5, label: 'V' },
-  { value: 6, label: 'S' },
-  { value: 0, label: 'D' }
-]
+const DAYS = [1, 2, 3, 4, 5, 6, 0] as const
 
 function blankRoutine(settings: PublicSettings): Routine {
   return {
@@ -37,13 +32,12 @@ function blankRoutine(settings: PublicSettings): Routine {
   }
 }
 
-function instagramTemplate(settings: PublicSettings): Routine {
+function instagramTemplate(settings: PublicSettings, t: T): Routine {
   return {
     ...blankRoutine(settings),
-    name: 'Post diario de Instagram',
+    name: t('routines.template.name'),
     agentId: settings.agents.some((a) => a.id === 'community-manager') ? 'community-manager' : settings.defaultAgentId,
-    prompt:
-      'Creá el post de hoy para Instagram siguiendo marca.md: elegí un tema que no se haya publicado (mirá publicaciones.md), generá la imagen, escribí el texto y publicalo. Después registralo en publicaciones.md.',
+    prompt: t('routines.template.prompt'),
     schedule: { kind: 'daily', time: '10:00', days: [1, 2, 3, 4, 5] }
   }
 }
@@ -62,16 +56,18 @@ function toLocalInput(at: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-function formatDate(date: Date | undefined): string {
+function formatDate(date: Date | undefined, language: Language): string {
   if (!date) return '—'
-  return date.toLocaleString('es', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return formatDateTime(language, date, 'weekday')
 }
 
 export function RoutinesDialog({ settings, state, onChange, onOpenThread, onClose }: Props): React.JSX.Element {
+  const t = useT()
+  const language = useLanguage()
   const [editing, setEditing] = useState<Routine | null>(null)
   const [, setTick] = useState(0)
   useEffect(() => {
-    const timer = setInterval(() => setTick((t) => t + 1), 30_000)
+    const timer = setInterval(() => setTick((n) => n + 1), 30_000)
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
     }
@@ -91,10 +87,10 @@ export function RoutinesDialog({ settings, state, onChange, onOpenThread, onClos
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-label="Rutinas">
+      <div className="modal" role="dialog" aria-label={t('sidebar.routines')}>
         <header className="modal-header">
-          <h2>Rutinas y recordatorios</h2>
-          <button className="icon-button" onClick={onClose} title="Cerrar">
+          <h2>{t('routines.heading')}</h2>
+          <button className="icon-button" onClick={onClose} title={t('common.close')}>
             <Icon icon={X} size="sm" />
           </button>
         </header>
@@ -104,21 +100,20 @@ export function RoutinesDialog({ settings, state, onChange, onOpenThread, onClos
           ) : (
             <>
               <p className="muted small">
-                Un recordatorio solo te avisa. En una rutina, un agente hace la tarea solo, a la hora programada, en una conversación
-                nueva. También los podés pedir en el chat («haceme acordar…»). La app tiene que estar abierta o en la bandeja del sistema.
+                {t('routines.intro')}
               </p>
               <div className="row">
                 <button className="primary" onClick={() => setEditing(blankReminder(settings))}>
-                  + Recordatorio
+                  {t('routines.addReminder')}
                 </button>
                 <button className="ghost" onClick={() => setEditing(blankRoutine(settings))}>
-                  + Rutina con agente
+                  {t('routines.addRoutine')}
                 </button>
-                <button className="ghost" onClick={() => setEditing(instagramTemplate(settings))}>
-                  Plantilla: post diario de Instagram
+                <button className="ghost" onClick={() => setEditing(instagramTemplate(settings, t))}>
+                  {t('routines.addTemplate')}
                 </button>
               </div>
-              {settings.routines.length === 0 && <p className="muted">Todavía no hay rutinas.</p>}
+              {settings.routines.length === 0 && <p className="muted">{t('routines.none')}</p>}
               {settings.routines.map((routine) => {
                 const entry = state[routine.id]
                 const next = nextRun(routine, entry?.lastRunAt, new Date())
@@ -127,20 +122,23 @@ export function RoutinesDialog({ settings, state, onChange, onOpenThread, onClos
                     <div className="row space">
                       <div>
                         <strong>{routine.name}</strong>{' '}
-                        <span className="badge">{routine.action === 'reminder' ? 'recordatorio' : 'rutina'}</span>{' '}
-                        {entry?.running ? <span className="badge ok">ejecutándose</span> : !routine.enabled && <span className="badge">pausada</span>}
+                        <span className="badge">{routine.action === 'reminder' ? t('routines.badge.reminder') : t('routines.badge.routine')}</span>{' '}
+                        {entry?.running ? <span className="badge ok">{t('routines.running')}</span> : !routine.enabled && <span className="badge">{t('routines.paused')}</span>}
                         <div className="muted small">
-                          {describeSchedule(routine)}
+                          {describeSchedule(routine, language)}
                           {routine.action !== 'reminder' && (
                             <>
                               {' '}· {agentName(settings.agents, routine.agentId)} · <Icon icon={Folder} size="sm" />{' '}
-                              {routine.workspace ? folderName(routine.workspace) : 'carpeta por defecto'}
+                              {routine.workspace ? folderName(routine.workspace) : t('routines.defaultFolder')}
                             </>
                           )}
                         </div>
                         {routine.action === 'reminder' && <div className="small">{routine.prompt}</div>}
                         <div className="muted small">
-                          Próxima: {routine.enabled ? formatDate(next) : '—'} · Última: {entry?.lastRunAt ? relativeTime(entry.lastRunAt) : 'nunca'}
+                          {t('routines.nextLast', {
+                            next: routine.enabled ? formatDate(next, language) : '—',
+                            last: entry?.lastRunAt ? relativeTime(entry.lastRunAt, t) : t('routines.never')
+                          })}
                         </div>
                       </div>
                       <label className="check">
@@ -149,7 +147,7 @@ export function RoutinesDialog({ settings, state, onChange, onOpenThread, onClos
                           checked={routine.enabled}
                           onChange={(e) => void upsert({ ...routine, enabled: e.target.checked })}
                         />
-                        Activa
+                        {t('routines.active')}
                       </label>
                     </div>
                     <div className="row">
@@ -164,7 +162,7 @@ export function RoutinesDialog({ settings, state, onChange, onOpenThread, onClos
                           })
                         }
                       >
-                        <Icon icon={Play} size="sm" /> {routine.action === 'reminder' ? 'Probar aviso' : 'Ejecutar ahora'}
+                        <Icon icon={Play} size="sm" /> {routine.action === 'reminder' ? t('routines.testReminder') : t('routines.runNow')}
                       </button>
                       {entry?.lastThreadId && (
                         <button
@@ -174,18 +172,18 @@ export function RoutinesDialog({ settings, state, onChange, onOpenThread, onClos
                             onClose()
                           }}
                         >
-                          Ver última ejecución
+                          {t('routines.lastRun')}
                         </button>
                       )}
                       <span className="grow" />
                       <button className="ghost small" onClick={() => setEditing(routine)}>
-                        Editar
+                        {t('routines.edit')}
                       </button>
                       <button
                         className="danger small"
-                        onClick={() => confirm(`¿Borrar la rutina «${routine.name}»?`) && void save(settings.routines.filter((r) => r.id !== routine.id))}
+                        onClick={() => confirm(t('routines.deleteConfirm', { name: routine.name })) && void save(settings.routines.filter((r) => r.id !== routine.id))}
                       >
-                        Borrar
+                        {t('common.delete')}
                       </button>
                     </div>
                   </div>
@@ -210,6 +208,7 @@ function RoutineEditor({
   onSave(routine: Routine): Promise<void>
   onCancel(): void
 }): React.JSX.Element {
+  const t = useT()
   const [draft, setDraft] = useState(routine)
   const schedule = draft.schedule
   const [unit, setUnit] = useState<'h' | 'min'>(schedule.kind === 'interval' && schedule.minutes % 60 !== 0 ? 'min' : 'h')
@@ -225,23 +224,23 @@ function RoutineEditor({
       <div className="row">
         <label className="check">
           <input type="radio" checked={isReminder} onChange={() => setDraft({ ...draft, action: 'reminder' })} />
-          Recordatorio (solo te avisa)
+          {t('routines.kind.reminder')}
         </label>
         <label className="check">
           <input type="radio" checked={!isReminder} onChange={() => setDraft({ ...draft, action: 'task' })} />
-          Rutina (un agente hace una tarea)
+          {t('routines.kind.task')}
         </label>
       </div>
       {!isReminder && (
       <label className="field">
-        <span>Nombre</span>
-        <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Post diario de Instagram" />
+        <span>{t('common.name')}</span>
+        <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={t('routines.template.name')} />
       </label>
       )}
       {!isReminder && (
       <div className="row">
         <label className="field">
-          <span>Agente</span>
+          <span>{t('chat.agent')}</span>
           <select value={draft.agentId} onChange={(e) => setDraft({ ...draft, agentId: e.target.value })}>
             {settings.agents.map((a) => (
               <option key={a.id} value={a.id}>
@@ -251,9 +250,9 @@ function RoutineEditor({
           </select>
         </label>
         <label className="field grow">
-          <span>Carpeta de trabajo</span>
+          <span>{t('routines.workspace')}</span>
           <div className="row">
-            <input readOnly value={draft.workspace || '(la carpeta por defecto)'} className="grow" />
+            <input readOnly value={draft.workspace || t('routines.workspaceDefault')} className="grow" />
             <button
               className="ghost"
               onClick={async () => {
@@ -261,23 +260,23 @@ function RoutineEditor({
                 if (folder) setDraft({ ...draft, workspace: folder })
               }}
             >
-              Elegir…
+              {t('general.pick')}
             </button>
           </div>
         </label>
       </div>
       )}
       <label className="field">
-        <span>{isReminder ? 'Qué te recuerdo' : 'Qué tiene que hacer (se le envía al agente en cada ejecución)'}</span>
+        <span>{isReminder ? t('routines.promptReminder') : t('routines.promptTask')}</span>
         <textarea
           rows={isReminder ? 2 : 5}
           value={draft.prompt}
-          placeholder={isReminder ? 'Llamar al dentista' : ''}
+          placeholder={isReminder ? t('routines.reminderExample') : ''}
           onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
         />
       </label>
       <fieldset className="field">
-        <legend>Cuándo</legend>
+        <legend>{t('routines.when')}</legend>
         <div className="row">
           <label className="check">
             <input
@@ -285,7 +284,7 @@ function RoutineEditor({
               checked={schedule.kind === 'once'}
               onChange={() => setDraft({ ...draft, schedule: { kind: 'once', at: Date.now() + 60 * 60_000 } })}
             />
-            Una vez
+            {t('routines.once')}
           </label>
           <label className="check">
             <input
@@ -293,7 +292,7 @@ function RoutineEditor({
               checked={schedule.kind === 'daily'}
               onChange={() => setDraft({ ...draft, schedule: { kind: 'daily', time: '09:00', days: [] } })}
             />
-            A una hora fija
+            {t('routines.daily')}
           </label>
           <label className="check">
             <input
@@ -301,7 +300,7 @@ function RoutineEditor({
               checked={schedule.kind === 'interval'}
               onChange={() => setDraft({ ...draft, schedule: { kind: 'interval', minutes: 240 } })}
             />
-            Cada cierto tiempo
+            {t('routines.interval')}
           </label>
         </div>
         {schedule.kind === 'once' ? (
@@ -311,35 +310,35 @@ function RoutineEditor({
               value={toLocalInput(schedule.at)}
               onChange={(e) => setDraft({ ...draft, schedule: { kind: 'once', at: new Date(e.target.value).getTime() } })}
             />
-            {schedule.at < Date.now() && <span className="text-warn small">Esa fecha ya pasó: va a sonar apenas guardes.</span>}
+            {schedule.at < Date.now() && <span className="text-warn small">{t('routines.past')}</span>}
           </div>
         ) : schedule.kind === 'daily' ? (
           <div className="row">
             <input type="time" value={schedule.time} onChange={(e) => setDraft({ ...draft, schedule: { ...schedule, time: e.target.value } })} />
             <div className="day-picker">
               {DAYS.map((day) => {
-                const active = schedule.days.includes(day.value)
+                const active = schedule.days.includes(day)
                 return (
                   <button
-                    key={day.value}
+                    key={day}
                     className={active ? 'active' : ''}
                     onClick={() =>
                       setDraft({
                         ...draft,
-                        schedule: { ...schedule, days: active ? schedule.days.filter((d) => d !== day.value) : [...schedule.days, day.value] }
+                        schedule: { ...schedule, days: active ? schedule.days.filter((d) => d !== day) : [...schedule.days, day] }
                       })
                     }
                   >
-                    {day.label}
+                    {t(`routines.day.${day}`)}
                   </button>
                 )
               })}
             </div>
-            <span className="muted small">{schedule.days.length === 0 ? 'todos los días' : ''}</span>
+            <span className="muted small">{schedule.days.length === 0 ? t('routines.everyDay') : ''}</span>
           </div>
         ) : (
           <div className="row">
-            <span>Cada</span>
+            <span>{t('routines.every')}</span>
             <input
               type="number"
               min={1}
@@ -360,15 +359,15 @@ function RoutineEditor({
                 if (next === 'h') setDraft({ ...draft, schedule: { kind: 'interval', minutes: Math.max(1, Math.round(schedule.minutes / 60)) * 60 } })
               }}
             >
-              <option value="h">horas</option>
-              <option value="min">minutos</option>
+              <option value="h">{t('routines.hours')}</option>
+              <option value="min">{t('routines.minutes')}</option>
             </select>
           </div>
         )}
       </fieldset>
       <label className="check">
         <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
-        Activa
+        {t('routines.active')}
       </label>
       <div className="row">
         <button
@@ -376,10 +375,10 @@ function RoutineEditor({
           disabled={!valid}
           onClick={() => void onSave({ ...draft, name: isReminder ? draft.prompt.trim().slice(0, 60) : draft.name.trim() })}
         >
-          {isReminder ? 'Guardar recordatorio' : 'Guardar rutina'}
+          {isReminder ? t('routines.saveReminder') : t('routines.saveRoutine')}
         </button>
         <button className="ghost" onClick={onCancel}>
-          Cancelar
+          {t('common.cancel')}
         </button>
       </div>
     </div>

@@ -6,6 +6,7 @@ import type {
   Effort,
   ImageProviderId,
   InstagramStatus,
+  Language,
   McpServerConfig,
   McpServerStatus,
   ProviderId,
@@ -17,9 +18,11 @@ import type {
   WhatsAppSettings,
   WhatsAppStatus
 } from '../../../shared/types'
+import { useLanguage, useT, type T } from '../i18n/useT'
+import { enrollmentPhrases, kokoroVoices, windowsVoices } from '../../../shared/voices'
 import { recordFor } from '../voice/audio'
 import { request } from '../lib/coordinator'
-import { APPROVAL_MODES, toolLabel } from '../lib/format'
+import { approvalModes, toolLabel } from '../lib/format'
 import { Play, RefreshCw, X } from 'lucide-react'
 import { AmbienceSettings } from '../umbra/AmbienceControls'
 import { Icon } from '../umbra/Icon'
@@ -39,25 +42,11 @@ interface Props {
 }
 
 export type Tab = 'providers' | 'agents' | 'teams' | 'approvals' | 'images' | 'telegram' | 'whatsapp' | 'email' | 'voice' | 'instagram' | 'mcp' | 'home' | 'general' | 'ambience'
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'providers', label: 'Proveedores' },
-  { id: 'agents', label: 'Agentes' },
-  { id: 'teams', label: 'Equipos' },
-  { id: 'approvals', label: 'Aprobaciones' },
-  { id: 'telegram', label: 'Telegram' },
-  { id: 'whatsapp', label: 'WhatsApp' },
-  { id: 'email', label: 'Mail' },
-  { id: 'voice', label: 'Voz' },
-  { id: 'images', label: 'Imágenes' },
-  { id: 'instagram', label: 'Instagram' },
-  { id: 'home', label: 'Casa' },
-  { id: 'mcp', label: 'Conectores MCP' },
-  { id: 'general', label: 'General' },
-  { id: 'ambience', label: 'Sonido y ambiente' }
-]
+const TABS: Tab[] = ['providers', 'agents', 'teams', 'approvals', 'telegram', 'whatsapp', 'email', 'voice', 'images', 'instagram', 'home', 'mcp', 'general', 'ambience']
 const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 export function SettingsDialog(props: Props): React.JSX.Element {
+  const t = useT()
   const [tab, setTab] = useState<Tab>(props.initialTab ?? 'providers')
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -69,18 +58,18 @@ export function SettingsDialog(props: Props): React.JSX.Element {
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
-      <div className="modal" role="dialog" aria-label="Configuración">
+      <div className="modal" role="dialog" aria-label={t('common.settings')}>
         <header className="modal-header">
-          <h2>Configuración</h2>
-          <button className="icon-button" onClick={props.onClose} title="Cerrar">
+          <h2>{t('common.settings')}</h2>
+          <button className="icon-button" onClick={props.onClose} title={t('common.close')}>
             <Icon icon={X} size="sm" />
           </button>
         </header>
         <div className="modal-body">
           <nav className="tabs">
-            {TABS.map((t) => (
-              <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
-                {t.label}
+            {TABS.map((id) => (
+              <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
+                {t(`settings.tab.${id}`)}
               </button>
             ))}
           </nav>
@@ -133,20 +122,43 @@ function useModels(source: ModelSource): { models: string[]; error: string; load
 /** Providers with models; the other secrets (Telegram, ElevenLabs, mail) live in their own tabs. */
 type ModelProviderId = Exclude<SecretProviderId, 'telegram' | 'elevenlabs' | 'email'>
 
-const PROVIDER_INFO: Record<ModelProviderId, { name: string; envVar: string; source: ModelSource }> = {
-  anthropic: { name: 'Anthropic (Claude)', envVar: 'ANTHROPIC_API_KEY', source: 'anthropic' },
-  xai: { name: 'xAI (Grok) · texto e imágenes', envVar: 'XAI_API_KEY', source: 'xai' },
-  deepseek: { name: 'DeepSeek · solo texto', envVar: 'DEEPSEEK_API_KEY', source: 'deepseek' },
-  vercel: { name: 'Vercel AI Gateway · solo texto', envVar: 'AI_GATEWAY_API_KEY', source: 'vercel' },
-  meta: { name: 'Meta (Muse) · texto, imágenes y transcripción', envVar: 'META_API_KEY', source: 'meta' },
-  openai: { name: 'OpenAI · solo imágenes', envVar: 'OPENAI_API_KEY', source: 'image-openai' }
+const PROVIDER_INFO: Record<ModelProviderId, { envVar: string; source: ModelSource }> = {
+  anthropic: { envVar: 'ANTHROPIC_API_KEY', source: 'anthropic' },
+  xai: { envVar: 'XAI_API_KEY', source: 'xai' },
+  deepseek: { envVar: 'DEEPSEEK_API_KEY', source: 'deepseek' },
+  vercel: { envVar: 'AI_GATEWAY_API_KEY', source: 'vercel' },
+  meta: { envVar: 'META_API_KEY', source: 'meta' },
+  openai: { envVar: 'OPENAI_API_KEY', source: 'image-openai' }
+}
+
+const CHAT_PROVIDERS = ['meta', 'anthropic', 'xai', 'deepseek', 'vercel'] as const
+
+/** The provider choices of the agent and reviewer selects. */
+function ProviderOptions(): React.JSX.Element {
+  const t = useT()
+  return (
+    <>
+      {CHAT_PROVIDERS.map((provider) => (
+        <option key={provider} value={provider}>
+          {t(`providers.option.${provider}`)}
+        </option>
+      ))}
+    </>
+  )
+}
+
+/** What an empty model field means for providers that have a default (the agent's field, and the reviewer's placeholder). */
+function emptyModelHint(provider: ProviderId, t: T, key: 'agents' | 'approvals'): string {
+  return provider === 'anthropic' ? '' : t(`${key}.modelHint.${provider}`)
 }
 
 function ProviderCard({ provider, settings, onSettingsReplaced }: { provider: ModelProviderId } & Props): React.JSX.Element {
+  const t = useT()
   const info = settings.providers[provider]
   const [key, setKey] = useState('')
   const [baseUrl, setBaseUrl] = useState(settings.providers.xai.baseUrl)
-  const { name, envVar, source } = PROVIDER_INFO[provider]
+  const { envVar, source } = PROVIDER_INFO[provider]
+  const name = t(`providers.name.${provider}`)
   const { models, error, load, loading } = useModels(source)
   const [tested, setTested] = useState(false)
 
@@ -160,29 +172,29 @@ function ProviderCard({ provider, settings, onSettingsReplaced }: { provider: Mo
       <div className="row space">
         <h3>{name}</h3>
         <span className={`badge ${info.hasKey || info.fromEnv ? 'ok' : 'warn'}`}>
-          {info.hasKey ? 'Key guardada' : info.fromEnv ? `Usa ${envVar}` : 'Sin configurar'}
+          {info.hasKey ? t('providers.keySaved') : info.fromEnv ? t('providers.usesEnv', { envVar }) : t('providers.notSet')}
         </span>
       </div>
       <div className="row">
         <input
           type="password"
-          placeholder={info.hasKey ? '•••••••• (escribí una nueva para reemplazarla)' : 'Pegá tu API key'}
+          placeholder={info.hasKey ? t('providers.replaceKey') : t('providers.pasteKey')}
           value={key}
           onChange={(e) => setKey(e.target.value)}
           className="grow"
         />
         <button className="primary" disabled={!key.trim()} onClick={() => void saveKey(key)}>
-          Guardar
+          {t('common.save')}
         </button>
         {info.hasKey && (
           <button className="ghost" onClick={() => void saveKey('')}>
-            Borrar
+            {t('common.delete')}
           </button>
         )}
       </div>
       {provider === 'xai' && (
         <label className="field">
-          <span>URL base</span>
+          <span>{t('providers.baseUrl')}</span>
           <div className="row">
             <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} className="grow" />
             <button
@@ -194,7 +206,7 @@ function ProviderCard({ provider, settings, onSettingsReplaced }: { provider: Mo
                   .then(onSettingsReplaced)
               }
             >
-              Guardar URL
+              {t('providers.saveUrl')}
             </button>
           </div>
         </label>
@@ -208,16 +220,16 @@ function ProviderCard({ provider, settings, onSettingsReplaced }: { provider: Mo
             load()
           }}
         >
-          {loading ? 'Probando…' : 'Probar conexión'}
+          {loading ? t('providers.testing') : t('providers.test')}
         </button>
-        {tested && !loading && (error ? <span className="text-danger small">{error}</span> : <span className="text-ok small">Conectado · {models.length} modelos disponibles</span>)}
+        {tested && !loading && (error ? <span className="text-danger small">{error}</span> : <span className="text-ok small">{t('providers.connected', { count: models.length })}</span>)}
       </div>
       {provider === 'vercel' && (
         <p className="muted small">
-          Para crear la key: <code>npx vercel@latest ai-gateway setup</code> en una terminal, o desde el panel de AI Gateway en vercel.com.
+          {t('providers.vercelHint.before')} <code>npx vercel@latest ai-gateway setup</code> {t('providers.vercelHint.after')}
         </p>
       )}
-      <p className="muted small">La key se guarda cifrada con el almacén seguro del sistema y nunca vuelve a la interfaz.</p>
+      <p className="muted small">{t('providers.keyNote')}</p>
     </div>
   )
 }
@@ -237,12 +249,12 @@ function ProvidersTab(props: Props): React.JSX.Element {
 
 // ---------------------------------------------------------------------------
 
-function newAgent(): AgentProfile {
+function newAgent(t: T): AgentProfile {
   return {
     id: `agente-${Math.random().toString(36).slice(2, 8)}`,
-    name: 'Nuevo agente',
-    description: 'Describí cuándo conviene usar este agente.',
-    systemPrompt: 'Sos un agente que ayuda al usuario.',
+    name: t('agents.new.name'),
+    description: t('agents.new.description'),
+    systemPrompt: t('agents.new.prompt'),
     provider: 'meta',
     model: '',
     effort: 'medium',
@@ -253,6 +265,7 @@ function newAgent(): AgentProfile {
 }
 
 function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
+  const t = useT()
   const [selectedId, setSelectedId] = useState(settings.agents[0]?.id ?? '')
   const selected = settings.agents.find((a) => a.id === selectedId) ?? settings.agents[0]
   const [draft, setDraft] = useState<AgentProfile | undefined>(selected)
@@ -268,11 +281,11 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
   const saveAgents = (agents: AgentProfile[]): Promise<void> => onChange({ agents })
   const set = <K extends keyof AgentProfile>(key: K, value: AgentProfile[K]): void => setDraft((d) => (d ? { ...d, [key]: value } : d))
 
-  if (!draft) return <p>No hay agentes.</p>
+  if (!draft) return <p>{t('agents.none')}</p>
   return (
     <>
     <label className="field">
-      <span>Agente por defecto (el de las conversaciones nuevas y los canales sin agente propio)</span>
+      <span>{t('agents.default')}</span>
       <select value={settings.defaultAgentId} onChange={(e) => void onChange({ defaultAgentId: e.target.value })}>
         {settings.agents.filter((a) => !a.companyId).map((a) => (
           <option key={a.id} value={a.id}>
@@ -288,33 +301,33 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
             <span className="ellipsis">{agent.name}</span>
             <span className="muted small">
               {PROVIDER_NAMES[agent.provider]}
-              {agent.id === settings.defaultAgentId ? ' · por defecto' : ''}
+              {agent.id === settings.defaultAgentId ? ` · ${t('agents.defaultMark')}` : ''}
             </span>
           </button>
         ))}
         <button
           className="ghost"
           onClick={() => {
-            const agent = newAgent()
+            const agent = newAgent(t)
             void saveAgents([...settings.agents, agent]).then(() => setSelectedId(agent.id))
           }}
         >
-          + Nuevo agente
+          {t('agents.add')}
         </button>
       </div>
 
       <div className="split-detail">
         <label className="field">
-          <span>Nombre</span>
+          <span>{t('common.name')}</span>
           <input value={draft.name} onChange={(e) => set('name', e.target.value)} />
         </label>
         <label className="field">
-          <span>Descripción (los demás agentes la leen para decidir cuándo delegarle)</span>
+          <span>{t('agents.description')}</span>
           <input value={draft.description} onChange={(e) => set('description', e.target.value)} />
         </label>
         <div className="row">
           <label className="field">
-            <span>Proveedor</span>
+            <span>{t('agents.provider')}</span>
             <select
               value={draft.provider}
               onChange={(e) => {
@@ -322,18 +335,14 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
                 setDraft({ ...draft, provider, model: provider === 'anthropic' ? CLAUDE_MODELS[0] : '' })
               }}
             >
-              <option value="meta">Meta (Muse)</option>
-              <option value="anthropic">Anthropic (Claude)</option>
-              <option value="xai">xAI (Grok)</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="vercel">Vercel AI Gateway</option>
+              <ProviderOptions />
             </select>
           </label>
           <label className="field grow">
-            <span>Modelo {draft.provider === 'xai' ? '(vacío = el Grok más nuevo disponible)' : draft.provider === 'deepseek' ? '(vacío = deepseek-v4-pro)' : draft.provider === 'vercel' ? '(formato lab/modelo; vacío = Claude Sonnet)' : draft.provider === 'meta' ? '(vacío = muse-spark-1.3)' : ''}</span>
+            <span>{t('model.label')} {emptyModelHint(draft.provider, t, 'agents')}</span>
             <div className="row">
               <input list={`models-${draft.provider}`} value={draft.model} onChange={(e) => set('model', e.target.value)} className="grow" />
-              <button className="ghost small" onClick={models.load} disabled={models.loading} title="Traer la lista de modelos de la API">
+              <button className="ghost small" onClick={models.load} disabled={models.loading} title={t('agents.fetchModels')}>
                 <Icon icon={RefreshCw} size="sm" />
               </button>
             </div>
@@ -345,7 +354,7 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
             {models.error && <span className="text-danger small">{models.error}</span>}
           </label>
           <label className="field">
-            <span>Esfuerzo</span>
+            <span>{t('agents.effort')}</span>
             <select value={draft.effort} onChange={(e) => set('effort', e.target.value as Effort)}>
               {EFFORTS.map((effort) => (
                 <option key={effort} value={effort}>
@@ -356,7 +365,7 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
           </label>
         </div>
         <fieldset className="field">
-          <legend>Herramientas</legend>
+          <legend>{t('agents.tools')}</legend>
           <div className="checks">
             {BUILTIN_TOOLS.map((tool) => (
               <label key={tool} className="check">
@@ -365,21 +374,21 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
                   checked={draft.tools.includes(tool)}
                   onChange={(e) => set('tools', e.target.checked ? [...draft.tools, tool] : draft.tools.filter((t) => t !== tool))}
                 />
-                {toolLabel(tool)}
+                {toolLabel(tool, t)}
               </label>
             ))}
             <label className="check">
               <input type="checkbox" checked={draft.allowMcp} onChange={(e) => set('allowMcp', e.target.checked)} />
-              Conectores MCP
+              {t('settings.tab.mcp')}
             </label>
             <label className="check">
               <input type="checkbox" checked={draft.canDelegate} onChange={(e) => set('canDelegate', e.target.checked)} />
-              Puede delegar en otros agentes
+              {t('agents.canDelegate')}
             </label>
           </div>
         </fieldset>
         <fieldset className="field">
-          <legend>Sin pedir aprobación (para este agente). Publicar en Instagram siempre pide aprobación.</legend>
+          <legend>{t('agents.noApproval')}</legend>
           <div className="checks">
             {draft.tools
               .filter((tool) => !READ_ONLY_TOOLS.includes(tool) && tool !== 'instagram_publish')
@@ -397,13 +406,13 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
                       )
                     }
                   />
-                  {toolLabel(tool)}
+                  {toolLabel(tool, t)}
                 </label>
               ))}
           </div>
         </fieldset>
         <label className="field">
-          <span>Instrucciones (prompt de sistema)</span>
+          <span>{t('agents.instructions')}</span>
           <textarea rows={8} value={draft.systemPrompt} onChange={(e) => set('systemPrompt', e.target.value)} />
         </label>
         <div className="row">
@@ -412,28 +421,28 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
             disabled={!dirty}
             onClick={() => void saveAgents(settings.agents.map((a) => (a.id === draft.id ? draft : a)))}
           >
-            Guardar cambios
+            {t('agents.saveChanges')}
           </button>
           <button className="ghost" disabled={!dirty} onClick={() => setDraft(selected)}>
-            Descartar
+            {t('agents.discard')}
           </button>
           <span className="grow" />
           {draft.id !== settings.defaultAgentId && (
             <button className="ghost" onClick={() => void onChange({ defaultAgentId: draft.id })}>
-              Usar por defecto
+              {t('agents.makeDefault')}
             </button>
           )}
           <button
             className="danger"
             disabled={settings.agents.length <= 1 || draft.id === settings.defaultAgentId}
-            title={draft.id === settings.defaultAgentId ? 'Elegí otro agente por defecto antes de borrar este' : undefined}
+            title={draft.id === settings.defaultAgentId ? t('agents.cannotDelete') : undefined}
             onClick={() => {
-              if (confirm(`¿Borrar el agente «${draft.name}»?`)) {
+              if (confirm(t('agents.deleteConfirm', { name: draft.name }))) {
                 void saveAgents(settings.agents.filter((a) => a.id !== draft.id)).then(() => setSelectedId(settings.agents[0].id))
               }
             }}
           >
-            Borrar
+            {t('common.delete')}
           </button>
         </div>
       </div>
@@ -445,14 +454,16 @@ function AgentsTab({ settings, onChange }: Props): React.JSX.Element {
 // ---------------------------------------------------------------------------
 
 function ApprovalsTab({ settings, onChange }: Props): React.JSX.Element {
+  const t = useT()
   const [review, setReview] = useState(settings.autoReview)
+  const reviewModelHint = emptyModelHint(review.provider, t, 'approvals')
   const dirty = JSON.stringify(review) !== JSON.stringify(settings.autoReview)
   return (
     <>
       <div className="card">
-        <h3>Modo de aprobación</h3>
-        <p className="muted small">Las lecturas (leer, listar, buscar) nunca piden aprobación.</p>
-        {APPROVAL_MODES.map((mode) => (
+        <h3>{t('approvals.mode')}</h3>
+        <p className="muted small">{t('approvals.readsNote')}</p>
+        {approvalModes(t).map((mode) => (
           <label key={mode.value} className="radio">
             <input
               type="radio"
@@ -469,21 +480,17 @@ function ApprovalsTab({ settings, onChange }: Props): React.JSX.Element {
       </div>
 
       <div className="card">
-        <h3>Auto-review</h3>
+        <h3>{t('approvals.autoReview')}</h3>
         <div className="row">
           <label className="field">
-            <span>Proveedor del revisor</span>
+            <span>{t('approvals.reviewerProvider')}</span>
             <select value={review.provider} onChange={(e) => setReview({ ...review, provider: e.target.value as ProviderId, model: e.target.value === 'anthropic' ? CLAUDE_MODELS[0] : '' })}>
-              <option value="meta">Meta (Muse)</option>
-              <option value="anthropic">Anthropic (Claude)</option>
-              <option value="xai">xAI (Grok)</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="vercel">Vercel AI Gateway</option>
+              <ProviderOptions />
             </select>
           </label>
           <label className="field grow">
-            <span>Modelo</span>
-            <input list="review-models" value={review.model} placeholder={review.provider === 'xai' ? 'vacío = el Grok más nuevo' : review.provider === 'deepseek' ? 'vacío = deepseek-v4-pro' : review.provider === 'vercel' ? 'lab/modelo; vacío = Claude Sonnet' : review.provider === 'meta' ? 'vacío = muse-spark-1.3' : ''} onChange={(e) => setReview({ ...review, model: e.target.value })} />
+            <span>{t('model.label')}</span>
+            <input list="review-models" value={review.model} placeholder={reviewModelHint} onChange={(e) => setReview({ ...review, model: e.target.value })} />
             <datalist id="review-models">
               {(review.provider === 'anthropic' ? CLAUDE_MODELS : []).map((m) => (
                 <option key={m} value={m} />
@@ -492,25 +499,25 @@ function ApprovalsTab({ settings, onChange }: Props): React.JSX.Element {
           </label>
         </div>
         <label className="field">
-          <span>Instrucciones: qué debe marcar como peligroso</span>
+          <span>{t('approvals.instructions')}</span>
           <textarea rows={7} value={review.instructions} onChange={(e) => setReview({ ...review, instructions: e.target.value })} />
         </label>
         <button className="primary" disabled={!dirty} onClick={() => void onChange({ autoReview: review })}>
-          Guardar auto-review
+          {t('approvals.saveReview')}
         </button>
       </div>
 
       <div className="card">
-        <h3>Siempre permitir</h3>
+        <h3>{t('toolcard.always')}</h3>
         {settings.alwaysAllowTools.length === 0 ? (
-          <p className="muted small">Ninguna. Aparecen acá cuando elegís «Siempre permitir» en una aprobación.</p>
+          <p className="muted small">{t('approvals.noneAlways')}</p>
         ) : (
           <ul className="plain-list">
             {settings.alwaysAllowTools.map((tool) => (
               <li key={tool} className="row space">
-                <span>{toolLabel(tool)}</span>
+                <span>{toolLabel(tool, t)}</span>
                 <button className="ghost small" onClick={() => void onChange({ alwaysAllowTools: settings.alwaysAllowTools.filter((t) => t !== tool) })}>
-                  Quitar
+                  {t('common.remove')}
                 </button>
               </li>
             ))}
@@ -533,6 +540,7 @@ function parseLines(text: string, separator: RegExp): Record<string, string> {
 }
 
 function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
+  const t = useT()
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ name: '', type: 'stdio' as 'stdio' | 'http', command: '', args: '', env: '', url: '', headers: '', tools: '' })
   const [json, setJson] = useState('')
@@ -565,17 +573,16 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
     <>
       <div className="card">
         <div className="row space">
-          <h3>Servidores</h3>
+          <h3>{t('mcp.servers')}</h3>
           <button className="ghost small" onClick={() => void request({ method: 'mcp.reconnect' })}>
-            <Icon icon={RefreshCw} size="sm" /> Reconectar
+            <Icon icon={RefreshCw} size="sm" /> {t('mcp.reconnect')}
           </button>
         </div>
-        {servers.length === 0 && <p className="muted small">No hay conectores. Agregá uno o importá tu mcp.json.</p>}
+        {servers.length === 0 && <p className="muted small">{t('mcp.none')}</p>}
         {!settings.mcpServers[CHROME_MCP] && (
           <div className="row space">
             <p className="muted small">
-              <strong>Chrome DevTools</strong>: el agente abre un Chrome propio y navega, hace clic, completa formularios y saca capturas. Las
-              sesiones que inicies en esa ventana quedan guardadas. Necesita Google Chrome instalado.
+              <strong>{t('mcp.chrome.name')}</strong>: {t('mcp.chrome.text')}
             </p>
             <button
               className="ghost small"
@@ -583,7 +590,7 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
                 void save({ ...settings.mcpServers, [CHROME_MCP]: { type: 'stdio', command: 'npx', args: ['-y', 'chrome-devtools-mcp@1.11.0'], enabled: true } })
               }
             >
-              Agregar Chrome
+              {t('mcp.chrome.add')}
             </button>
           </div>
         )}
@@ -595,7 +602,7 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
                 <div>
                   <strong>{name}</strong>{' '}
                   <span className={`badge ${status?.state === 'connected' ? 'ok' : status?.state === 'error' ? 'danger' : ''}`}>
-                    {status?.state === 'connected' ? `${status.tools.length} herramientas` : status?.state ?? 'desconocido'}
+                    {status?.state === 'connected' ? t('mcp.tools', { count: status.tools.length }) : status?.state ?? t('mcp.unknown')}
                   </span>
                   <div className="muted small mono ellipsis">
                     {config.type === 'stdio' ? `${config.command} ${(config.args ?? []).join(' ')}` : config.url}
@@ -604,7 +611,7 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
                 <div className="row">
                   <label className="check">
                     <input type="checkbox" checked={config.enabled} onChange={(e) => void save({ ...settings.mcpServers, [name]: { ...config, enabled: e.target.checked } })} />
-                    Activo
+                    {t('mcp.active')}
                   </label>
                   <button
                     className="danger small"
@@ -613,7 +620,7 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
                       void save(rest)
                     }}
                   >
-                    Quitar
+                    {t('common.remove')}
                   </button>
                 </div>
               </div>
@@ -628,69 +635,69 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
 
       {adding ? (
         <div className="card">
-          <h3>Nuevo servidor</h3>
+          <h3>{t('mcp.new')}</h3>
           <div className="row">
             <label className="field grow">
-              <span>Nombre</span>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="github" />
+              <span>{t('common.name')}</span>
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('mcp.nameExample')} />
             </label>
             <label className="field">
-              <span>Tipo</span>
+              <span>{t('mcp.type')}</span>
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'stdio' | 'http' })}>
-                <option value="stdio">Comando local (stdio)</option>
-                <option value="http">Remoto (HTTPS)</option>
+                <option value="stdio">{t('mcp.type.stdio')}</option>
+                <option value="http">{t('mcp.type.http')}</option>
               </select>
             </label>
           </div>
           {form.type === 'stdio' ? (
             <>
               <label className="field">
-                <span>Comando</span>
-                <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder="npx" />
+                <span>{t('mcp.command')}</span>
+                <input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} placeholder={t('mcp.commandExample')} />
               </label>
               <label className="field">
-                <span>Argumentos (uno por línea)</span>
-                <textarea rows={3} value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} placeholder={'-y\n@modelcontextprotocol/server-filesystem\nC:\\proyectos'} />
+                <span>{t('mcp.args')}</span>
+                <textarea rows={3} value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} placeholder={t('mcp.argsExample')} />
               </label>
               <label className="field">
-                <span>Variables de entorno (CLAVE=valor, una por línea)</span>
+                <span>{t('mcp.env')}</span>
                 <textarea rows={2} value={form.env} onChange={(e) => setForm({ ...form, env: e.target.value })} />
               </label>
             </>
           ) : (
             <>
               <label className="field">
-                <span>URL</span>
-                <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://ejemplo.com/mcp" />
+                <span>{t('mcp.url')}</span>
+                <input value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder={t('mcp.urlExample')} />
               </label>
               <label className="field">
-                <span>Headers (Nombre: valor, uno por línea)</span>
+                <span>{t('mcp.headers')}</span>
                 <textarea rows={2} value={form.headers} onChange={(e) => setForm({ ...form, headers: e.target.value })} />
               </label>
             </>
           )}
           <label className="field">
-            <span>Herramientas permitidas (separadas por coma o línea; vacío = todas)</span>
-            <textarea rows={2} className="mono" value={form.tools} onChange={(e) => setForm({ ...form, tools: e.target.value })} placeholder="analyze_javascript_application, inspect_artifact" />
+            <span>{t('mcp.allowedTools')}</span>
+            <textarea rows={2} className="mono" value={form.tools} onChange={(e) => setForm({ ...form, tools: e.target.value })} placeholder={t('mcp.toolsExample')} />
           </label>
           <div className="row">
             <button className="primary" onClick={addServer} disabled={!form.name.trim() || (form.type === 'stdio' ? !form.command.trim() : !form.url.trim())}>
-              Agregar
+              {t('common.add')}
             </button>
             <button className="ghost" onClick={() => setAdding(false)}>
-              Cancelar
+              {t('common.cancel')}
             </button>
           </div>
         </div>
       ) : (
         <button className="ghost" onClick={() => setAdding(true)}>
-          + Agregar servidor
+          {t('mcp.addServer')}
         </button>
       )}
 
       <div className="card">
-        <h3>Importar mcp.json</h3>
-        <p className="muted small">Compatible con el formato de Claude Desktop y Cursor ({'{ "mcpServers": { … } }'}).</p>
+        <h3>{t('mcp.importTitle')}</h3>
+        <p className="muted small">{t('mcp.importHint', { format: '{ "mcpServers": { … } }' })}</p>
         <textarea rows={5} className="mono" value={json} onChange={(e) => setJson(e.target.value)} />
         {jsonError && <div className="text-danger small">{jsonError}</div>}
         <button
@@ -699,7 +706,7 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
           onClick={() => {
             try {
               const imported = importMcpJson(json)
-              if (Object.keys(imported).length === 0) throw new Error('No se encontró ningún servidor.')
+              if (Object.keys(imported).length === 0) throw new Error(t('mcp.importEmpty'))
               void save({ ...settings.mcpServers, ...imported })
               setJson('')
               setJsonError('')
@@ -708,7 +715,7 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
             }
           }}
         >
-          Importar
+          {t('mcp.import')}
         </button>
       </div>
     </>
@@ -718,15 +725,28 @@ function McpTab({ settings, mcp, onChange }: Props): React.JSX.Element {
 // ---------------------------------------------------------------------------
 
 function GeneralTab({ settings, onChange }: Props): React.JSX.Element {
+  const t = useT()
   return (
     <>
       <div className="card">
-        <h3>Carpeta de trabajo por defecto</h3>
+        <label className="field">
+          <span>{t('settings.language.title')}</span>
+          <select value={settings.language} onChange={(e) => void onChange({ language: e.target.value as Language })}>
+            {(['es', 'en'] as const).map((language) => (
+              <option key={language} value={language}>
+                {t(`settings.language.${language}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="card">
+        <h3>{t('general.workspace.title')}</h3>
         <p className="muted small">
-          Las conversaciones nuevas empiezan en esta carpeta. Los agentes no pueden leer ni escribir fuera de la carpeta de la conversación.
+          {t('general.workspace.hint')}
         </p>
         <div className="row">
-          <input readOnly value={settings.defaultWorkspace || '(ninguna)'} className="grow" />
+          <input readOnly value={settings.defaultWorkspace || t('general.workspace.none')} className="grow" />
           <button
             className="ghost"
             onClick={async () => {
@@ -734,20 +754,20 @@ function GeneralTab({ settings, onChange }: Props): React.JSX.Element {
               if (folder) await onChange({ defaultWorkspace: folder })
             }}
           >
-            Elegir…
+            {t('general.pick')}
           </button>
         </div>
       </div>
       <div className="card">
-        <h3>Segundo plano</h3>
-        <p className="muted small">Las rutinas solo se ejecutan mientras la app está abierta o en la bandeja del sistema.</p>
+        <h3>{t('general.background.title')}</h3>
+        <p className="muted small">{t('general.background.hint')}</p>
         <label className="check">
           <input
             type="checkbox"
             checked={settings.background.runInTray}
             onChange={(e) => void onChange({ background: { ...settings.background, runInTray: e.target.checked } })}
           />
-          Al cerrar la ventana, seguir en la bandeja del sistema
+          {t('general.background.tray')}
         </label>
         <label className="check">
           <input
@@ -755,7 +775,7 @@ function GeneralTab({ settings, onChange }: Props): React.JSX.Element {
             checked={settings.background.launchAtLogin}
             onChange={(e) => void onChange({ background: { ...settings.background, launchAtLogin: e.target.checked } })}
           />
-          Abrir al iniciar Windows (minimizada)
+          {t('general.background.login')}
         </label>
       </div>
       <PrivacyCard settings={settings} onChange={onChange} />
@@ -765,22 +785,23 @@ function GeneralTab({ settings, onChange }: Props): React.JSX.Element {
 
 /** Retention, a copy of what Alma keeps about the person, and erasing it. */
 function PrivacyCard({ settings, onChange }: Pick<Props, 'settings' | 'onChange'>): React.JSX.Element {
+  const t = useT()
   const [note, setNote] = useState('')
   const run = (job: () => Promise<string>): void => void job().then(setNote).catch((e: Error) => setNote(e.message))
   return (
     <div className="card">
-      <h3>Privacidad</h3>
+      <h3>{t('privacy.title')}</h3>
       <p className="muted small">
-        Las conversaciones, los archivos que recibís y la huella de tu voz viven solo en esta computadora. Lo que le escribís a un agente viaja al proveedor de modelos que ese agente use.
+        {t('privacy.about')}
       </p>
       <label className="field">
-        <span>Borrar conversaciones sin actividad</span>
+        <span>{t('privacy.retention')}</span>
         <select value={settings.privacy.threadRetentionDays} onChange={(e) => void onChange({ privacy: { threadRetentionDays: Number(e.target.value) } })}>
-          <option value={0}>Nunca (las guardo yo)</option>
-          <option value={30}>A los 30 días</option>
-          <option value={90}>A los 90 días</option>
-          <option value={180}>A los 180 días</option>
-          <option value={365}>Al año</option>
+          <option value={0}>{t('privacy.never')}</option>
+          <option value={30}>{t('privacy.afterDays', { count: 30 })}</option>
+          <option value={90}>{t('privacy.afterDays', { count: 90 })}</option>
+          <option value={180}>{t('privacy.afterDays', { count: 180 })}</option>
+          <option value={365}>{t('privacy.afterYear')}</option>
         </select>
       </label>
       <div className="row">
@@ -789,26 +810,26 @@ function PrivacyCard({ settings, onChange }: Pick<Props, 'settings' | 'onChange'
           onClick={() =>
             run(async () => {
               const folder = await window.desktop.pickFolder()
-              return folder ? `Copia guardada en ${await request({ method: 'privacy.export', targetDir: folder })}` : ''
+              return folder ? t('privacy.saved', { path: await request<string>({ method: 'privacy.export', targetDir: folder }) }) : ''
             })
           }
         >
-          Exportar mis datos…
+          {t('privacy.export')}
         </button>
         <button
           className="danger"
           onClick={() => {
-            if (confirm('¿Borrar TODAS las conversaciones, los archivos recibidos y la huella de tu voz? No se puede deshacer. Tu vault, tus claves y tus canales no se tocan.')) {
+            if (confirm(t('privacy.eraseConfirm'))) {
               run(async () => {
                 await request({ method: 'privacy.erase' })
                 // ponytail: the conversation list lives in App state; reloading the window is the cheap way to empty it.
                 setTimeout(() => location.reload(), 1200)
-                return 'Listo: conversaciones, archivos recibidos y huella de voz borrados.'
+                return t('privacy.erased')
               })
             }
           }}
         >
-          Borrar mi historial
+          {t('privacy.erase')}
         </button>
       </div>
       {note && <p className="muted small">{note}</p>}
@@ -819,6 +840,7 @@ function PrivacyCard({ settings, onChange }: Pick<Props, 'settings' | 'onChange'
 // ---------------------------------------------------------------------------
 
 function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
+  const t = useT()
   const [model, setModel] = useState(settings.images.model)
   const source: ModelSource = `image-${settings.images.provider}`
   const models = useModels(source)
@@ -826,13 +848,13 @@ function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
   const isKey = looksLikeApiKey(model)
   return (
     <div className="card">
-      <h3>Generación de imágenes</h3>
+      <h3>{t('images.title')}</h3>
       <p className="muted small">
-        La usa la herramienta «Generar imagen». Claude no genera imágenes, y DeepSeek tampoco lo ofrece por API, así que se usa xAI, OpenAI o Meta (Muse Image, USD 0,01 por imagen).
+        {t('images.about')}
       </p>
       <div className="row">
         <label className="field">
-          <span>Servicio</span>
+          <span>{t('images.service')}</span>
           <select
             value={settings.images.provider}
             onChange={(e) => {
@@ -840,16 +862,25 @@ function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
               void onChange({ images: { provider: e.target.value as ImageProviderId, model: '' } })
             }}
           >
-            <option value="meta">Meta (Muse Image){hasKey('meta') ? '' : ' · falta la key'}</option>
-            <option value="xai">xAI (Grok){hasKey('xai') ? '' : ' · falta la key'}</option>
-            <option value="openai">OpenAI{hasKey('openai') ? '' : ' · falta la key'}</option>
+            <option value="meta">
+              {t('images.option.meta')}
+              {hasKey('meta') ? '' : ` · ${t('images.missingKey')}`}
+            </option>
+            <option value="xai">
+              {t('providers.option.xai')}
+              {hasKey('xai') ? '' : ` · ${t('images.missingKey')}`}
+            </option>
+            <option value="openai">
+              {t('images.option.openai')}
+              {hasKey('openai') ? '' : ` · ${t('images.missingKey')}`}
+            </option>
           </select>
         </label>
         <label className="field grow">
-          <span>Modelo (vacío = el más nuevo disponible)</span>
+          <span>{t('images.model')}</span>
           <div className="row">
             <input list="image-models" value={model} onChange={(e) => setModel(e.target.value)} className="grow" />
-            <button className="ghost small" onClick={models.load} disabled={models.loading} title="Traer la lista de modelos de imagen">
+            <button className="ghost small" onClick={models.load} disabled={models.loading} title={t('images.fetchModels')}>
               <Icon icon={RefreshCw} size="sm" />
             </button>
             <button
@@ -857,11 +888,11 @@ function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
               disabled={model === settings.images.model || isKey}
               onClick={() => void onChange({ images: { ...settings.images, model: model.trim() } })}
             >
-              Guardar
+              {t('common.save')}
             </button>
           </div>
           {isKey && (
-            <span className="text-danger small">Eso es una API key, no un modelo. Las keys van en la pestaña Proveedores.</span>
+            <span className="text-danger small">{t('images.isKey')}</span>
           )}
           <datalist id="image-models">
             {models.models.map((m) => (
@@ -877,15 +908,16 @@ function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
 
 const CHROME_MCP = 'chrome-devtools'
 
-const WHATSAPP_STATE: Record<WhatsAppStatus['state'], { text: string; badge: string }> = {
-  off: { text: 'Apagado', badge: '' },
-  connecting: { text: 'Conectando…', badge: 'warn' },
-  qr: { text: 'Esperando el QR', badge: 'warn' },
-  online: { text: 'Conectado', badge: 'ok' },
-  error: { text: 'Error', badge: 'danger' }
+const WHATSAPP_STATE: Record<WhatsAppStatus['state'], { badge: string }> = {
+  off: { badge: '' },
+  connecting: { badge: 'warn' },
+  qr: { badge: 'warn' },
+  online: { badge: 'ok' },
+  error: { badge: 'danger' }
 }
 
 function WhatsAppTab({ settings, onChange, whatsapp }: Props): React.JSX.Element {
+  const t = useT()
   const config = settings.whatsapp
   const patch = (next: Partial<WhatsAppSettings>): Promise<void> => onChange({ whatsapp: { ...config, ...next } })
   const state = WHATSAPP_STATE[whatsapp.state]
@@ -893,45 +925,43 @@ function WhatsAppTab({ settings, onChange, whatsapp }: Props): React.JSX.Element
     <>
       <div className="card">
         <div className="row space">
-          <h3>WhatsApp</h3>
+          <h3>{t('settings.tab.whatsapp')}</h3>
           <span className={`badge ${state.badge}`}>
-            {state.text}
+            {t(`channels.state.${whatsapp.state}`)}
             {whatsapp.number ? ` · +${whatsapp.number}` : ''}
           </span>
         </div>
         <p className="muted small">
-          Alma se vincula a tu número como un dispositivo más (igual que WhatsApp Web). Le hablás desde tu chat <strong>«Mensajes para mí»</strong>{' '}
-          y te contesta ahí (sus mensajes empiezan con 🤖). Puede escribirle a tus contactos solo si se lo pedís, y cada envío lo aprobás vos.
+          {t('whatsapp.about.before')} <strong>{t('whatsapp.about.selfChat')}</strong> {t('whatsapp.about.after')}
         </p>
         <p className="small text-danger">
-          No es la API oficial de WhatsApp: si WhatsApp detecta un uso raro (muchos mensajes, a desconocidos) puede bloquear el número. Alma
-          nunca escribe por su cuenta.
+          {t('whatsapp.warning')}
         </p>
         <label className="check">
           <input type="checkbox" checked={config.enabled} onChange={(e) => void patch({ enabled: e.target.checked })} />
-          Activar WhatsApp
+          {t('whatsapp.enable')}
         </label>
         {whatsapp.state === 'error' && <p className="text-danger small">{whatsapp.error}</p>}
         {whatsapp.state === 'qr' && whatsapp.qr && (
           <div className="row">
-            <img src={whatsapp.qr} alt="Código QR para vincular WhatsApp" width={240} height={240} style={{ background: '#fff', borderRadius: 8 }} />
+            <img src={whatsapp.qr} alt={t('whatsapp.qrAlt')} width={240} height={240} style={{ background: '#fff', borderRadius: 8 }} />
             <p className="small">
-              En el celular: WhatsApp → <strong>Dispositivos vinculados</strong> → <strong>Vincular un dispositivo</strong>, y escaneá este código.
+              {t('whatsapp.qr.before')} <strong>{t('whatsapp.qr.linked')}</strong> → <strong>{t('whatsapp.qr.link')}</strong>
+              {t('whatsapp.qr.after')}
             </p>
           </div>
         )}
         {whatsapp.state === 'online' && (
           <button className="ghost small" onClick={() => void request({ method: 'whatsapp.logout' })}>
-            Desvincular este dispositivo
+            {t('whatsapp.unlink')}
           </button>
         )}
       </div>
 
       <div className="card">
-        <h3>Agente que responde</h3>
+        <h3>{t('channels.agent')}</h3>
         <p className="muted small">
-          Tus mensajes de «Mensajes para mí» llegan a una conversación de Alma con el ícono de WhatsApp. Escribí /nuevo para empezar otra. Si
-          hace falta tu permiso, te lo pregunta ahí y contestás «sí» o «no».
+          {t('whatsapp.agentNote')}
         </p>
         <select value={config.agentId} onChange={(e) => void patch({ agentId: e.target.value })}>
           {settings.agents.filter((a) => !a.companyId).map((agent) => (
@@ -946,6 +976,7 @@ function WhatsAppTab({ settings, onChange, whatsapp }: Props): React.JSX.Element
 }
 
 function EmailTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.Element {
+  const t = useT()
   const config = settings.email
   const [password, setPassword] = useState('')
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null)
@@ -956,28 +987,27 @@ function EmailTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
   return (
     <>
       <div className="card">
-        <h3>Tu casilla</h3>
+        <h3>{t('email.title')}</h3>
         <p className="muted small">
-          Con esto los agentes pueden buscar y leer tus mails, y mandar mails en tu nombre (cada envío lo aprobás vos). Funciona con Gmail,
-          Outlook, Yahoo, iCloud o el mail de tu dominio.
+          {t('email.about')}
         </p>
         <label className="field">
-          <span>Dirección</span>
+          <span>{t('email.address')}</span>
           <input
             type="email"
-            placeholder="vos@gmail.com"
+            placeholder={t('email.addressExample')}
             value={config.address}
             onChange={(e) => void patch({ address: e.target.value.trim() })}
             onBlur={() => !config.imapHost && config.address.includes('@') && void patch(emailServersFor(config.address))}
           />
         </label>
         <label className="field">
-          <span>Contraseña de aplicación</span>
+          <span>{t('email.appPassword')}</span>
           <div className="row">
             <input
               type="password"
               className="grow"
-              placeholder={hasPassword ? 'Guardada (pegá otra para reemplazarla)' : 'xxxx xxxx xxxx xxxx'}
+              placeholder={hasPassword ? t('email.passwordSaved') : t('email.passwordExample')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -989,51 +1019,51 @@ function EmailTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
                 setPassword('')
               }}
             >
-              Guardar
+              {t('common.save')}
             </button>
             {hasPassword && (
               <button className="ghost" onClick={async () => onSettingsReplaced(await window.desktop.settings.setApiKey('email', ''))}>
-                Borrar
+                {t('common.delete')}
               </button>
             )}
           </div>
         </label>
         {gmail && (
           <p className="small">
-            En Gmail: activá la verificación en 2 pasos y creá una contraseña en{' '}
+            {t('email.gmail.before')}{' '}
             <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
               myaccount.google.com/apppasswords
             </a>
-            . No uses tu contraseña normal.
+            . {t('email.gmail.after')}
           </p>
         )}
       </div>
 
       <div className="card">
-        <h3>Servidores</h3>
+        <h3>{t('mcp.servers')}</h3>
         <div className="row">
           <label className="field grow">
-            <span>IMAP (leer)</span>
+            <span>{t('email.imap')}</span>
             <input value={config.imapHost} placeholder="imap.gmail.com" onChange={(e) => void patch({ imapHost: e.target.value.trim() })} />
           </label>
           <label className="field">
-            <span>Puerto</span>
+            <span>{t('email.port')}</span>
             <input type="number" value={config.imapPort} onChange={(e) => void patch({ imapPort: Number(e.target.value) || 993 })} />
           </label>
         </div>
         <div className="row">
           <label className="field grow">
-            <span>SMTP (mandar)</span>
+            <span>{t('email.smtp')}</span>
             <input value={config.smtpHost} placeholder="smtp.gmail.com" onChange={(e) => void patch({ smtpHost: e.target.value.trim() })} />
           </label>
           <label className="field">
-            <span>Puerto</span>
+            <span>{t('email.port')}</span>
             <input type="number" value={config.smtpPort} onChange={(e) => void patch({ smtpPort: Number(e.target.value) || 465 })} />
           </label>
         </div>
         <div className="row">
           <button className="ghost small" onClick={() => void patch(emailServersFor(config.address))} disabled={!config.address.includes('@')}>
-            Completar según la dirección
+            {t('email.autofill')}
           </button>
           <button
             className="primary small"
@@ -1047,7 +1077,7 @@ function EmailTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
                 .finally(() => setTesting(false))
             }}
           >
-            {testing ? 'Probando…' : 'Probar conexión'}
+            {testing ? t('providers.testing') : t('providers.test')}
           </button>
         </div>
         {test && <p className={`small ${test.ok ? '' : 'text-danger'}`}>{test.text}</p>}
@@ -1056,14 +1086,15 @@ function EmailTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
   )
 }
 
-const TELEGRAM_STATE: Record<TelegramStatus['state'], { text: string; badge: string }> = {
-  off: { text: 'Apagado', badge: '' },
-  connecting: { text: 'Conectando…', badge: 'warn' },
-  online: { text: 'Conectado', badge: 'ok' },
-  error: { text: 'Error', badge: 'danger' }
+const TELEGRAM_STATE: Record<TelegramStatus['state'], { badge: string }> = {
+  off: { badge: '' },
+  connecting: { badge: 'warn' },
+  online: { badge: 'ok' },
+  error: { badge: 'danger' }
 }
 
 function TelegramTab({ settings, onChange, onSettingsReplaced, telegram }: Props): React.JSX.Element {
+  const t = useT()
   const config = settings.telegram
   const [token, setToken] = useState('')
   const [user, setUser] = useState('')
@@ -1081,22 +1112,21 @@ function TelegramTab({ settings, onChange, onSettingsReplaced, telegram }: Props
     <>
       <div className="card">
         <div className="row space">
-          <h3>Bot de Telegram</h3>
+          <h3>{t('telegram.title')}</h3>
           <span className={`badge ${state.badge}`}>
-            {state.text}
-            {telegram.username ? ` como @${telegram.username}` : ''}
+            {t(`channels.state.${telegram.state}`)}
+            {telegram.username ? ` ${t('telegram.as', { username: telegram.username })}` : ''}
           </span>
         </div>
         <p className="muted small">
-          Hablale a Alma desde el celular. Creá un bot con <strong>@BotFather</strong> en Telegram (comando /newbot) y pegá acá el token
-          que te da. El bot corre dentro de Alma: la app tiene que estar abierta o en la bandeja.
+          {t('telegram.about.before')} <strong>@BotFather</strong> {t('telegram.about.after')}
         </p>
         {telegram.state === 'error' && <p className="text-danger small">{telegram.error}</p>}
         <div className="row">
           <input
             type="password"
             className="grow"
-            placeholder={hasToken ? 'Token guardado (pegá otro para reemplazarlo)' : '123456789:AA…'}
+            placeholder={hasToken ? t('telegram.tokenSaved') : '123456789:AA…'}
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />
@@ -1108,48 +1138,47 @@ function TelegramTab({ settings, onChange, onSettingsReplaced, telegram }: Props
               setToken('')
             }}
           >
-            Guardar token
+            {t('telegram.saveToken')}
           </button>
           {settings.providers.telegram.hasKey && (
             <button className="ghost" onClick={async () => onSettingsReplaced(await window.desktop.settings.setApiKey('telegram', ''))}>
-              Borrar
+              {t('common.delete')}
             </button>
           )}
         </div>
         <label className="check">
           <input type="checkbox" checked={config.enabled} onChange={(e) => void patch({ enabled: e.target.checked })} />
-          Bot activo
+          {t('telegram.active')}
         </label>
         {telegram.username && (
           <p className="small">
-            Abrí <a href={`https://t.me/${telegram.username}`} target="_blank" rel="noreferrer">t.me/{telegram.username}</a> en el celular y
-            mandale /start.
+            {t('telegram.open.before')} <a href={`https://t.me/${telegram.username}`} target="_blank" rel="noreferrer">t.me/{telegram.username}</a>{' '}
+            {t('telegram.open.after')}
           </p>
         )}
       </div>
 
       <div className="card">
-        <h3>Quién puede escribirle</h3>
+        <h3>{t('telegram.who')}</h3>
         {config.chatId !== null ? (
           <>
             <p className="small">
-              Vinculado a tu chat privado. Solo ese chat puede usar el bot, aunque cambies de nombre de usuario.
+              {t('telegram.linked')}
             </p>
             <button className="ghost small" onClick={() => void patch({ chatId: null })}>
-              Desvincular (el próximo usuario permitido que escriba queda vinculado)
+              {t('telegram.unlink')}
             </button>
           </>
         ) : (
           <p className="muted small">
-            El primer usuario de esta lista que le escriba por privado queda vinculado, y desde ahí solo ese chat puede usarlo. Los grupos
-            no se aceptan.
+            {t('telegram.firstUser')}
           </p>
         )}
         <div className="row wrap">
           {config.allowedUsers.map((name) => (
             <span key={name} className="badge">
               @{name}{' '}
-              <button className="icon-button" title="Quitar" onClick={() => void patch({ allowedUsers: config.allowedUsers.filter((u) => u !== name) })}>
+              <button className="icon-button" title={t('common.remove')} onClick={() => void patch({ allowedUsers: config.allowedUsers.filter((u) => u !== name) })}>
                 <Icon icon={X} size={12} />
               </button>
             </span>
@@ -1158,22 +1187,21 @@ function TelegramTab({ settings, onChange, onSettingsReplaced, telegram }: Props
         <div className="row">
           <input
             className="grow"
-            placeholder="tu_usuario (sin @)"
+            placeholder={t('telegram.userExample')}
             value={user}
             onChange={(e) => setUser(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addUser()}
           />
           <button className="ghost" onClick={addUser} disabled={!user.trim()}>
-            Agregar
+            {t('common.add')}
           </button>
         </div>
       </div>
 
       <div className="card">
-        <h3>Agente que responde</h3>
+        <h3>{t('channels.agent')}</h3>
         <p className="muted small">
-          Los mensajes de Telegram llegan a una conversación de Alma (con el ícono de Telegram en la barra lateral). Con /nuevo empezás
-          otra. Si el agente necesita aprobación, te llegan botones Permitir / Rechazar en Telegram.
+          {t('telegram.agentNote')}
         </p>
         <select value={config.agentId} onChange={(e) => void patch({ agentId: e.target.value })}>
           {settings.agents.filter((a) => !a.companyId).map((agent) => (
@@ -1187,20 +1215,12 @@ function TelegramTab({ settings, onChange, onSettingsReplaced, telegram }: Props
   )
 }
 
-const ENROLL_PHRASES = [
-  'Hola Alma, hoy quiero organizar mis notas y revisar los pendientes de la semana.',
-  'El viernes a la tarde tengo una reunión con el equipo para hablar del proyecto.',
-  'Recordame comprar yerba, pan y frutas cuando salga del trabajo.'
-]
 const ENROLL_MS = 5500
 
-const KOKORO_VOICES = [
-  { id: 'ef_dora', label: 'Dora (mujer, la de ALMA)' },
-  { id: 'em_alex', label: 'Alex (hombre)' },
-  { id: 'em_santa', label: 'Santa (hombre, grave)' }
-]
-
 function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.Element {
+  const t = useT()
+  const language = useLanguage()
+  const phrases = enrollmentPhrases(language)
   const voice = settings.voice
   const patch = (next: Partial<VoiceSettings>): Promise<void> => onChange({ voice: { ...voice, ...next } })
   const [mics, setMics] = useState<MediaDeviceInfo[]>([])
@@ -1214,12 +1234,12 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
 
   useEffect(() => {
     void navigator.mediaDevices.enumerateDevices().then((devices) => setMics(devices.filter((d) => d.kind === 'audioinput')))
-    const loadVoices = (): void => setSystemVoices(speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith('es')))
+    const loadVoices = (): void => setSystemVoices(windowsVoices(speechSynthesis.getVoices(), language))
     loadVoices()
     speechSynthesis.addEventListener('voiceschanged', loadVoices)
     void request<{ enrolled: boolean; enrolledAt?: number }>({ method: 'voice.profile' }).then(setProfile)
     return () => speechSynthesis.removeEventListener('voiceschanged', loadVoices)
-  }, [])
+  }, [language])
 
   const run = async (label: string, work: () => Promise<string | void>): Promise<void> => {
     setBusy(label)
@@ -1228,7 +1248,7 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
       const result = await work()
       if (result) setMessage(result)
     } catch (error) {
-      setMessage(`Error: ${(error as Error).message}`)
+      setMessage(t('voice.error', { message: (error as Error).message }))
     } finally {
       setBusy('')
     }
@@ -1237,7 +1257,7 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
   const enroll = (): Promise<void> =>
     run('enroll', async () => {
       const samples: ArrayBuffer[] = []
-      for (let step = 0; step < ENROLL_PHRASES.length; step++) {
+      for (let step = 0; step < phrases.length; step++) {
         setEnrolling({ step, level: 0 })
         samples.push(await recordFor(ENROLL_MS, voice.micDeviceId, (level) => setEnrolling({ step, level })))
       }
@@ -1245,34 +1265,36 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
       const { consistency } = await request<{ consistency: number }>({ method: 'voice.enroll', samples })
       setProfile(await request({ method: 'voice.profile' }))
       return consistency < 0.75
-        ? `Listo, pero las grabaciones salieron poco parecidas entre sí (${Math.round(consistency * 100)}%). Si hubo ruido, volvé a entrenar.`
-        : `¡Listo! Aprendí tu voz (consistencia ${Math.round(consistency * 100)}%).`
+        ? t('voice.enrollMixed', { percent: Math.round(consistency * 100) })
+        : t('voice.enrollDone', { percent: Math.round(consistency * 100) })
     }).finally(() => setEnrolling(null))
 
   const testSpeaker = (): Promise<void> =>
     run('test', async () => {
-      setMessage('Hablá unos segundos…')
+      setMessage(t('voice.speakNow'))
       const sample = await recordFor(3500, voice.micDeviceId)
       const score = await request<number>({ method: 'voice.testSpeaker', sample })
-      return `Parecido con tu voz: ${Math.round(score * 100)}% (umbral ${Math.round(voice.speakerThreshold * 100)}%) → ${score >= voice.speakerThreshold ? 'te reconocería ✓' : 'no te reconocería'}`
+      return t('voice.testResult', {
+        score: Math.round(score * 100),
+        threshold: Math.round(voice.speakerThreshold * 100),
+        verdict: score >= voice.speakerThreshold ? t('voice.recognized') : t('voice.notRecognized')
+      })
     })
 
   return (
     <>
       <div className="card">
         <div className="row space">
-          <h3>Asistente de voz</h3>
-          <button className="switch" role="switch" aria-checked={voice.enabled} aria-label="Asistente de voz" onClick={() => void patch({ enabled: !voice.enabled })}>
+          <h3>{t('voice.title')}</h3>
+          <button className="switch" role="switch" aria-checked={voice.enabled} aria-label={t('voice.title')} onClick={() => void patch({ enabled: !voice.enabled })}>
             <span className="switch-knob" />
           </button>
         </div>
         <p className="muted small">
-          Como en ALMA: Alma escucha la palabra de activación, verifica que seas vos, transcribe lo que decís, se lo pasa al agente y
-          responde en voz alta. Todo corre en tu PC (sin Python); los modelos se descargan la primera vez. Las conversaciones de voz
-          aparecen en la barra lateral con un micrófono.
+          {t('voice.about')}
         </p>
         <label className="field">
-          <span>Agente que responde</span>
+          <span>{t('channels.agent')}</span>
           <select value={voice.agentId} onChange={(e) => void patch({ agentId: e.target.value })}>
             {settings.agents.filter((a) => !a.companyId).map((agent) => (
               <option key={agent.id} value={agent.id}>
@@ -1282,12 +1304,12 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
           </select>
         </label>
         <label className="field">
-          <span>Micrófono</span>
+          <span>{t('voice.mic')}</span>
           <select value={voice.micDeviceId} onChange={(e) => void patch({ micDeviceId: e.target.value })}>
-            <option value="">El predeterminado de Windows</option>
+            <option value="">{t('voice.micDefault')}</option>
             {mics.filter((m) => m.deviceId && m.deviceId !== 'default').map((mic) => (
               <option key={mic.deviceId} value={mic.deviceId}>
-                {mic.label || 'Micrófono'}
+                {mic.label || t('voice.mic')}
               </option>
             ))}
           </select>
@@ -1295,17 +1317,17 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
       </div>
 
       <div className="card">
-        <h3>Cómo se activa</h3>
+        <h3>{t('voice.activation.title')}</h3>
         <div className="row">
           <label className="field grow">
-            <span>Palabra de activación</span>
+            <span>{t('voice.wakeWord')}</span>
             <select value={voice.wakeWord} onChange={(e) => void patch({ wakeWord: e.target.value as VoiceSettings['wakeWord'] })}>
-              <option value="hola_alma">«Hola Alma»</option>
-              <option value="off">Ninguna, solo el atajo</option>
+              <option value="hola_alma">{t('voice.wakePhrase')}</option>
+              <option value="off">{t('voice.wakeOff')}</option>
             </select>
           </label>
           <label className="field">
-            <span>Sensibilidad</span>
+            <span>{t('voice.sensitivity')}</span>
             <input
               type="range"
               min={0.3}
@@ -1317,35 +1339,34 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
           </label>
         </div>
         <label className="field">
-          <span>Pausa antes de enviar lo que dijiste (para poder cancelar con la ✕ o Esc si se activó sola)</span>
+          <span>{t('voice.sendDelay')}</span>
           <select value={voice.sendDelayMs} onChange={(e) => void patch({ sendDelayMs: Number(e.target.value) })}>
-            <option value={0}>Ninguna: se envía enseguida</option>
-            <option value={1000}>1 segundo</option>
-            <option value={1500}>1,5 segundos</option>
-            <option value={2500}>2,5 segundos</option>
-            <option value={4000}>4 segundos</option>
+            <option value={0}>{t('voice.delay.none')}</option>
+            <option value={1000}>{t('voice.delay.1000')}</option>
+            <option value={1500}>{t('voice.delay.1500')}</option>
+            <option value={2500}>{t('voice.delay.2500')}</option>
+            <option value={4000}>{t('voice.delay.4000')}</option>
           </select>
         </label>
         <label className="field">
-          <span>Atajo de teclado (funciona desde cualquier programa; también corta a Alma cuando habla)</span>
+          <span>{t('voice.hotkey')}</span>
           <input value={voice.hotkey} placeholder="Control+Alt+Space" onChange={(e) => void patch({ hotkey: e.target.value })} />
         </label>
-        <p className="muted small">Una palabra propia («Hola Alma») necesita entrenar un modelo aparte; por ahora usá una de estas.</p>
+        <p className="muted small">{t('voice.ownWord')}</p>
       </div>
 
       <div className="card">
         <div className="row space">
-          <h3>Tu voz</h3>
-          <span className={`badge ${profile.enrolled ? 'ok' : 'warn'}`}>{profile.enrolled ? 'Entrenada' : 'Sin entrenar'}</span>
+          <h3>{t('voice.yours')}</h3>
+          <span className={`badge ${profile.enrolled ? 'ok' : 'warn'}`}>{profile.enrolled ? t('voice.trained') : t('voice.untrained')}</span>
         </div>
         <p className="muted small">
-          Leé tres frases en voz alta para que Alma aprenda tu voz. Con la palabra de activación solo te responde a vos; con el atajo
-          responde siempre (estás en la computadora).
+          {t('voice.enrollAbout')}
         </p>
         {enrolling ? (
           <div className="enroll-step">
-            <div className="muted small">Frase {enrolling.step + 1} de {ENROLL_PHRASES.length} — leé en voz alta:</div>
-            <blockquote>{ENROLL_PHRASES[enrolling.step]}</blockquote>
+            <div className="muted small">{t('voice.enrollStep', { step: enrolling.step + 1, total: phrases.length })}</div>
+            <blockquote>{phrases[enrolling.step]}</blockquote>
             <div className="level-meter">
               <span style={{ width: `${Math.min(100, enrolling.level * 180)}%` }} />
             </div>
@@ -1353,10 +1374,10 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
         ) : (
           <div className="row">
             <button className="primary" disabled={!!busy} onClick={() => void enroll()}>
-              {profile.enrolled ? 'Volver a entrenar' : 'Entrenar mi voz'}
+              {profile.enrolled ? t('voice.retrain') : t('voice.train')}
             </button>
             <button className="ghost" disabled={!!busy || !profile.enrolled} onClick={() => void testSpeaker()}>
-              Probar si me reconoce
+              {t('voice.test')}
             </button>
             {profile.enrolled && (
               <button
@@ -1364,72 +1385,72 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
                 disabled={!!busy}
                 onClick={() => void request({ method: 'voice.forgetProfile' }).then(() => setProfile({ enrolled: false }))}
               >
-                Olvidar mi voz
+                {t('voice.forget')}
               </button>
             )}
           </div>
         )}
         <label className="check">
           <input type="checkbox" checked={voice.verifySpeaker} onChange={(e) => void patch({ verifySpeaker: e.target.checked })} />
-          Solo responder a mi voz
+          {t('voice.onlyMine')}
         </label>
         <label className="field">
-          <span>Exigencia: {Math.round(voice.speakerThreshold * 100)}%</span>
+          <span>{t('voice.strictness', { percent: Math.round(voice.speakerThreshold * 100) })}</span>
           <input type="range" min={0.6} max={0.95} step={0.01} value={voice.speakerThreshold} onChange={(e) => void patch({ speakerThreshold: Number(e.target.value) })} />
         </label>
       </div>
 
       <div className="card">
-        <h3>Transcripción</h3>
+        <h3>{t('voice.stt.title')}</h3>
         <div className="row">
           <label className="check">
             <input type="radio" checked={voice.stt === 'local'} onChange={() => void patch({ stt: 'local' })} />
-            En tu PC (Whisper, gratis)
+            {t('voice.stt.local')}
           </label>
           <label className="check">
             <input type="radio" checked={voice.stt === 'openai'} onChange={() => void patch({ stt: 'openai' })} />
-            OpenAI (más rápido, usa tu key de OpenAI)
+            {t('voice.stt.openai')}
           </label>
           <label className="check">
             <input type="radio" checked={voice.stt === 'meta'} onChange={() => void patch({ stt: 'meta' })} />
-            Meta (Muse Voice, USD 0,18 por hora de audio)
+            {t('voice.stt.meta')}
           </label>
         </div>
         {voice.stt === 'local' ? (
           <select value={voice.sttModel} onChange={(e) => void patch({ sttModel: e.target.value as VoiceSettings['sttModel'] })}>
-            <option value="whisper-base">Whisper base: ~1 s por frase, ~80 MB</option>
-            <option value="whisper-small">Whisper small: más preciso, ~2,5 s por frase, ~250 MB</option>
+            <option value="whisper-base">{t('voice.stt.base')}</option>
+            <option value="whisper-small">{t('voice.stt.small')}</option>
           </select>
         ) : (
           (() => {
             const provider = voice.stt === 'meta' ? settings.providers.meta : settings.providers.openai
-            return !provider.hasKey && !provider.fromEnv && <p className="text-warn small">Cargá una API key de {voice.stt === 'meta' ? 'Meta' : 'OpenAI'} en Proveedores.</p>
+            return !provider.hasKey && !provider.fromEnv && <p className="text-warn small">{t('voice.stt.needKey', { provider: voice.stt === 'meta' ? 'Meta' : 'OpenAI' })}</p>
           })()
         )}
       </div>
 
       <div className="card">
-        <h3>Voz de Alma</h3>
+        <h3>{t('voice.tts.title')}</h3>
         <div className="row">
           <label className="check">
             <input type="radio" checked={voice.tts === 'kokoro'} onChange={() => void patch({ tts: 'kokoro' })} />
-            Kokoro (gratis, natural)
+            {t('voice.tts.kokoro')}
           </label>
           <label className="check">
             <input type="radio" checked={voice.tts === 'windows'} onChange={() => void patch({ tts: 'windows' })} />
-            Windows (gratis, instantánea)
+            {t('voice.tts.windows')}
           </label>
           <label className="check">
             <input type="radio" checked={voice.tts === 'elevenlabs'} onChange={() => void patch({ tts: 'elevenlabs' })} />
-            ElevenLabs (la mejor, con tu key)
+            {t('voice.tts.elevenlabs')}
           </label>
         </div>
 
         {voice.tts === 'kokoro' && (
           <select value={voice.kokoroVoice} onChange={(e) => void patch({ kokoroVoice: e.target.value })}>
-            {KOKORO_VOICES.map((v) => (
+            {kokoroVoices(language, voice.kokoroVoice).map((v) => (
               <option key={v.id} value={v.id}>
-                {v.label}
+                {t(v.label)}
               </option>
             ))}
           </select>
@@ -1437,7 +1458,7 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
 
         {voice.tts === 'windows' && (
           <select value={voice.windowsVoice} onChange={(e) => void patch({ windowsVoice: e.target.value })}>
-            <option value="">La primera en español</option>
+            <option value="">{t('voice.windowsFirst')}</option>
             {systemVoices.map((v) => (
               <option key={v.name} value={v.name}>
                 {v.name} ({v.lang})
@@ -1452,7 +1473,7 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
               <input
                 type="password"
                 className="grow"
-                placeholder={settings.providers.elevenlabs.hasKey ? 'Key guardada (pegá otra para reemplazarla)' : 'API key de ElevenLabs'}
+                placeholder={settings.providers.elevenlabs.hasKey ? t('voice.eleven.keySaved') : t('voice.eleven.keyPlaceholder')}
                 value={elevenKey}
                 onChange={(e) => setElevenKey(e.target.value)}
               />
@@ -1464,25 +1485,25 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
                   setElevenKey('')
                 }}
               >
-                Guardar key
+                {t('voice.eleven.saveKey')}
               </button>
               <button
                 className="ghost"
                 disabled={!!busy || !(settings.providers.elevenlabs.hasKey || settings.providers.elevenlabs.fromEnv)}
                 onClick={() => void run('voices', async () => setElevenVoices(await request({ method: 'voice.elevenVoices' })))}
               >
-                {busy === 'voices' ? 'Cargando…' : 'Ver voces'}
+                {busy === 'voices' ? t('voice.eleven.loading') : t('voice.eleven.list')}
               </button>
             </div>
             <select value={voice.elevenModel} onChange={(e) => void patch({ elevenModel: e.target.value as VoiceSettings['elevenModel'] })}>
-              <option value="eleven_multilingual_v2">Multilingual v2 (mejor calidad)</option>
-              <option value="eleven_flash_v2_5">Flash v2.5 (más rápida y barata)</option>
+              <option value="eleven_multilingual_v2">{t('voice.eleven.multilingual')}</option>
+              <option value="eleven_flash_v2_5">{t('voice.eleven.flash')}</option>
             </select>
             {elevenVoices.length > 0 && (
               <div className="voice-list">
                 {elevenVoices.map((v) => (
                   <div key={v.id} className={`voice-row${voice.elevenVoiceId === v.id ? ' active' : ''}`}>
-                    <button className="icon-button" title="Escuchar muestra" onClick={() => void new Audio(v.preview).play()}>
+                    <button className="icon-button" title={t('voice.eleven.play')} onClick={() => void new Audio(v.preview).play()}>
                       <Icon icon={Play} size={14} />
                     </button>
                     <div className="grow">
@@ -1490,18 +1511,18 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
                       <div className="muted small">{v.labels}</div>
                     </div>
                     <button className={voice.elevenVoiceId === v.id ? 'primary small' : 'ghost small'} onClick={() => void patch({ elevenVoiceId: v.id })}>
-                      {voice.elevenVoiceId === v.id ? 'Elegida' : 'Elegir'}
+                      {voice.elevenVoiceId === v.id ? t('voice.eleven.chosen') : t('voice.eleven.choose')}
                     </button>
                   </div>
                 ))}
               </div>
             )}
-            {!voice.elevenVoiceId && <p className="muted small">Elegí una voz (si no hay voz o key, Alma usa la de Windows).</p>}
+            {!voice.elevenVoiceId && <p className="muted small">{t('voice.eleven.pickOne')}</p>}
           </>
         )}
 
-        <button className="ghost" disabled={!!busy} onClick={() => void run('say', () => request({ method: 'voice.say', text: 'Hola, soy Alma. ¿En qué te puedo ayudar hoy?' }))}>
-          {busy === 'say' ? 'Hablando…' : 'Probar la voz'}
+        <button className="ghost" disabled={!!busy} onClick={() => void run('say', () => request({ method: 'voice.say', text: t('voice.testSentence') }))}>
+          {busy === 'say' ? t('voice.speaking') : t('voice.testVoice')}
         </button>
       </div>
 
@@ -1511,6 +1532,7 @@ function VoiceTab({ settings, onChange, onSettingsReplaced }: Props): React.JSX.
 }
 
 function InstagramTab({ settings, onChange }: Props): React.JSX.Element {
+  const t = useT()
   const [status, setStatus] = useState<InstagramStatus | null>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
@@ -1528,45 +1550,41 @@ function InstagramTab({ settings, onChange }: Props): React.JSX.Element {
     <>
       <div className="card">
         <div className="row space">
-          <h3>Cuenta de Instagram</h3>
-          <span className={`badge ${status?.connected ? 'ok' : 'warn'}`}>{status ? (status.connected ? 'Conectada' : 'Sin conectar') : '…'}</span>
+          <h3>{t('instagram.title')}</h3>
+          <span className={`badge ${status?.connected ? 'ok' : 'warn'}`}>{status ? (status.connected ? t('instagram.connected') : t('instagram.disconnected')) : '…'}</span>
         </div>
         <p className="muted small">
-          Se abre Instagram en una ventana de la app y vos iniciás sesión ahí, como en cualquier navegador. La contraseña la escribís en la página de
-          Instagram; la app solo guarda la sesión, en este equipo y separada del resto.
+          {t('instagram.about')}
         </p>
         <div className="row">
           <button className="primary" disabled={busy} onClick={() => void run(() => window.desktop.instagram.connect())}>
-            {status?.connected ? 'Abrir Instagram para revisar la sesión' : 'Conectar Instagram'}
+            {status?.connected ? t('instagram.check') : t('instagram.connect')}
           </button>
           {status?.connected && (
             <button className="ghost" disabled={busy} onClick={() => void run(() => window.desktop.instagram.disconnect())}>
-              Desconectar
+              {t('instagram.disconnect')}
             </button>
           )}
         </div>
       </div>
       <div className="card">
-        <h3>Modo de prueba</h3>
+        <h3>{t('instagram.testMode')}</h3>
         <label className="check">
           <input
             type="checkbox"
             checked={settings.instagram.testMode}
             onChange={(e) => void onChange({ instagram: { testMode: e.target.checked } })}
           />
-          Completar el post pero no tocar «Compartir»
+          {t('instagram.testModeLabel')}
         </label>
         <p className="muted small">
-          Dejalo activado las primeras veces: el agente sube la imagen y escribe el texto en una ventana de Instagram, y vos verificás que todo
-          quedó bien. Cuando lo desactives, después de tu aprobación el agente toca «Compartir» solo.
+          {t('instagram.testModeNote')}
         </p>
       </div>
       <div className="card">
-        <h3>Antes de automatizar</h3>
+        <h3>{t('instagram.beforeTitle')}</h3>
         <p className="muted small">
-          Instagram no permite automatizar acciones sin su autorización. Si detecta publicaciones automatizadas puede bloquear acciones
-          temporalmente o, si se repite, suspender la cuenta. Publicá poco (1 o 2 posts por día). Si Instagram cambia su página, la publicación
-          automática puede fallar: en ese caso la ventana queda abierta para que termines a mano.
+          {t('instagram.beforeNote')}
         </p>
       </div>
     </>

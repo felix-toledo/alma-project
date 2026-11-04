@@ -1,9 +1,11 @@
-// Configuración → Casa: turn the module on, install or connect the engine, choose who answers the rules and which model
+// «Configuración → Casa»: turn the module on, install or connect the engine, choose who answers the rules and which model
 // looks at pictures, see the connected accounts. Everything is per computer: each person sets up what they have.
 import { Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { HomeEngineStatus, HomeEntry } from '../../../shared/home'
-import type { PublicSettings } from '../../../shared/types'
+import { PROVIDER_NAMES } from '../../../shared/defaults'
+import type { ProviderId, PublicSettings } from '../../../shared/types'
+import { useT } from '../i18n/useT'
 import { onEvent, request } from '../lib/coordinator'
 import { Icon } from '../umbra/Icon'
 import './home.css'
@@ -14,17 +16,8 @@ interface Props {
   onSettingsReplaced(settings: PublicSettings): void
 }
 
-const STATE_LABEL: Record<HomeEngineStatus['state'], string> = {
-  off: 'Apagado',
-  missing: 'Sin instalar',
-  installing: 'Instalando',
-  starting: 'Arrancando',
-  ready: 'Funcionando',
-  error: 'Con error',
-  unsupported: 'No disponible'
-}
-
 export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
+  const t = useT()
   const config = settings.home
   const patch = (next: Partial<typeof config>): Promise<void> => onChange({ home: { ...config, ...next } })
   const [engine, setEngine] = useState<HomeEngineStatus | null>(null)
@@ -54,21 +47,21 @@ export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
   return (
     <>
       <div className="card">
-        <h3>Domótica</h3>
+        <h3>{t('home.settings.title')}</h3>
         <p className="muted small">
-          El mapa de tu casa y los dispositivos (luces, enchufes, cámaras, parlantes…): los manejás desde la sección Casa o pidiéndoselo a Alma por chat, voz o Telegram. Funciona con Tuya, eWeLink, Tapo y las miles de marcas que soporta Home Assistant, el motor que Alma usa por abajo.
+          {t('home.settings.about')}
         </p>
         <label className="row">
-          <input type="checkbox" checked={config.enabled} onChange={(e) => void patch({ enabled: e.target.checked })} /> Activar la domótica
+          <input type="checkbox" checked={config.enabled} onChange={(e) => void patch({ enabled: e.target.checked })} /> {t('home.enable')}
         </label>
         {config.enabled && (
           <fieldset className="field">
-            <legend>Motor</legend>
+            <legend>{t('home.engine')}</legend>
             <label className="row">
-              <input type="radio" name="home-mode" checked={config.mode === 'managed'} onChange={() => void patch({ mode: 'managed' })} /> Que Alma lo instale y lo maneje (recomendado)
+              <input type="radio" name="home-mode" checked={config.mode === 'managed'} onChange={() => void patch({ mode: 'managed' })} /> {t('home.mode.managed')}
             </label>
             <label className="row">
-              <input type="radio" name="home-mode" checked={config.mode === 'external'} onChange={() => void patch({ mode: 'external' })} /> Ya tengo un Home Assistant
+              <input type="radio" name="home-mode" checked={config.mode === 'external'} onChange={() => void patch({ mode: 'external' })} /> {t('home.mode.external')}
             </label>
           </fieldset>
         )}
@@ -77,9 +70,9 @@ export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
       {config.enabled && (
         <div className="card">
           <h3>
-            Estado del motor <span className={`badge ${state === 'ready' ? 'ok' : state === 'error' || state === 'unsupported' ? 'danger' : 'warn'}`}>{STATE_LABEL[state]}</span>
+            {t('home.engine.state')} <span className={`badge ${state === 'ready' ? 'ok' : state === 'error' || state === 'unsupported' ? 'danger' : 'warn'}`}>{t(`home.engine.${state}`)}</span>
           </h3>
-          {engine?.version && <p className="muted small">Home Assistant {engine.version} · {engine.url}</p>}
+          {engine?.version && <p className="muted small">{t('home.engine.version', { version: engine.version, url: engine.url ?? '' })}</p>}
           {busy && (
             <>
               <p>
@@ -93,61 +86,61 @@ export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
           {config.mode === 'managed' ? (
             <>
               <p className="muted small">
-                Corre dentro de un Linux oculto (WSL2) llamado «alma-home». La primera vez baja unos 1,2 GB y ocupa unos 3 GB. Se apaga cuando cerrás Alma.
+                {t('home.managedNote')}
               </p>
               <div className="row">
                 {state === 'missing' && (
                   <button className="primary" onClick={() => void request({ method: 'home.install' })}>
-                    Instalar el motor
+                    {t('home.installEngine')}
                   </button>
                 )}
                 {state === 'error' && (
                   <button className="primary" onClick={() => void request({ method: 'home.start' })}>
-                    Reintentar
+                    {t('error.retry')}
                   </button>
                 )}
                 {state === 'ready' && (
-                  <button onClick={() => void request({ method: 'home.stop' })}>Detener</button>
+                  <button onClick={() => void request({ method: 'home.stop' })}>{t('chat.stop')}</button>
                 )}
                 {state === 'off' && (
                   <button className="primary" onClick={() => void request({ method: 'home.start' })}>
-                    Iniciar
+                    {t('home.start')}
                   </button>
                 )}
                 {(state === 'ready' || state === 'error') && (
                   <button
                     className="ghost danger-text"
-                    onClick={() => confirm('¿Desinstalar el motor? Se borran los dispositivos conectados y las cuentas de las marcas (el plano y las reglas de Alma se conservan).') && void request({ method: 'home.uninstall' })}
+                    onClick={() => confirm(t('home.uninstallConfirm')) && void request({ method: 'home.uninstall' })}
                   >
-                    Desinstalar
+                    {t('home.uninstall')}
                   </button>
                 )}
                 {state === 'ready' && (
                   <button
                     className="ghost"
                     onClick={() => void request<{ url: string; username: string; password: string } | null>({ method: 'home.advanced' }).then(setLogin)}
-                    title="Para emparejar algo raro o mirar los registros"
+                    title={t('home.advancedTitle')}
                   >
-                    Abrir Home Assistant (avanzado)
+                    {t('home.advanced')}
                   </button>
                 )}
               </div>
               {login && (
                 <div className="card">
                   <p className="small">
-                    Home Assistant tiene su propia pantalla. Entrá con este usuario (la cuenta la creó Alma; guardala solo si la necesitás):
+                    {t('home.login.about')}
                   </p>
                   <p className="mono">
-                    usuario: {login.username}
+                    {t('home.login.user', { value: login.username })}
                     <br />
-                    contraseña: {login.password}
+                    {t('home.login.password', { value: login.password })}
                   </p>
                   <div className="row">
                     <a className="button primary" href={login.url} target="_blank" rel="noreferrer">
-                      Abrir {login.url}
+                      {t('home.login.open', { url: login.url })}
                     </a>
                     <button className="ghost" onClick={() => setLogin(null)}>
-                      Ocultar
+                      {t('home.login.hide')}
                     </button>
                   </div>
                 </div>
@@ -156,12 +149,12 @@ export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
           ) : (
             <>
               <label className="field">
-                <span>Dirección de tu Home Assistant</span>
+                <span>{t('home.ext.url')}</span>
                 <input placeholder="http://192.168.1.20:8123" value={url} onChange={(e) => setUrl(e.target.value)} />
               </label>
               <label className="field">
-                <span>Token de acceso de larga duración</span>
-                <input type="password" placeholder="Perfil de usuario → Seguridad → Tokens de acceso de larga duración" value={token} onChange={(e) => setToken(e.target.value)} />
+                <span>{t('home.ext.token')}</span>
+                <input type="password" placeholder={t('home.ext.tokenExample')} value={token} onChange={(e) => setToken(e.target.value)} />
               </label>
               <div className="row">
                 <button
@@ -173,13 +166,13 @@ export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
                       await patch({ externalUrl: url.trim().replace(/\/+$/, '') })
                       await request({ method: 'home.connectExternal', url: url.trim(), token: token.trim() })
                       setToken('')
-                      setNote({ ok: true, text: 'Conectado.' })
+                      setNote({ ok: true, text: t('home.ext.connected') })
                     } catch (error) {
                       setNote({ ok: false, text: (error as Error).message })
                     }
                   }}
                 >
-                  Conectar
+                  {t('home.ext.connect')}
                 </button>
                 {note && <span className={`small ${note.ok ? '' : 'text-danger'}`}>{note.text}</span>}
               </div>
@@ -190,11 +183,11 @@ export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
 
       {config.enabled && (
         <div className="card">
-          <h3>Cómo piensa Alma en la casa</h3>
+          <h3>{t('home.think.title')}</h3>
           <label className="field">
-            <span>Agente que responde las reglas con criterio</span>
+            <span>{t('home.think.agent')}</span>
             <select value={config.agentId} onChange={(e) => void patch({ agentId: e.target.value })}>
-              <option value="">El agente por defecto</option>
+              <option value="">{t('home.think.defaultAgent')}</option>
               {settings.agents
                 .filter((a) => !a.companyId)
                 .map((agent) => (
@@ -205,36 +198,36 @@ export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
             </select>
           </label>
           <div className="field">
-            <span>Modelo que mira imágenes (planos y cámaras)</span>
+            <span>{t('home.think.vision')}</span>
             <div className="row">
               <select value={config.visionProvider} onChange={(e) => void patch({ visionProvider: e.target.value, ...(e.target.value ? {} : { visionModel: '' }) })}>
-                <option value="">El del agente de arriba</option>
-                <option value="anthropic">Claude</option>
-                <option value="xai">Grok</option>
-                <option value="deepseek">DeepSeek</option>
-                <option value="vercel">Vercel AI Gateway</option>
-                <option value="meta">Meta (Muse)</option>
+                <option value="">{t('home.think.visionDefault')}</option>
+                {(Object.keys(PROVIDER_NAMES) as ProviderId[]).map((provider) => (
+                  <option key={provider} value={provider}>
+                    {PROVIDER_NAMES[provider]}
+                  </option>
+                ))}
               </select>
-              {config.visionProvider && <input className="grow" placeholder="Modelo (con visión)" defaultValue={config.visionModel} onBlur={(e) => void patch({ visionModel: e.target.value.trim() })} />}
+              {config.visionProvider && <input className="grow" placeholder={t('home.think.visionModel')} defaultValue={config.visionModel} onBlur={(e) => void patch({ visionModel: e.target.value.trim() })} />}
             </div>
-            <span className="muted small">Cada foto de cámara que Alma mira cuesta unos pocos miles de tokens de imagen. Elegí un modelo barato que entienda imágenes si vas a usar vigilancia.</span>
+            <span className="muted small">{t('home.think.visionNote')}</span>
           </div>
         </div>
       )}
 
       {config.enabled && entries.length > 0 && (
         <div className="card">
-          <h3>Cuentas y marcas conectadas</h3>
+          <h3>{t('home.accounts')}</h3>
           {entries.map((entry) => (
             <div key={entry.entryId} className="row space">
               <span>
-                <b>{entry.title}</b> <span className="muted small">{entry.domain} · {entry.state === 'loaded' ? 'activa' : entry.state}</span>
+                <b>{entry.title}</b> <span className="muted small">{entry.domain} · {entry.state === 'loaded' ? t('home.entry.active') : entry.state}</span>
               </span>
               <button
                 className="ghost small danger-text"
-                onClick={() => confirm(`¿Quitar «${entry.title}»? Se van todos sus dispositivos.`) && void request({ method: 'home.entry.remove', entryId: entry.entryId }).then(() => setEntries((list) => list.filter((e) => e.entryId !== entry.entryId)))}
+                onClick={() => confirm(t('home.entry.removeConfirm', { title: entry.title })) && void request({ method: 'home.entry.remove', entryId: entry.entryId }).then(() => setEntries((list) => list.filter((e) => e.entryId !== entry.entryId)))}
               >
-                Quitar
+                {t('common.remove')}
               </button>
             </div>
           ))}

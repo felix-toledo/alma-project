@@ -1,9 +1,10 @@
 import { Building2, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { canReportTo, COMPANY_TEMPLATES, memberAgent, newId, pickName } from '../../../shared/company'
+import { canReportTo, companyTemplates, memberAgent, newId, pickName } from '../../../shared/company'
 import { BUILTIN_TOOLS, CLAUDE_MODELS, emailServersFor, PROVIDER_NAMES } from '../../../shared/defaults'
 import type { AgentProfile, Company, CompanyMember, Effort, ProviderId, PublicSettings, Routine, WhatsAppStatus } from '../../../shared/types'
 import { onEvent, request } from '../lib/coordinator'
+import { useLanguage, useT } from '../i18n/useT'
 import { toolLabel } from '../lib/format'
 import { Icon } from '../umbra/Icon'
 import { OrgChart } from './OrgChart'
@@ -26,6 +27,7 @@ async function defaultCompanyVault(name: string): Promise<string> {
 }
 
 export function TeamsSettings({ settings, onChange, onSettingsReplaced }: Props): React.JSX.Element {
+  const t = useT()
   const [selected, setSelected] = useState<string | null>(settings.companies[0]?.id ?? null)
   const [creating, setCreating] = useState(settings.companies.length === 0)
   const company = settings.companies.find((c) => c.id === selected) ?? null
@@ -37,14 +39,13 @@ export function TeamsSettings({ settings, onChange, onSettingsReplaced }: Props)
     <div className="teams">
       <div className="card">
         <div className="row space">
-          <h3>Empresas</h3>
+          <h3>{t('common.companies')}</h3>
           <button className="primary small" onClick={() => setCreating(true)}>
-            <Icon icon={Plus} size={14} /> Nueva empresa
+            <Icon icon={Plus} size={14} /> {t('teams.new')}
           </button>
         </div>
         <p className="muted small">
-          Cada empresa tiene su vault, su organigrama de agentes, sus cuentas y su presupuesto. Los agentes duermen hasta que hay algo concreto:
-          una tarea, una reunión, una rutina o un mensaje tuyo.
+          {t('teams.intro')}
         </p>
         <div className="row wrap">
           {settings.companies.map((c) => (
@@ -73,13 +74,15 @@ export function TeamsSettings({ settings, onChange, onSettingsReplaced }: Props)
 }
 
 function NewCompany({ settings, onCreate, onCancel }: { settings: PublicSettings; onCreate(company: Company, agents: AgentProfile[]): Promise<void>; onCancel?(): void }): React.JSX.Element {
-  const [template, setTemplate] = useState(COMPANY_TEMPLATES[0].id)
+  const tr = useT()
+  const templates = companyTemplates(useLanguage())
+  const [template, setTemplate] = useState(templates[0].id)
   const [name, setName] = useState('')
   const [vault, setVault] = useState('')
   const [vaultTouched, setVaultTouched] = useState(false)
   const [busy, setBusy] = useState(false)
-  const chosen = COMPANY_TEMPLATES.find((t) => t.id === template)
-  const finalName = name.trim() || chosen?.name || 'Mi empresa'
+  const chosen = templates.find((t) => t.id === template)
+  const finalName = name.trim() || chosen?.name || tr('teams.defaultName')
 
   useEffect(() => {
     if (!vaultTouched) void defaultCompanyVault(finalName).then(setVault)
@@ -120,9 +123,9 @@ function NewCompany({ settings, onCreate, onCancel }: { settings: PublicSettings
 
   return (
     <div className="card">
-      <h3>Nueva empresa</h3>
+      <h3>{tr('teams.new')}</h3>
       <div className="template-grid">
-        {COMPANY_TEMPLATES.map((t) => (
+        {templates.map((t) => (
           <button key={t.id} className={`template${template === t.id ? ' active' : ''}`} style={{ '--company': t.color } as React.CSSProperties} onClick={() => setTemplate(t.id)}>
             <Icon icon={Building2} size={18} />
             <strong>{t.name}</strong>
@@ -131,16 +134,16 @@ function NewCompany({ settings, onCreate, onCancel }: { settings: PublicSettings
         ))}
         <button className={`template${template === 'blank' ? ' active' : ''}`} onClick={() => setTemplate('blank')}>
           <Icon icon={Plus} size={18} />
-          <strong>En blanco</strong>
-          <span className="small muted">Armás los puestos vos</span>
+          <strong>{tr('teams.blank')}</strong>
+          <span className="small muted">{tr('teams.blankHint')}</span>
         </button>
       </div>
       <label className="field">
-        <span>Nombre</span>
-        <input value={name} placeholder={chosen?.name ?? 'Mi empresa'} onChange={(e) => setName(e.target.value)} />
+        <span>{tr('common.name')}</span>
+        <input value={name} placeholder={chosen?.name ?? tr('teams.defaultName')} onChange={(e) => setName(e.target.value)} />
       </label>
       <label className="field">
-        <span>Vault de la empresa (se crea si no existe)</span>
+        <span>{tr('teams.vaultLabel')}</span>
         <div className="row">
           <input className="grow" value={vault} onChange={(e) => (setVault(e.target.value), setVaultTouched(true))} />
           <button
@@ -150,18 +153,18 @@ function NewCompany({ settings, onCreate, onCancel }: { settings: PublicSettings
               if (folder) (setVault(folder), setVaultTouched(true))
             }}
           >
-            Elegir carpeta
+            {tr('chat.pickFolder')}
           </button>
         </div>
       </label>
       <div className="row end">
         {onCancel && (
           <button className="ghost" onClick={onCancel}>
-            Cancelar
+            {tr('common.cancel')}
           </button>
         )}
         <button className="primary" disabled={busy || !vault} onClick={() => void create()}>
-          {busy ? 'Creando…' : 'Crear empresa'}
+          {busy ? tr('teams.creating') : tr('teams.createCompany')}
         </button>
       </div>
     </div>
@@ -183,6 +186,7 @@ function CompanyEditor({
   onSettingsReplaced(settings: PublicSettings): void
   onDeleted(): void
 }): React.JSX.Element {
+  const t = useT()
   const [member, setMember] = useState<string | null>(null)
   const patch = (next: Partial<Company>): Promise<void> => onSave({ ...company, ...next })
   const agents = settings.agents
@@ -195,14 +199,14 @@ function CompanyEditor({
   const addMember = (): void => {
     const id = newId('puesto')
     const boss = member ?? company.members.find((m) => m.reportsTo === null)?.id ?? null
-    const next: CompanyMember = { id, title: 'Nuevo puesto', reportsTo: boss, collaborates: [], budgetUsd: 0 }
+    const next: CompanyMember = { id, title: t('teams.newPosition.title'), reportsTo: boss, collaborates: [], budgetUsd: 0 }
     const taken = agents.filter((a) => a.companyId === company.id).map((a) => a.name)
-    const agent = memberAgent(company, next, { description: 'Describí qué hace este puesto.', instructions: 'Escribí cómo trabaja este puesto: qué hace, con qué datos, qué entrega y dónde lo deja.', tools: ['read_file', 'list_dir', 'search_files', 'write_file', 'edit_file'], canDelegate: false }, pickName(taken))
+    const agent = memberAgent(company, next, { description: t('teams.newPosition.description'), instructions: t('teams.newPosition.instructions'), tools: ['read_file', 'list_dir', 'search_files', 'write_file', 'edit_file'], canDelegate: false }, pickName(taken))
     void onSave({ ...company, members: [...company.members, next] }, [...agents, agent]).then(() => setMember(id))
   }
 
   const removeCompany = (): void => {
-    if (!confirm(`¿Borrar «${company.name}» y sus ${company.members.length} agentes? El vault (sus archivos) no se borra.`)) return
+    if (!confirm(t('teams.deleteConfirm', { name: company.name, count: company.members.length }))) return
     const ids = new Set(company.members.map((m) => m.id))
     void onChange({
       companies: settings.companies.filter((c) => c.id !== company.id),
@@ -217,34 +221,34 @@ function CompanyEditor({
         <div className="row space">
           <h3>{company.name}</h3>
           <button className="ghost small danger-text" onClick={removeCompany}>
-            <Icon icon={Trash2} size={14} /> Borrar empresa
+            <Icon icon={Trash2} size={14} /> {t('teams.deleteCompany')}
           </button>
         </div>
         <div className="row">
           <label className="field grow">
-            <span>Nombre</span>
+            <span>{t('common.name')}</span>
             <input value={company.name} onChange={(e) => void patch({ name: e.target.value })} />
           </label>
           <label className="field">
-            <span>Color</span>
+            <span>{t('teams.color')}</span>
             <div className="row">
               {COLORS.map((color) => (
-                <button key={color} className={`swatch${company.color === color ? ' active' : ''}`} style={{ background: color }} title={color} aria-label={`Color ${color}`} onClick={() => void patch({ color })} />
+                <button key={color} className={`swatch${company.color === color ? ' active' : ''}`} style={{ background: color }} title={color} aria-label={t('teams.colorAria', { color })} onClick={() => void patch({ color })} />
               ))}
             </div>
           </label>
         </div>
         <label className="field">
-          <span>Misión: qué hace y para quién (todos los agentes la leen)</span>
+          <span>{t('teams.mission')}</span>
           <textarea rows={2} value={company.mission} onChange={(e) => void patch({ mission: e.target.value })} />
         </label>
         <label className="field">
-          <span>Objetivos actuales (uno por línea)</span>
+          <span>{t('teams.goals')}</span>
           <textarea rows={3} value={company.goals} onChange={(e) => void patch({ goals: e.target.value })} />
         </label>
         <div className="row">
           <label className="field grow">
-            <span>Vault</span>
+            <span>{t('sidebar.mode.vault')}</span>
             <div className="row">
               <input className="grow" value={company.vault} onChange={(e) => void patch({ vault: e.target.value })} />
               <button
@@ -254,12 +258,12 @@ function CompanyEditor({
                   if (folder) void onChange({ companies: settings.companies.map((c) => (c.id === company.id ? { ...c, vault: folder } : c)), vaults: [...new Set([...settings.vaults, folder])] })
                 }}
               >
-                Elegir
+                {t('voice.eleven.choose')}
               </button>
             </div>
           </label>
           <label className="field">
-            <span>Presupuesto mensual (USD, 0 = sin límite)</span>
+            <span>{t('teams.budget')}</span>
             <input type="number" min={0} value={company.budgetUsd} onChange={(e) => void patch({ budgetUsd: Math.max(0, Number(e.target.value)) })} />
           </label>
         </div>
@@ -267,9 +271,9 @@ function CompanyEditor({
 
       <div className="card">
         <div className="row space">
-          <h3>Organigrama</h3>
-          <button className="primary small" onClick={addMember} title={member ? 'Agrega un puesto debajo del seleccionado' : 'Agrega un puesto debajo de quien dirige'}>
-            <Icon icon={Plus} size={14} /> Agregar puesto
+          <h3>{t('companies.tab.org')}</h3>
+          <button className="primary small" onClick={addMember} title={member ? t('teams.addPositionUnderSelected') : t('teams.addPositionUnderBoss')}>
+            <Icon icon={Plus} size={14} /> {t('teams.addPosition')}
           </button>
         </div>
         <OrgChart company={company} agents={agents} selected={member} onSelect={setMember} onReparent={reparent} />
@@ -299,10 +303,11 @@ function MemberEditor({
   onChange(patch: Partial<PublicSettings>): Promise<void>
   onClose(): void
 }): React.JSX.Element {
+  const t = useT()
   const member = company.members.find((m) => m.id === memberId)!
   const agent = settings.agents.find((a) => a.id === memberId)
-  const [routine, setRoutine] = useState({ time: '09:00', prompt: 'Revisá tus tareas pendientes y avanzá con la más importante.' })
-  if (!agent) return <div className="card">Falta el agente de este puesto.</div>
+  const [routine, setRoutine] = useState({ time: '09:00', prompt: t('teams.routine.prompt') })
+  if (!agent) return <div className="card">{t('teams.noAgent')}</div>
   const others = company.members.filter((m) => m.id !== memberId)
   const name = (id: string): string => settings.agents.find((a) => a.id === id)?.name ?? id
 
@@ -311,7 +316,7 @@ function MemberEditor({
   const routines = settings.routines.filter((r) => r.agentId === memberId)
 
   const remove = (): void => {
-    if (!confirm(`¿Sacar el puesto «${member.title}»? Quienes le reportaban pasan a su jefe.`)) return
+    if (!confirm(t('teams.removeConfirm', { title: member.title }))) return
     const members = company.members
       .filter((m) => m.id !== memberId)
       .map((m) => ({ ...m, reportsTo: m.reportsTo === memberId ? member.reportsTo : m.reportsTo, collaborates: m.collaborates.filter((id) => id !== memberId) }))
@@ -346,36 +351,36 @@ function MemberEditor({
         </h3>
         <div className="row">
           <button className="ghost small danger-text" onClick={remove}>
-            <Icon icon={Trash2} size={14} /> Sacar puesto
+            <Icon icon={Trash2} size={14} /> {t('teams.removePosition')}
           </button>
           <button className="ghost small" onClick={onClose}>
-            Listo
+            {t('teams.done')}
           </button>
         </div>
       </div>
       <div className="row">
         <label className="field grow">
-          <span>Nombre del agente</span>
+          <span>{t('teams.agentName')}</span>
           <input value={agent.name} onChange={(e) => void saveAgent({ name: e.target.value })} />
         </label>
         <label className="field grow">
-          <span>Puesto</span>
+          <span>{t('teams.position')}</span>
           <input value={member.title} onChange={(e) => void saveMember({ title: e.target.value })} />
         </label>
       </div>
       <label className="field">
-        <span>Qué hace (lo leen sus compañeros para saber cuándo recurrir a él)</span>
+        <span>{t('teams.whatItDoes')}</span>
         <textarea rows={2} value={agent.description} onChange={(e) => void saveAgent({ description: e.target.value })} />
       </label>
       <label className="field">
-        <span>Instrucciones y conocimientos del puesto</span>
+        <span>{t('teams.instructions')}</span>
         <textarea rows={6} value={agent.systemPrompt} onChange={(e) => void saveAgent({ systemPrompt: e.target.value })} />
       </label>
       <div className="row">
         <label className="field">
-          <span>Le reporta a</span>
+          <span>{t('teams.reportsTo')}</span>
           <select value={member.reportsTo ?? ''} onChange={(e) => void saveMember({ reportsTo: e.target.value || null })}>
-            <option value="">Directorio (vos)</option>
+            <option value="">{t('teams.boardYou')}</option>
             {others
               .filter((m) => canReportTo(company, memberId, m.id))
               .map((m) => (
@@ -386,12 +391,12 @@ function MemberEditor({
           </select>
         </label>
         <label className="field">
-          <span>Presupuesto propio (USD/mes, 0 = el de la empresa)</span>
+          <span>{t('teams.ownBudget')}</span>
           <input type="number" min={0} value={member.budgetUsd} onChange={(e) => void saveMember({ budgetUsd: Math.max(0, Number(e.target.value)) })} />
         </label>
       </div>
       <div className="field">
-        <span>Colabora con (línea punteada: le puede consultar directamente)</span>
+        <span>{t('teams.collaborates')}</span>
         <div className="row wrap">
           {others.map((m) => (
             <label key={m.id} className="check">
@@ -407,7 +412,7 @@ function MemberEditor({
       </div>
       <div className="row">
         <label className="field">
-          <span>Proveedor</span>
+          <span>{t('agents.provider')}</span>
           <select value={agent.provider} onChange={(e) => void saveAgent({ provider: e.target.value as ProviderId, model: e.target.value === 'anthropic' ? CLAUDE_MODELS[0] : '' })}>
             {(Object.keys(PROVIDER_NAMES) as ProviderId[]).map((p) => (
               <option key={p} value={p}>
@@ -417,7 +422,7 @@ function MemberEditor({
           </select>
         </label>
         <label className="field grow">
-          <span>Modelo (vacío = automático)</span>
+          <span>{t('teams.model')}</span>
           {agent.provider === 'anthropic' ? (
             <select value={agent.model} onChange={(e) => void saveAgent({ model: e.target.value })}>
               {CLAUDE_MODELS.map((m) => (
@@ -431,7 +436,7 @@ function MemberEditor({
           )}
         </label>
         <label className="field">
-          <span>Esfuerzo</span>
+          <span>{t('agents.effort')}</span>
           <select value={agent.effort} onChange={(e) => void saveAgent({ effort: e.target.value as Effort })}>
             {EFFORTS.map((effort) => (
               <option key={effort} value={effort}>
@@ -442,24 +447,24 @@ function MemberEditor({
         </label>
       </div>
       <div className="field">
-        <span>Herramientas (internet, notas del vault, mail y WhatsApp de la empresa las tiene siempre que estén configurados)</span>
+        <span>{t('teams.tools')}</span>
         <div className="row wrap">
           {tools.map((tool) => (
             <label key={tool} className="check">
               <input type="checkbox" checked={agent.tools.includes(tool)} onChange={(e) => void saveAgent({ tools: e.target.checked ? [...agent.tools, tool] : agent.tools.filter((t) => t !== tool) })} />
-              {toolLabel(tool)}
+              {toolLabel(tool, t)}
             </label>
           ))}
         </div>
       </div>
       <div className="field">
-        <span>Rutinas: cuándo se despierta solo (si no tiene ninguna, solo trabaja cuando le asignan algo)</span>
+        <span>{t('teams.routines')}</span>
         {routines.map((r) => (
           <div key={r.id} className="row space small">
             <span>
-              {r.schedule.kind === 'daily' ? `Lun a vie ${r.schedule.time}` : r.name}: {r.prompt}
+              {r.schedule.kind === 'daily' ? t('teams.weekdays', { time: r.schedule.time }) : r.name}: {r.prompt}
             </span>
-            <button className="icon-button" title="Quitar" onClick={() => void onChange({ routines: settings.routines.filter((x) => x.id !== r.id) })}>
+            <button className="icon-button" title={t('common.remove')} onClick={() => void onChange({ routines: settings.routines.filter((x) => x.id !== r.id) })}>
               <Icon icon={Trash2} size={14} />
             </button>
           </div>
@@ -468,7 +473,7 @@ function MemberEditor({
           <input type="time" value={routine.time} onChange={(e) => setRoutine({ ...routine, time: e.target.value })} />
           <input className="grow" value={routine.prompt} onChange={(e) => setRoutine({ ...routine, prompt: e.target.value })} />
           <button className="ghost small" onClick={addRoutine}>
-            Agregar rutina
+            {t('teams.addRoutine')}
           </button>
         </div>
       </div>
@@ -476,9 +481,8 @@ function MemberEditor({
   )
 }
 
-const WA_STATE: Record<WhatsAppStatus['state'], string> = { off: 'Apagado', connecting: 'Conectando…', qr: 'Esperando el QR', online: 'Conectado', error: 'Error' }
-
 function Accounts({ company, settings, patch, onSettingsReplaced }: { company: Company; settings: PublicSettings; patch(next: Partial<Company>): Promise<void>; onSettingsReplaced(s: PublicSettings): void }): React.JSX.Element {
+  const t = useT()
   const [password, setPassword] = useState('')
   const [status, setStatus] = useState<WhatsAppStatus>({ state: 'off' })
   const [test, setTest] = useState('')
@@ -494,49 +498,49 @@ function Accounts({ company, settings, patch, onSettingsReplaced }: { company: C
 
   return (
     <div className="card">
-      <h3>Cuentas de la empresa</h3>
-      <p className="muted small">Lo que no configures acá usa tus cuentas (Configuración → Mail y WhatsApp). Todo lo que sale lo aprueba primero el jefe del agente y después vos.</p>
-      <h4>Mail</h4>
+      <h3>{t('teams.accounts')}</h3>
+      <p className="muted small">{t('teams.accountsHint')}</p>
+      <h4>{t('settings.tab.email')}</h4>
       <div className="row">
         <label className="field grow">
-          <span>Dirección</span>
+          <span>{t('email.address')}</span>
           <input type="email" value={email.address} placeholder="hola@empresa.com" onChange={(e) => void patch({ email: { ...email, address: e.target.value.trim() } })} onBlur={() => email.address.includes('@') && !email.imapHost && void patch({ email: { ...email, ...emailServersFor(email.address) } })} />
         </label>
         <label className="field grow">
-          <span>Contraseña de aplicación</span>
+          <span>{t('email.appPassword')}</span>
           <div className="row">
-            <input type="password" className="grow" value={password} placeholder={hasPassword ? 'Guardada' : ''} onChange={(e) => setPassword(e.target.value)} />
+            <input type="password" className="grow" value={password} placeholder={hasPassword ? t('teams.saved') : ''} onChange={(e) => setPassword(e.target.value)} />
             <button className="primary small" disabled={!password.trim()} onClick={async () => (onSettingsReplaced(await window.desktop.settings.setCompanySecret(company.id, password.replace(/\s+/g, ''))), setPassword(''))}>
-              Guardar
+              {t('common.save')}
             </button>
           </div>
         </label>
       </div>
       {email.address && (
         <p className="small muted">
-          IMAP {email.imapHost || '—'}:{email.imapPort} · SMTP {email.smtpHost || '—'}:{email.smtpPort}{' '}
+          {t('teams.servers', { imap: `${email.imapHost || '—'}:${email.imapPort}`, smtp: `${email.smtpHost || '—'}:${email.smtpPort}` })}{' '}
           <button className="link" onClick={() => void patch({ email: { ...email, ...emailServersFor(email.address) } })}>
-            completar según la dirección
+            {t('teams.autofill')}
           </button>
           {test && <span> · {test}</span>}
         </p>
       )}
-      <h4>WhatsApp</h4>
+      <h4>{t('settings.tab.whatsapp')}</h4>
       <label className="check">
         <input type="checkbox" checked={company.whatsapp} onChange={(e) => void patch({ whatsapp: e.target.checked })} />
-        Número propio de la empresa (lo atiende quien dirige) — {WA_STATE[status.state]}
+        {t('teams.ownNumber', { state: t(`channels.state.${status.state}`) })}
         {status.number ? ` · +${status.number}` : ''}
       </label>
       {status.state === 'qr' && status.qr && (
         <div className="row">
-          <img src={status.qr} alt="QR para vincular el WhatsApp de la empresa" width={200} height={200} style={{ background: '#fff', borderRadius: 8 }} />
-          <p className="small">En el celular de la empresa: WhatsApp → Dispositivos vinculados → Vincular un dispositivo.</p>
+          <img src={status.qr} alt={t('teams.qrAlt')} width={200} height={200} style={{ background: '#fff', borderRadius: 8 }} />
+          <p className="small">{t('teams.qrHint')}</p>
         </div>
       )}
       {status.state === 'error' && <p className="text-danger small">{status.error}</p>}
       {status.state === 'online' && (
         <button className="ghost small" onClick={() => void request({ method: 'company.whatsapp.logout', companyId: company.id }).then(() => setTest(''))}>
-          Desvincular
+          {t('teams.unlink')}
         </button>
       )}
     </div>

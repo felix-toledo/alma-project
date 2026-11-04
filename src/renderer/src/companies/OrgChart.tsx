@@ -2,6 +2,7 @@ import { Crown, Link2 } from 'lucide-react'
 import { useState } from 'react'
 import { canReportTo } from '../../../shared/company'
 import type { AgentProfile, Company, CompanyMember } from '../../../shared/types'
+import { useT } from '../i18n/useT'
 import { Icon } from '../umbra/Icon'
 
 interface Props {
@@ -30,6 +31,7 @@ export const initials = (name: string): string =>
  * with whom) show as chips on the card. In edit mode, positions are dragged onto their new boss.
  */
 export function OrgChart({ company, agents, working = [], spend, selected, onSelect, onReparent }: Props): React.JSX.Element {
+  const t = useT()
   const [dropOn, setDropOn] = useState<string | null>(null)
   const name = (id: string): string => agents.find((a) => a.id === id)?.name ?? id
   const childrenOf = (boss: string | null): CompanyMember[] => company.members.filter((m) => m.reportsTo === boss || (boss === null && m.reportsTo !== null && !company.members.some((x) => x.id === m.reportsTo)))
@@ -67,7 +69,7 @@ export function OrgChart({ company, agents, working = [], spend, selected, onSel
           onClick={() => onSelect?.(selected === member.id ? null : member.id)}
           onKeyDown={(e) => e.key === 'Enter' && onSelect?.(member.id)}
           style={{ '--company': company.color } as React.CSSProperties}
-          title={busy ? `${agentName} está trabajando` : agentName}
+          title={busy ? t('org.working', { name: agentName }) : agentName}
           {...dropProps(member.id)}
         >
           <span className="org-avatar" aria-hidden>
@@ -76,10 +78,10 @@ export function OrgChart({ company, agents, working = [], spend, selected, onSel
           <span className="org-text">
             <strong className="ellipsis">{agentName}</strong>
             <span className="small muted ellipsis">{member.title}</span>
-            {spend && <span className="small muted">USD {(spend[member.id] ?? 0).toFixed(2)}{member.budgetUsd ? ` / ${member.budgetUsd}` : ''}</span>}
+            {spend && <span className="small muted">{t('org.spend', { amount: (spend[member.id] ?? 0).toFixed(2), budget: member.budgetUsd ? ` / ${member.budgetUsd}` : '' })}</span>}
           </span>
           {member.collaborates.length > 0 && (
-            <span className="org-links" title={`Colabora con ${member.collaborates.map(name).join(', ')}`}>
+            <span className="org-links" title={t('org.collab', { names: member.collaborates.map(name).join(', ') })}>
               <Icon icon={Link2} size={12} /> {member.collaborates.length}
             </span>
           )}
@@ -98,14 +100,14 @@ export function OrgChart({ company, agents, working = [], spend, selected, onSel
               <Icon icon={Crown} size={16} />
             </span>
             <span className="org-text">
-              <strong>Directorio</strong>
-              <span className="small muted">Vos: aprobás y decidís</span>
+              <strong>{t('companies.board')}</strong>
+              <span className="small muted">{t('org.you')}</span>
             </span>
           </div>
           {company.members.length > 0 && <ul>{childrenOf(null).map(node)}</ul>}
         </li>
       </ul>
-      {onReparent && <p className="small muted org-hint">Arrastrá un puesto sobre otro para cambiar a quién le reporta.</p>}
+      {onReparent && <p className="small muted org-hint">{t('org.dragHint')}</p>}
     </div>
   )
 }

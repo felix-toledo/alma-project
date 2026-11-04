@@ -151,6 +151,8 @@ function applyEvent(state: AppState, event: LiveEvent): AppState {
     }
     case 'approval.request':
       return { ...state, approvals: [...state.approvals, event.approval] }
+    case 'approval.reason':
+      return { ...state, approvals: state.approvals.map((a) => (a.approvalId === event.approvalId ? { ...a, reasonShown: event.reasonShown } : a)) }
     case 'approval.resolved':
       return { ...state, approvals: state.approvals.filter((a) => a.approvalId !== event.approvalId) }
     case 'thread.updated': {

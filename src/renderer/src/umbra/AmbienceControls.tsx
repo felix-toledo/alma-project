@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { Music, Volume1, Volume2, VolumeX, Waves } from 'lucide-react'
+import { useT } from '../i18n/useT'
 import { Icon } from './Icon'
 import { useUISound } from './useUISound'
 
@@ -18,21 +19,22 @@ function Switch({ icon, label, hint, on, onToggle }: { icon: LucideIcon; label: 
   )
 }
 
-/** Pestaña de Configuración: sonidos, música, fondo en movimiento y volumen. */
+/** Settings tab: sounds, music, moving background and volume. */
 export function AmbienceSettings(): React.JSX.Element {
+  const t = useT()
   const s = useUISound()
   const pct = Math.round(s.volume * 100)
   return (
     <>
       <div className="card">
-        <h3>Sonido</h3>
-        <Switch icon={s.muted ? VolumeX : Volume2} label="Sonidos de interfaz" hint="Un tono suave al pasar y al elegir." on={!s.muted} onToggle={() => s.setMuted(!s.muted)} />
-        <Switch icon={Music} label="Música de fondo" hint="Ambiente tranquilo mientras la app está visible." on={s.music} onToggle={() => s.setMusic(!s.music)} />
+        <h3>{t('ambience.sound.title')}</h3>
+        <Switch icon={s.muted ? VolumeX : Volume2} label={t('ambience.ui.label')} hint={t('ambience.ui.hint')} on={!s.muted} onToggle={() => s.setMuted(!s.muted)} />
+        <Switch icon={Music} label={t('ambience.music.label')} hint={t('ambience.music.hint')} on={s.music} onToggle={() => s.setMusic(!s.music)} />
         <div className="setting-row">
           <Icon icon={pct === 0 ? VolumeX : pct < 50 ? Volume1 : Volume2} size="sm" className="setting-icon" />
           <div className="grow">
-            <div>Volumen</div>
-            <div className="muted small">Música y sonidos de interfaz.</div>
+            <div>{t('ambience.volume.label')}</div>
+            <div className="muted small">{t('ambience.volume.hint')}</div>
           </div>
           <label className="ambience-volume">
             <input
@@ -41,7 +43,7 @@ export function AmbienceSettings(): React.JSX.Element {
               max={100}
               step={5}
               value={pct}
-              aria-label="Volumen de música y sonidos"
+              aria-label={t('ambience.volume.aria')}
               data-consumes-lr
               onChange={(e) => s.setVolume(Number(e.target.value) / 100)}
               style={{ ['--pct' as string]: `${pct}%` }}
@@ -51,8 +53,8 @@ export function AmbienceSettings(): React.JSX.Element {
         </div>
       </div>
       <div className="card">
-        <h3>Apariencia</h3>
-        <Switch icon={Waves} label="Fondo en movimiento" hint="Luz y partículas que flotan despacio. Apagado, el fondo queda quieto." on={s.motion} onToggle={() => s.setMotion(!s.motion)} />
+        <h3>{t('ambience.appearance.title')}</h3>
+        <Switch icon={Waves} label={t('ambience.motion.label')} hint={t('ambience.motion.hint')} on={s.motion} onToggle={() => s.setMotion(!s.motion)} />
       </div>
     </>
   )
