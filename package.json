@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Alma: agente de escritorio (Claude / Grok / DeepSeek) con subagentes, herramientas locales, MCP y biblioteca de imágenes",
   "private": true,
+  "license": "MIT",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

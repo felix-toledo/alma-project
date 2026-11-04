@@ -186,3 +186,9 @@ Vitest. They cover agent, tools, providers, MCP, Telegram, routines and schedule
 - **DeepSeek for images?** Its API does not generate images: use xAI or OpenAI, or the image library (`compose_image`), which needs none.
 - **Testing the Instagram automation**: `ALMA_INSTAGRAM_URL` points the app at a local page that imitates
   Instagram, to test without touching a real account.
+
+## License and disclaimer
+
+Alma is open source under the [MIT License](LICENSE).
+
+The **WhatsApp** channel (unofficial, through Baileys) and the **Instagram** publishing (a logged-in in-app browser session) are included **as demonstrations only**. Neither uses an official, supported API, so using them may break the terms of service of those platforms and can get an account restricted or banned. If you try them, use a throwaway account and do it at your own risk. They are not recommended for real or business accounts.
