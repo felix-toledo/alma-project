@@ -1,4 +1,4 @@
-import type { AgentProfile, ProviderId, Settings } from './types'
+import type { AgentProfile, ProviderId, Settings, Thread } from './types'
 
 /** Word, Excel, PowerPoint and PDF: read, create and edit (src/coordinator/tools/office). */
 export const OFFICE_TOOLS = ['office_read', 'office_create', 'office_edit']
@@ -7,6 +7,8 @@ export const BUILTIN_TOOLS = [...FILE_TOOLS, 'generate_image', 'compose_image', 
 export const READ_ONLY_TOOLS: readonly string[] = ['read_file', 'list_dir', 'search_files', 'office_read']
 
 export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5'
+/** Empty = the newest Muse Spark the account lists (muse-spark-1.3 today). */
+export const DEFAULT_META_MODEL = ''
 export const CLAUDE_MODELS = [
   'claude-opus-5-5',
   'claude-sonnet-5-5',
@@ -39,8 +41,8 @@ export const DEFAULT_AGENTS: AgentProfile[] = [
     systemPrompt: `Sos un agente de escritorio que ayuda al usuario con tareas en su computadora.
 ${WORKING_STYLE}
 Cuando una tarea se divide en partes independientes (investigar varias áreas, revisar y programar en paralelo), delegá cada parte con delegate_task y después integrá los resultados.`,
-    provider: 'anthropic',
-    model: DEFAULT_CLAUDE_MODEL,
+    provider: 'meta',
+    model: DEFAULT_META_MODEL,
     effort: 'high',
     tools: [...FILE_TOOLS, 'generate_image', 'compose_image'],
     allowMcp: true,
@@ -52,8 +54,8 @@ Cuando una tarea se divide en partes independientes (investigar varias áreas, r
     description: 'Explora la carpeta de trabajo y responde preguntas sobre el código o los documentos. Solo lectura.',
     systemPrompt: `Sos un investigador. Explorás archivos para responder una pregunta concreta y devolvés hallazgos verificables con rutas y números de línea.
 No modificás nada. Terminá con un resumen claro de lo que encontraste y lo que no pudiste confirmar.`,
-    provider: 'anthropic',
-    model: DEFAULT_CLAUDE_MODEL,
+    provider: 'meta',
+    model: DEFAULT_META_MODEL,
     effort: 'medium',
     tools: ['read_file', 'list_dir', 'search_files', 'office_read'],
     allowMcp: false,
@@ -65,8 +67,8 @@ No modificás nada. Terminá con un resumen claro de lo que encontraste y lo que
     description: 'Implementa cambios de código y corre comandos (tests, builds) para verificarlos.',
     systemPrompt: `Sos un programador cuidadoso. Implementás el cambio pedido, lo verificás corriendo los comandos adecuados y reportás qué cambiaste y cómo lo comprobaste.
 ${WORKING_STYLE}`,
-    provider: 'anthropic',
-    model: DEFAULT_CLAUDE_MODEL,
+    provider: 'meta',
+    model: DEFAULT_META_MODEL,
     effort: 'medium',
     tools: [...FILE_TOOLS, 'generate_image', 'compose_image'],
     allowMcp: true,
@@ -78,8 +80,8 @@ ${WORKING_STYLE}`,
     description: 'Revisa código o cambios buscando errores concretos, con evidencia. Solo lectura.',
     systemPrompt: `Sos un revisor de código. Buscás errores reales (lógica, casos borde, seguridad) y los reportás con archivo, línea y por qué fallan.
 No inventes problemas: si no encontrás nada importante, decilo.`,
-    provider: 'anthropic',
-    model: DEFAULT_CLAUDE_MODEL,
+    provider: 'meta',
+    model: DEFAULT_META_MODEL,
     effort: 'medium',
     tools: ['read_file', 'list_dir', 'search_files', 'office_read'],
     allowMcp: false,
@@ -141,8 +143,8 @@ Cómo trabajás con Remotion:
 5. Renderizá con npx remotion render <id> out/<nombre>.mp4 (--codec=h264 por defecto; --scale=0.5 para una prueba rápida; --props='{"titulo":"..."}' para variar el contenido). run_command corta a los 120 s: para npm install y renders pasá timeout_seconds: 600, y si un render es más largo dividilo en tramos (--frames=0-299) o bajá la escala. Reportá la ruta, la duración, la resolución y el tamaño.
 6. Nunca dejes un proceso largo corriendo: npx remotion studio es interactivo, no lo lances salvo que el usuario lo pida y avisale cómo abrirlo él.
 Formatos habituales: 1920x1080 a 30 fps para YouTube, 1080x1920 para Reels/TikTok/Shorts, 1080x1080 o 1080x1350 para feed. Si faltan datos (duración, textos, marca, formato), proponé valores razonables y avanzá en lugar de preguntar todo.`,
-    provider: 'anthropic',
-    model: DEFAULT_CLAUDE_MODEL,
+    provider: 'meta',
+    model: DEFAULT_META_MODEL,
     effort: 'medium',
     tools: [...FILE_TOOLS, 'generate_image', 'compose_image'],
     allowMcp: false,
@@ -161,8 +163,8 @@ Cómo trabajás:
 4. Publicá con instagram_publish. El usuario ve la imagen y el texto y decide; si lo rechaza, preguntá qué cambiar en lugar de reintentar lo mismo.
 5. Si se publicó, agregá una entrada a publicaciones.md con la fecha, el tema, la ruta de la imagen y el texto.
 Respondé en el idioma del usuario.`,
-    provider: 'anthropic',
-    model: DEFAULT_CLAUDE_MODEL,
+    provider: 'meta',
+    model: DEFAULT_META_MODEL,
     effort: 'medium',
     tools: ['read_file', 'list_dir', 'search_files', 'write_file', 'edit_file', ...OFFICE_TOOLS, 'generate_image', 'compose_image', 'instagram_publish'],
     allowMcp: false,
@@ -197,11 +199,11 @@ export function defaultSettings(): Settings {
     defaultAgentId: 'general',
     agents: structuredClone(DEFAULT_AGENTS),
     approvalMode: 'needs-approval',
-    autoReview: { provider: 'anthropic', model: DEFAULT_CLAUDE_MODEL, instructions: DEFAULT_REVIEW_INSTRUCTIONS },
+    autoReview: { provider: 'meta', model: DEFAULT_META_MODEL, instructions: DEFAULT_REVIEW_INSTRUCTIONS },
     alwaysAllowTools: [],
     mcpServers: {},
     defaultWorkspace: '',
-    images: { provider: 'xai', model: '' },
+    images: { provider: 'meta', model: '' },
     instagram: { testMode: true },
     routines: [],
     background: { runInTray: true, launchAtLogin: false },
@@ -224,6 +226,7 @@ export function defaultSettings(): Settings {
       windowsVoice: '',
       elevenVoiceId: '',
       elevenModel: 'eleven_multilingual_v2',
+      sendDelayMs: 1000,
       agentId: 'general',
       threadId: null
     },
@@ -243,4 +246,35 @@ export function emailServersFor(address: string): Partial<Settings['email']> {
   if (/^yahoo\.[a-z.]+$/.test(domain)) return { imapHost: 'imap.mail.yahoo.com', imapPort: 993, smtpHost: 'smtp.mail.yahoo.com', smtpPort: 465 }
   if (/^(icloud|me|mac)\.com$/.test(domain)) return { imapHost: 'imap.mail.me.com', imapPort: 993, smtpHost: 'smtp.mail.me.com', smtpPort: 587 }
   return domain ? { imapHost: `imap.${domain}`, imapPort: 993, smtpHost: `smtp.${domain}`, smtpPort: 465 } : {}
+}
+
+/**
+ * Settings saved before Meta became the default: the untouched default agents, the review and the image service move to
+ * Meta, once, and only when there is a Meta key (without it they'd stop working). Choices the person made stay.
+ */
+export function applyMetaDefault(settings: Settings, hasMetaKey: boolean): Settings {
+  if (settings.metaDefaultApplied || !hasMetaKey) return settings
+  const defaults = new Set(DEFAULT_AGENTS.map((a) => a.id))
+  const { autoReview, images } = settings
+  return {
+    ...settings,
+    metaDefaultApplied: true,
+    agents: settings.agents.map((a) =>
+      defaults.has(a.id) && !a.companyId && a.provider === 'anthropic' && a.model === DEFAULT_CLAUDE_MODEL ? { ...a, provider: 'meta', model: DEFAULT_META_MODEL } : a
+    ),
+    autoReview: autoReview.provider === 'anthropic' && autoReview.model === DEFAULT_CLAUDE_MODEL ? { ...autoReview, provider: 'meta', model: DEFAULT_META_MODEL } : autoReview,
+    images: images.provider === 'xai' && !images.model ? { provider: 'meta', model: '' } : images
+  }
+}
+
+/** The agent as it runs in a conversation: a model chosen in the header replaces the agent's own provider and model. */
+export function effectiveProfile(profile: AgentProfile, thread: Pick<Thread, 'model'>): AgentProfile {
+  return thread.model ? { ...profile, provider: thread.model.provider, model: thread.model.model } : profile
+}
+
+const NOT_CHAT_MODEL = /image|imagine|vision|video|embed|voice|transcribe|tts|stt|realtime|multi-agent|(^|[-_/])sam([-_.\d]|$)/
+
+/** Provider listings mix in image, voice and embedding models; the header only offers the ones that chat. */
+export function isChatModel(id: string): boolean {
+  return !NOT_CHAT_MODEL.test(id)
 }

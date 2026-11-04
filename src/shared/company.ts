@@ -1,5 +1,5 @@
 // Companies: pure helpers shared by the coordinator (who may talk to whom, spend) and the window (org chart, templates).
-import { DEFAULT_CLAUDE_MODEL } from './defaults'
+import { DEFAULT_META_MODEL } from './defaults'
 import type { AgentProfile, Company, CompanyMember, ProviderId, Usage } from './types'
 
 export const BOARD = 'user'
@@ -274,8 +274,8 @@ export function memberAgent(company: Company, member: CompanyMember, template: P
     name,
     description: template.description,
     systemPrompt: template.instructions,
-    provider: 'anthropic',
-    model: DEFAULT_CLAUDE_MODEL,
+    provider: 'meta',
+    model: DEFAULT_META_MODEL,
     effort: 'medium',
     tools: template.tools,
     allowMcp: false,

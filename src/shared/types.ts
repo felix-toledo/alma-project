@@ -118,6 +118,8 @@ export interface VoiceSettings {
   windowsVoice: string
   elevenVoiceId: string
   elevenModel: 'eleven_multilingual_v2' | 'eleven_flash_v2_5'
+  /** Milliseconds between the transcript and sending it to the model, during which it can still be cancelled; 0 = none. */
+  sendDelayMs: number
   agentId: string
   /** The conversation voice requests go to; a new one starts after an hour of silence. */
   threadId: string | null
@@ -214,6 +216,8 @@ export interface Settings {
   officeToolsAdded?: boolean
   /** The default Multimedia agent was added once to a settings file saved before it existed. */
   multimediaAdded?: boolean
+  /** One-time migration marker: the default agents, auto-review and images moved to Meta (spec 024). */
+  metaDefaultApplied?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -433,6 +437,8 @@ export interface Thread {
   id: string
   title: string
   agentId: string
+  /** Who answers in this conversation, over the agent's own provider and model. */
+  model?: ModelChoice
   workspace: string
   /** Where the conversation happens besides the app; shown as an icon in the sidebar. */
   /** 'company': a task, review or meeting prep an agent of a company worked on by itself. */
@@ -445,7 +451,12 @@ export interface Thread {
   toolStates: Record<string, ToolState>
 }
 
-export type ThreadSummary = Pick<Thread, 'id' | 'title' | 'agentId' | 'workspace' | 'updatedAt' | 'channel'>
+export interface ModelChoice {
+  provider: ProviderId
+  model: string
+}
+
+export type ThreadSummary = Pick<Thread, 'id' | 'title' | 'agentId' | 'model' | 'workspace' | 'updatedAt' | 'channel'>
 
 export interface McpServerStatus {
   name: string
@@ -519,7 +530,7 @@ export type CoordinatorRequest =
   | { method: 'threads.list' }
   | { method: 'threads.get'; threadId: string }
   | { method: 'threads.create'; agentId: string; workspace: string }
-  | { method: 'threads.update'; threadId: string; title?: string; agentId?: string; workspace?: string }
+  | { method: 'threads.update'; threadId: string; title?: string; agentId?: string; workspace?: string; /** null = back to the agent's own model */ model?: ModelChoice | null }
   | { method: 'threads.delete'; threadId: string }
   | { method: 'chat.send'; threadId: string; text: string }
   | { method: 'chat.stop'; threadId: string }
@@ -576,6 +587,8 @@ export type CoordinatorRequest =
   | { method: 'voice.status' }
   /** Hotkey or button: start listening now, skipping the wake word. Pressed while speaking: stop. */
   | { method: 'voice.trigger' }
+  /** Throws away what is being recorded or pending, stops Alma and ends the conversation. */
+  | { method: 'voice.cancel' }
   /** The renderer finished playing what Alma said (or the user cut it off). */
   | { method: 'voice.played' }
   /** Mono 16 kHz Int16 PCM recordings of the user reading, to learn their voice. */
