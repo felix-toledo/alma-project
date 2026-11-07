@@ -318,7 +318,14 @@ const telegram = new TelegramChannel({
   saveImage: saveInboxImage,
   onEvent,
   respondApproval: (approvalId, decision) => approvals.respond(approvalId, decision),
-  onStatus: (status) => broadcast({ type: 'telegram.status', status })
+  onStatus: (status) => broadcast({ type: 'telegram.status', status }),
+  home: {
+    enabled: () => settings.home.enabled,
+    snapshot: () => (home.hub.ready ? home.hub.snapshot() : null),
+    status: () => home.engine.status().state,
+    control: (entityId, service, data) => home.hub.control(entityId, service, data),
+    cameraPhoto: (entityId) => home.hub.cameraSnapshot(entityId)
+  }
 })
 
 // Created on init (it keeps its session in the data folder).

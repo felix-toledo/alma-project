@@ -13,7 +13,7 @@ The document has two halves inside the standard sections: **Part A, engine and d
 - The person adds a device of any brand HA knows through step-by-step forms (account, IP, QR code, external link). An agent can do the same with `home_add_device`.
 - The person or an agent can rename a device, move it to another room, or remove it.
 - Lights, plugs, fans, covers, climate and speakers are controlled by name, room or kind with no permission prompt. Locks, alarms, sirens and garage/gate/door covers always ask the person first, whatever the approval mode.
-- Control works from the Casa window and from any agent surface: chat, voice, Telegram, WhatsApp.
+- Control works from the Casa window and from any agent surface: chat, voice, Telegram, WhatsApp. Telegram also has a button panel (`/home`, [Telegram](telegram.md)): rooms, scenes and cameras without asking the agent.
 
 **Part B, plan, cameras and rules**
 

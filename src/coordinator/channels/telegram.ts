@@ -1,8 +1,23 @@
 // Telegram channel: the bot runs inside the coordinator (long polling, no server or open port needed).
-import { Bot, InlineKeyboard, InputFile, type Context } from 'grammy'
+import { Bot, InlineKeyboard, InputFile, Keyboard, type Context } from 'grammy'
 import { audit } from '../../shared/audit'
+import type { HomeSnapshot, HomeThing } from '../../shared/home'
+import type { Language } from '../../shared/i18n/language'
 import { type MessageKey, type ParamsArg, translate } from '../../shared/i18n/messages'
 import type { LiveEvent, PendingApproval, Settings, TelegramSettings, TelegramStatus, Thread } from '../../shared/types'
+import {
+  camerasView,
+  confirmView,
+  HomeTokens,
+  homeRoot,
+  isHomeOpenText,
+  parseHomeCallback,
+  roomView,
+  scenesView,
+  sensitiveActions,
+  toggleControl,
+  type MenuView
+} from './home-menu'
 import { approvalButtons, approvalPrompt, approvalToast, describeTelegramError } from './texts'
 
 const TELEGRAM_LIMIT = 4096
@@ -25,6 +40,14 @@ export interface TelegramDeps {
   onEvent(listener: (event: LiveEvent) => void): () => void
   respondApproval(approvalId: string, decision: 'allow' | 'deny' | 'always'): void
   onStatus(status: TelegramStatus): void
+  /** The house behind the /home panel; snapshot() is null while it is off or still connecting. */
+  home?: {
+    enabled(): boolean
+    snapshot(): HomeSnapshot | null
+    status(): string
+    control(entityId: string, service: string, data?: Record<string, unknown>): Promise<void>
+    cameraPhoto(entityId: string): Promise<Buffer>
+  }
 }
 
 /** Splits text at paragraph or line breaks so every piece fits in one Telegram message. */
@@ -59,12 +82,24 @@ export function authorizeChat(
   return 'denied'
 }
 
+/** A menu view as an inline keyboard; views without buttons (an empty house) send no keyboard. */
+function toInlineKeyboard(view: MenuView): InlineKeyboard | undefined {
+  if (!view.buttons.length) return undefined
+  const keyboard = new InlineKeyboard()
+  view.buttons.forEach((row, index) => {
+    if (index) keyboard.row()
+    for (const button of row) keyboard.text(button.label, button.data)
+  })
+  return keyboard
+}
+
 export class TelegramChannel {
   private bot: Bot | null = null
   private runningToken = ''
   private status: TelegramStatus = { state: 'off' }
   private approvalMessages = new Map<string, { chatId: number; messageId: number; text: string }>()
   private offApprovals: (() => void) | null = null
+  private homeTokens = new HomeTokens()
 
   constructor(private deps: TelegramDeps) {}
 
@@ -163,7 +198,18 @@ export class TelegramChannel {
 
   private async onStart(ctx: Context): Promise<void> {
     if (!this.check(ctx)) return this.deny(ctx)
-    await ctx.reply(this.text('tg.start'))
+    await ctx.reply(this.text('tg.start'), { reply_markup: new Keyboard().text(this.text('tg.homeButton')).resized() })
+  }
+
+  /** The Casa panel: rooms, scenes and cameras as buttons, from the same snapshot the Home window shows. */
+  private async onHome(ctx: Context): Promise<void> {
+    if (!this.check(ctx)) return this.deny(ctx)
+    const home = this.deps.home
+    if (!home?.enabled()) return void (await ctx.reply(this.text('tg.homeOff')))
+    const snapshot = home.snapshot()
+    if (!snapshot) return void (await ctx.reply(this.text('tg.homeNotReady', { status: home.status() })))
+    const view = homeRoot(snapshot, this.deps.settings().language, this.homeTokens)
+    await ctx.reply(view.text, { reply_markup: toInlineKeyboard(view) })
   }
 
   private async onNew(ctx: Context): Promise<void> {
@@ -209,6 +255,9 @@ ${ctx.message!.caption}` : ''}`)
 
   private async onText(ctx: Context, text: string): Promise<void> {
     if (!this.check(ctx)) return this.deny(ctx)
+    // /home opens the panel instead of asking the agent. It is caught here (not with bot.command) because grammY
+    // runs both a command handler and the text handler for a command, which would send the panel twice.
+    if (isHomeOpenText(text, this.deps.settings().language)) return this.onHome(ctx)
     const chatId = ctx.chat!.id
     const thread = this.deps.conversation()
     const placeholder = await ctx.reply(this.text('chan.thinking'))
@@ -262,10 +311,119 @@ ${ctx.message!.caption}` : ''}`)
   }
 
   private async onCallback(ctx: Context): Promise<void> {
-    const match = /^ap:([\w-]+):(allow|always|deny)$/.exec(ctx.callbackQuery?.data ?? '')
+    const data = ctx.callbackQuery?.data ?? ''
+    if (data.startsWith('hm:')) {
+      if (!this.check(ctx)) return void (await ctx.answerCallbackQuery())
+      return this.onHomeCallback(ctx, data)
+    }
+    const match = /^ap:([\w-]+):(allow|always|deny)$/.exec(data)
     if (!match || !this.check(ctx)) return void (await ctx.answerCallbackQuery())
     this.deps.respondApproval(match[1], match[2] as 'allow' | 'always' | 'deny')
     await ctx.answerCallbackQuery({ text: approvalToast(this.deps.settings().language, match[2] as 'allow' | 'always' | 'deny') })
+  }
+
+  /** A tap on the Casa panel. Every action re-reads the live snapshot, so a tap always sees the house as it is now. */
+  private async onHomeCallback(ctx: Context, data: string): Promise<void> {
+    const parsed = parseHomeCallback(data)
+    const home = this.deps.home
+    if (!parsed || !home?.enabled()) return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeExpired') }))
+    if (parsed.action === 'close') {
+      await ctx.answerCallbackQuery()
+      return void (await ctx.deleteMessage().catch(() => undefined))
+    }
+    const language = this.deps.settings().language
+    const snapshot = home.snapshot()
+    if (!snapshot) return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeNotReady', { status: home.status() }) }))
+    try {
+      switch (parsed.action) {
+        case 'home':
+        case 'scenes':
+        case 'cams': {
+          const view = parsed.action === 'home' ? homeRoot(snapshot, language, this.homeTokens) : parsed.action === 'scenes' ? scenesView(snapshot, language, this.homeTokens) : camerasView(snapshot, language, this.homeTokens)
+          await this.editHome(ctx, view)
+          return void (await ctx.answerCallbackQuery())
+        }
+        case 'room':
+        case 'refresh': {
+          const target = parsed.token ? this.homeTokens.resolve(parsed.token) : undefined
+          if (!target || target.kind !== 'area') return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeExpired') }))
+          await this.editHome(ctx, roomView(snapshot, target.id, language, this.homeTokens))
+          return void (await ctx.answerCallbackQuery())
+        }
+        case 'toggle': {
+          const thing = this.homeThing(snapshot, parsed.token)
+          const control = thing ? toggleControl(thing) : null
+          if (!thing || !control) return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeExpired') }))
+          await home.control(thing.entityId, control.service, control.data)
+          await ctx.answerCallbackQuery({ text: this.text('chan.done') })
+          return this.refreshRoom(ctx, home, thing, language)
+        }
+        case 'scene': {
+          const target = parsed.token ? this.homeTokens.resolve(parsed.token) : undefined
+          const scene = target?.kind === 'scene' ? snapshot.scenes.find((s) => s.entityId === target.entityId) : undefined
+          if (!scene) return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeExpired') }))
+          await home.control(scene.entityId, 'scene/turn_on')
+          return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeSceneOn', { name: scene.name }).slice(0, 190) }))
+        }
+        case 'cam': {
+          const thing = this.homeThing(snapshot, parsed.token)
+          if (!thing || thing.kind !== 'camera') return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeExpired') }))
+          await ctx.answerCallbackQuery()
+          try {
+            const jpeg = await home.cameraPhoto(thing.entityId)
+            await ctx.replyWithPhoto(new InputFile(jpeg, 'alma.jpg'), { caption: thing.name.slice(0, 1000) })
+          } catch (error) {
+            await ctx.reply(this.text('tg.homePhotoFailed', { error: this.describe(error) }))
+          }
+          return
+        }
+        case 'ask': {
+          const thing = this.homeThing(snapshot, parsed.token)
+          if (!thing || !sensitiveActions(thing, language).length) return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeExpired') }))
+          await this.editHome(ctx, confirmView(thing, language, this.homeTokens))
+          return void (await ctx.answerCallbackQuery())
+        }
+        case 'do': {
+          const thing = this.homeThing(snapshot, parsed.token)
+          const actions = thing ? sensitiveActions(thing, language) : []
+          const action = parsed.arg ? actions.find((a) => a.id === parsed.arg) : actions[0]
+          if (!thing || !action) return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeExpired') }))
+          await home.control(thing.entityId, action.service)
+          audit({ action: 'home.control', actor: 'remote', target: thing.entityId, outcome: 'ok', detail: { service: action.service } })
+          await ctx.answerCallbackQuery({ text: this.text('chan.done') })
+          return this.refreshRoom(ctx, home, thing, language)
+        }
+        default:
+          return void (await ctx.answerCallbackQuery({ text: this.text('tg.homeExpired') }))
+      }
+    } catch (error) {
+      await ctx.answerCallbackQuery({ text: this.text('tg.homeFailed', { error: this.describe(error) }).slice(0, 190) }).catch(() => undefined)
+    }
+  }
+
+  private homeThing(snapshot: HomeSnapshot, token: string | undefined): HomeThing | undefined {
+    const target = token ? this.homeTokens.resolve(token) : undefined
+    return target?.kind === 'thing' ? snapshot.things.find((t) => t.id === target.id) : undefined
+  }
+
+  /** Re-reads the room of a thing after acting on it, giving Home Assistant a moment to report the new state. */
+  private async refreshRoom(ctx: Context, home: NonNullable<TelegramDeps['home']>, thing: HomeThing, language: Language): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    const snapshot = home.snapshot()
+    const current = snapshot?.things.find((t) => t.id === thing.id)
+    if (!snapshot) return
+    await this.editHome(ctx, roomView(snapshot, current?.areaId ?? thing.areaId, language, this.homeTokens))
+  }
+
+  /** Refreshes the panel in place; falls back to a new message when Telegram won't edit it. */
+  private async editHome(ctx: Context, view: MenuView): Promise<void> {
+    const keyboard = toInlineKeyboard(view)
+    try {
+      await ctx.editMessageText(view.text, { reply_markup: keyboard })
+    } catch (error) {
+      if (/not modified/i.test((error as Error).message)) return
+      await ctx.reply(view.text, { reply_markup: keyboard }).catch(() => undefined)
+    }
   }
 
   private describe(error: unknown): string {

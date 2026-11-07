@@ -7,6 +7,7 @@
 The person creates a bot with @BotFather, pastes its token in Alma, and lists their own Telegram username. From then on:
 
 - **Chat.** The owner's private chat with the bot is one more conversation in Alma. Text, voice notes and photos go to an agent, and the answer comes back to the phone.
+- **Casa panel.** `/home` (or the fixed "🏠 Casa" button) shows the house as button menus: rooms with their devices to tap on/off, scenes ("Modos") to activate, and cameras to get a still. Locks, alarms and gates ask for confirmation in the chat before acting.
 - **Approvals.** When an agent needs permission, the bot sends a message with buttons "Permitir" (allow) and "Rechazar" (reject), plus "Siempre" (always) when that is allowed. The same approval stays answerable in the desktop app.
 - **Notices.** Reminders, house alerts (a rule fired, a camera condition) and company notices arrive as Telegram messages.
 - **Agents can message the owner.** The tool `send_telegram` sends text or one image to the bound chat.
@@ -25,8 +26,9 @@ Chat commands:
 
 | Command | Effect |
 |---|---|
-| `/start` | Replies «Hola, soy Alma. Escribime o mandame un audio. /nuevo empieza una conversación nueva.» and runs no agent. |
+| `/start` | Replies «Hola, soy Alma. … Tocá 🏠 Casa (o mandá /home) para manejar tu casa.» and shows the fixed "🏠 Casa" keyboard button. Runs no agent. |
 | `/nuevo` | Starts a new Telegram conversation («Listo, conversación nueva.»). The old one stays in the sidebar. |
+| `/home` | Opens the Casa panel (rooms, scenes, cameras) instead of asking the agent. |
 | any other `/x` | Treated as ordinary text for the agent. |
 
 Asking Alma to message you, from any chat: «mandame por Telegram cuando termines» (send me a Telegram when you finish), «avisame por Telegram si...» (tell me on Telegram if...).
@@ -39,7 +41,8 @@ Pieces:
 
 | File | Role |
 |---|---|
-| `src/coordinator/channels/telegram.ts` | The channel: grammy bot, `authorizeChat`, `splitForTelegram`, status, approvals, `notify`, `notifyPhoto`. |
+| `src/coordinator/channels/telegram.ts` | The channel: grammy bot, `authorizeChat`, `splitForTelegram`, status, approvals, `notify`, `notifyPhoto`, the `/home` panel wiring. |
+| `src/coordinator/channels/home-menu.ts` | The Casa panel as pure functions: room/scene/camera views, `toggleControl`, `sensitiveActions`, short callback tokens (`HomeTokens`), `parseHomeCallback`, `isHomeOpenText`. |
 | `src/coordinator/tools/telegram.ts` | The `send_telegram` tool. |
 | `src/coordinator/index.ts` | Wiring: `channelConversation`, `deliverReminder`, `notifyHome`, `saveInboxImage`, token lookup. |
 | `src/coordinator/agent.ts` | Registers the tool and adds the channel text to the system prompt. |
@@ -67,6 +70,7 @@ Non-obvious points:
 - **Restart rules.** Applying settings restarts the bot only if the token or the enabled flag changed. A new token forgets the old approval buttons.
 - **Placeholder edits.** While the agent runs, the placeholder is edited with the tool name (prefix `mcp__` removed, underscores as spaces), at most every 1.5 s and only when the text changed.
 - **Approval buttons** carry `ap:<approvalId>:<allow|always|deny>`. After resolution (from either side) the message is edited to its original text plus "(respondido)" (answered). Only approvals for the Telegram conversation are sent; approvals for desktop chats, routines and companies never go to Telegram.
+- **Casa panel buttons** carry `hm:<action>[:<token>[:<arg>]]` (`home-menu.ts`). Buttons never embed entity ids (they can exceed the 64-byte `callback_data` cap); they carry a short token that resolves against the live snapshot, and stale tokens answer "that panel expired, send /home again". Every tap re-reads the snapshot; after acting, the room is re-read ~800 ms later so the buttons show the new state. `/home` is caught in the text handler rather than `bot.command`, because grammY would run both handlers and send the panel twice.
 - **Voice notes** are downloaded and handed to the transcriber of the [voice module](voice.md), echoed back as `🎙️ «texto»` and then handled like typed text. **Photos**: the largest size is saved in `<data>/inbox` and the agent is told «[El usuario te mandó una imagen: <ruta>. Mirala con look_at_image.]».
 - **Channel prompt.** In a Telegram thread the agent is told it is on a phone: brief answers, no tables or long code blocks, audios arrive transcribed.
 - **Messages between layers.** Request `telegram.status`; event `telegram.status` on every change; coordinator to main `settings.patch`.
@@ -117,9 +121,9 @@ Alma must be running (window or tray). Nothing is received while it is closed.
 
 ## How it is tested
 
-`tests/telegram.test.ts` covers `authorizeChat` (bind, groups denied, bound chat only; AC-1.1 to 1.3) and `splitForTelegram` (AC-3.4). `tests/audit.test.ts` covers the audit throttle (AC-1.5). Everything else in the spec is marked `[gap]`: connection states, handlers, approvals, `send_telegram`, photo and voice paths. Nothing here needs a live Telegram account in tests; there are no tests with a fake bot yet.
+`tests/telegram.test.ts` covers `authorizeChat` (bind, groups denied, bound chat only; AC-1.1 to 1.3) and `splitForTelegram` (AC-3.4). `tests/telegram-home.test.ts` covers the Casa panel: toggle mapping, sensitive actions, tokens, callback parsing, views and the 64-byte cap. `tests/audit.test.ts` covers the audit throttle (AC-1.5). Everything else in the spec is marked `[gap]`: connection states, handlers, approvals, `send_telegram`, photo and voice paths. Nothing here needs a live Telegram account in tests; there are no tests with a fake bot yet.
 
-By hand: configure a bot, check the badge, write from the phone, press an approval button, press "Desvincular" and write again from another allowed user, send a voice note and a photo.
+By hand: configure a bot, check the badge, write from the phone, press an approval button, press "Desvincular" and write again from another allowed user, send a voice note and a photo. For the Casa panel: send `/home`, open a room, toggle a light, activate a scene, open a camera, and confirm a lock.
 
 ## Known limits
 
