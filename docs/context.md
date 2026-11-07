@@ -211,7 +211,7 @@ The tamper-evident log of what agents did and who allowed it: `<userData>/audit/
 _Avoid_: log, history
 
 **Native confirmation**:
-A system dialog that the page cannot click, shown before Alma starts new code (a new stdio MCP server) or stops asking for approval ("Permitir todo").
+A system dialog that the page cannot click, shown before Alma starts new code (a new stdio MCP server), stops asking for approval ("Permitir todo") or turns on remote access (spec 026).
 _Avoid_: confirm prompt, modal
 
 **Private host**:
@@ -317,6 +317,38 @@ _Avoid_: snapshot (the code uses that word for the live state of the house too),
 **Vision model**:
 The model that looks at pictures for `look_at_image`, camera stills and plan photos; chosen in «Configuración → Casa», otherwise the first agent with a key. Pictures never enter an agent's conversation, only the text answer does.
 _Avoid_: image model (that generates pictures), multimodal model
+
+## Language: remote access
+
+Spec [026](../.specify/specs/026-remote-access/spec.md). Terms below are the ones the human decided; whatever is still open is listed in that spec's Open Questions, not here.
+
+**Remote channel**:
+The single shared security layer, in `coordinator/channels`, through which a paired phone reaches Alma: device identity, scopes, step-up and the audit trail. It is identical whichever transport carries the bytes, and it exposes a narrow API built for the phone, not the desktop UI.
+_Avoid_: remote control, remote API (that is only the set of operations the phone may call)
+
+**Transport**:
+The swappable piece of the remote channel that only moves bytes between the phone and the PC (Tailscale through `tailscale serve`; a local one that exists only in tests; an Alma-run relay in a later spec). It carries no authority: being reachable over a transport never grants access.
+_Avoid_: connection, tunnel, network, provider (providers are model providers)
+
+**Device** (remote):
+A paired phone, with its own key, name and scopes, that the person can revoke alone without touching the others. Not a **Thing** (a house device), and not a WhatsApp **Linked device**; the audit trail records it as `detail.deviceId`.
+_Avoid_: phone (in code and specs), client, session
+
+**Pairing**:
+The one-time ritual that turns a phone into a device: a one-use QR that expires in 3 minutes, then a 6-digit code the person compares on both screens and approves on the PC (a native confirmation). Scanning the QR alone grants nothing; at most 5 devices can be paired.
+_Avoid_: login, linking (WhatsApp's QR is a linked device), enrolment
+
+**Scope** (remote):
+One capability a device may use: chat, approve, home automation or cameras (still pictures of the cameras the person allowed one by one, seen in transit and never saved on the PC; each camera added needs a native confirmation and the list persists across turn-ons). Scopes are global (not per device), all off every time remote access is turned on, and each is enabled separately on the PC. Locks and alarms are a sub-switch under home automation, off by default and, when on, opening and disarming need a step-up. Unrelated to **Tool risk**, which classifies tools, not capabilities.
+_Avoid_: permission, role, access level
+
+**Step-up**:
+A WebAuthn passkey assertion, made on the phone and verified by the PC, required on every action that opens or disarms a sensitive device (locks, alarms, sirens, gate, garage and door covers), with no time window and no fallback; the passkey is registered during pairing. Closing, locking and arming need none, nor do a siren's trigger or silence or a cover's stop or set-position. It is added to the approval card, not a replacement.
+_Avoid_: 2FA, PIN, re-login
+
+**Dormant device**:
+A paired device while remote access is off: it stays in the list, cannot connect, and returns when remote access is turned on again (the native confirmation names it). Its 15-day idle clock keeps running, so a long-dormant device is removed automatically. Not the same as a revoked device, which is deleted at once.
+_Avoid_: disabled device, inactive device
 
 ## Language: images and interface
 

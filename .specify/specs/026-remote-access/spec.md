@@ -1,0 +1,389 @@
+---
+status: ready
+---
+
+# 026 — Remote access
+
+<!-- Ready: every Open Question in §8 is answered and the human set `ready` (2026-11-06). Next: plan.md and tasks.md.
+Design reference (mechanism, figures): the "acceso remoto de Alma" brief the human chose. D1-D9 are the human's first decisions; the answers to OQ-1 to OQ-28 are the human's interview answers. None of them is re-asked. -->
+
+## 1. Summary
+The person can reach their own Alma from a phone, away from the PC. Alma gains a **remote channel**: one security layer that is the same whatever carries the bytes. Each phone is a **device** with its own non-exportable key, paired by a one-use QR that expires in 3 minutes plus a 6-digit code the person compares on both screens and approves on the PC. What a device may do is split into four **scopes** (chat, approve, home automation, cameras), global and all off until the person switches each one on; locks and alarms are a sub-switch, off by default, and opening or disarming them needs a **step-up** (a passkey the PC verifies) on top of the usual approval. Every remote action that changes something or shows a picture lands in the audit trail. The phone talks to a narrow API built for it, never to the desktop UI. The bytes travel over **Tailscale Serve** (HTTPS on the PC's `*.ts.net` name), set up by a guided wizard in the installed app, or over a **local test transport** that only tests use. The PWA that runs on the phone is served by the PC itself. A content-free push ("Alma te necesita") tells the person an approval is waiting. Remote access is opt-in and off by default, and turning it on needs a native confirmation. Alma-operated servers never see content: this spec adds none.
+
+## 2. Problem and goal
+Alma can already be reached from a phone through Telegram and WhatsApp, but both pass the content through a third party's servers and neither can control the house or show cameras. The person wants their own Alma, with their own agents, house and approvals, from outside the home without exposing the PC or trusting a relay with the content. Done means: a person with Tailscale on PC and phone can follow a wizard, pair a phone, chat, approve actions, operate the house and see pictures from the cameras they allowed, each only if they switched that capability on; a lost phone can be cut off from the PC at once; a stranger who is merely on the same network gets nothing; and every remote action is on the record.
+
+## 3. Scope
+**In:**
+- The remote channel in `coordinator/channels`: the transport strategy (interface), device identity and pairing, scopes, step-up, the narrow phone API, audit of remote actions, limits, the content-free push, and the status of the channel.
+- Two transports: **Tailscale** (through `tailscale serve`, HTTPS), and a **local test transport** that exists only in tests so the whole security layer is exercised without Tailscale.
+- The wizard and settings tab "Remote access" in the installed app: detect Tailscale, open its official download behind a native confirmation, run `tailscale serve` after a native confirmation showing the exact command, show three short notices (Tailscale's free plan, the public certificate name, renaming the PC) and the recommended ACLs as text, test the connection with the concrete cause on failure, pair, list and revoke devices, switch scopes, choose the allowed cameras, see the remote-activity list, and warn after a rename.
+- The tray kill switch.
+- The phone client: a small PWA served by the PC over the transport, built independent of its origin so spec 027 can reuse it.
+- Native confirmations in `main` (BR-29); protection against an agent or the coordinator turning remote access on.
+- Docs in the same PR: `docs/security/` (new risk R-14, `CONTROLS.md`, `PRIVACY.md`), glossary terms (done), ADR 0020 (written), and the specs listed in §7.1.
+
+**Out (and why):**
+- The Alma-run end-to-end encrypted relay: **later spec (027+)**. It changes the transport only; the remote channel built here must not need to change for it. The session-key end-to-end encryption layer is designed with it (BR-23).
+- Live camera video: **its own later spec**. 026 shows still pictures only.
+- Cloudflare bring-your-own tunnel: **not offered in v1** (public login URL, a third party reads the traffic).
+- WebRTC video, a self-hostable relay, a native phone app, Alma accounts (D9).
+- An installer (NSIS) wizard: the wizard lives in the installed app only.
+- Alma installing Tailscale (no installer, no package manager, no `winget`), Tailscale Funnel, editing Tailscale ACLs, and Headscale (a self-hosted Tailscale control server): not supported in v1.
+- Asking a vision model about a picture from the phone, saving camera pictures on the PC for the phone, and cellular-data handling (ignored).
+- Exposing anything beyond the four scopes: the vault, files, commands, settings, secrets, desktop threads, company threads, mail, WhatsApp, Instagram, voice and routines are not reachable from the phone (the agent in the remote chat can of course use its own tools under the usual approvals).
+- Changes to how Telegram and WhatsApp work (`../010-telegram/spec.md`, `../011-whatsapp/spec.md`).
+- The prerequisite fixes R-02, R-01 and the signing work of R-06: dependencies, not scope (see §7).
+
+## 4. Users and stories
+- **US-1** As a person, I want remote access off until I turn it on, and a system dialog an agent cannot click before it starts, so that nothing reaches my PC from outside by accident or by a manipulated agent.
+- **US-2** As a person, I want a wizard that detects Tailscale, helps me get it, tests the connection and tells me the concrete cause when it fails, so that I do not need to be technical.
+- **US-3** As a person, I want to pair my phone with a QR and a code I compare and approve on the PC, so that someone who photographs the QR or sits on my network cannot get in.
+- **US-4** As a person away from the PC, I want to chat with my agents from the phone, so that I can use Alma anywhere.
+- **US-5** As a person away from the PC, I want to see and answer the approvals my remote chat is waiting for, with the same rules as everywhere else, so that a run does not stall.
+- **US-6** As a person, I want to operate my house from the phone and see camera pictures, each only if I enabled it.
+- **US-7** As a person, I want locks and alarms off remotely by default and, when I enable them, to confirm with a passkey every time I open or disarm, so that a stolen unlocked phone cannot open my door.
+- **US-8** As a person, I want to see my paired phones and revoke one, or all, and have them cut off at once, so that a lost phone is cut off.
+- **US-9** As a person or reviewer, I want every remote action that changes something on the audit trail with the device that did it, and to see the remote activity on the PC.
+- **US-10** As the maintainer, I want the transport to be swappable behind one security layer and tests to run the whole layer without Tailscale, so that adding the relay later does not touch the security rules.
+- **US-11** As a person, I want my phone to nudge me when an approval is waiting, without the notification carrying any content, so that a run does not stall unseen.
+- **US-12** As a person, I want to shut remote access off in one click from the tray, and have my data rights cover the devices, so that I stay in control.
+
+## 5. Acceptance criteria
+Tests name the id: `it('AC-1.1 …')`. At draft stage no test exists, so testable criteria carry `[gap]`; `plan.md` maps each to a test file and the tag is replaced by the citation when the spec is `implemented`. UI text is cited by dictionary key (spec 025); the key table is §6.1. Wording that depends on an open question says "(OQ-n)". Ids are stable: new behavior takes the next free number of its group.
+
+### Opt-in and native confirmation (US-1, US-12)
+- **AC-1.1** (US-1) Given a fresh install or settings with no remote section, when Alma starts, then remote access is off, no listener is open and no transport is started. [gap]
+- **AC-1.2** (US-1) Given remote access is off, when the person turns it on in the tab (`remote.enable`), then `main` shows a native warning dialog titled `main.security.title` with `main.remote.enable`, `main.remote.enableDetail` and, when dormant devices exist, `main.remote.dormant` listing their names (AC-1.11), buttons `main.security.allow` / `main.security.cancel` (default Cancel); only "Allow" saves the setting and starts the channel. [gap] for the decision: a pure function (like `newCommands` in `src/main/guard.ts`) says which confirmations a settings change requires; the dialog itself is AC-1.3.
+- **AC-1.3** (US-1) [manual] Each native dialog of BR-29 is a system dialog, not drawn by the page. Checked in a dev run by triggering each and trying to click it from DevTools.
+- **AC-1.4** (US-1) Given the person cancels any of those dialogs, when the change would apply, then nothing is saved, nothing starts, the window gets the error `main.error.cancelled`, and the cancellation is audited like the existing `settings.update` denial. [gap]
+- **AC-1.5** (US-1) Given the coordinator sends `settings.patch` containing any remote-access key (the path a manipulated agent could reach), when `main` receives it, then those keys are ignored and the stored setting is unchanged. [gap]
+- **AC-1.6** (US-1) Given the tool registry, when it is built in any configuration, then it has no tool that reads, changes or starts remote access, pairing or devices. [gap]
+- **AC-1.7** (US-1) Given remote access is on, when the person turns it off (tab or tray), then the listener stops, every open remote connection is cut at once, and the paired devices become dormant: kept in the list, unable to connect, back when remote access is turned on again. [gap]
+- **AC-1.8** (US-1) Given remote access was on, when Alma restarts, then the channel starts again without a new confirmation; given it was off, nothing starts. [gap]
+- **AC-1.9** (US-1) Given a scope that is off, when the person turns it on, then `main` shows the native confirmation `main.remote.scope` naming that scope and only "Allow" applies it; turning a scope off needs no confirmation. [gap]
+- **AC-1.10** (US-1, US-7) Given the locks-and-alarms sub-switch is off, when the person turns it on, then `main` shows the native confirmation `main.remote.sensitive` and only "Allow" applies it; turning it off needs none. [gap]
+- **AC-1.11** (US-1) Given dormant devices exist when remote access is turned on, then the dialog of AC-1.2 lists them by name, so the person sees which phones return. [gap]
+- **AC-1.12** (US-1) Given remote access is turned on, the first time or any later time, when it starts, then the four scopes and the locks-and-alarms sub-switch are all off (the camera allow-list is a choice of cameras, kept; it reaches nothing while the cameras scope is off); the dialog of AC-1.2 lists dormant devices but not scopes. [gap]
+- **AC-1.13** (US-12) Given remote access is on, when the person picks `tray.remote.off` in the tray menu, then remote access turns off at once with no confirmation (AC-1.7 applies); the item is shown only while remote access is on. [gap]
+- **AC-1.14** (US-12) [manual] The tray item appears and disappears with the setting and its click cuts a connected phone. Checked with a paired phone.
+
+### Wizard and Tailscale (US-2)
+- **AC-2.1** (US-2) Given the Tailscale detector (injected, like `TelegramDeps`) reports "not installed", "installed but disconnected" or "installed and connected", when the wizard reads it, then each maps to its own state and text (`remote.wizard.tailscale.missing`, `remote.wizard.tailscale.disconnected`, `remote.wizard.tailscale.found`). "Disconnected" covers signed out and tailnet offline as one state (BR-37). Which signal the detector reads is a plan decision. [gap]
+- **AC-2.2** (US-2) Given "not installed", when the person presses `remote.wizard.tailscale.download`, then `main` shows a native confirmation (`main.remote.download` plus the URL) and opens the official Tailscale download page in the system browser only if the person allows; cancelling opens nothing. The URL is a constant in code, never taken from page, agent or setting input. [gap]
+- **AC-2.3** (US-2) Given any outcome of the wizard, when it ends, then Alma has not installed Tailscale: it ran no installer and no package manager (no `winget`). The only Tailscale programs Alma runs are the detection and the confirmed `tailscale serve` (AC-2.8). [gap]
+- **AC-2.4** (US-2) Given Tailscale is connected, when the person presses `remote.wizard.test`, then Alma checks, in order, the PC's internet, Tailscale, that MagicDNS and HTTPS certificates are on in the tailnet, and that its own listener is up, and shows `remote.wizard.test.ok` or exactly one of `remote.wizard.fail.noInternet`, `remote.wizard.fail.tailscaleDown`, `remote.wizard.fail.httpsOff`, `remote.wizard.fail.listener` (with the reason); the checks are injected and each cause has its own test. [gap]
+- **AC-2.5** (US-2) Given a paired device, when the person tests that device, then the PC sends it a test message through the full channel and shows `remote.wizard.test.ok`, or `remote.wizard.fail.phoneSilent` if it does not answer within 10 seconds. [gap]
+- **AC-2.6** (US-2) Given the channel status changes, when the tab is open, then it shows `channels.state.off`, `channels.state.connecting`, `channels.state.online` or `channels.state.error` with the cause under it, and the status is available to the window as a request and an event like the other channels. [gap]
+- **AC-2.7** (US-2) [manual] The wizard walks Check Tailscale, Download (if needed), Enable HTTPS in Tailscale (the person does it in the admin console; Alma tells them), Publish with Tailscale Serve, Test connection and Pair a phone, with the texts of §6.1; every failure shows its cause, never a generic error. Checked on a PC with Tailscale absent, stopped, running without HTTPS, and running with it.
+- **AC-2.8** (US-2) Given Tailscale is connected and HTTPS is on, when the person presses `remote.wizard.serve`, then `main` shows a native confirmation (`main.remote.serve` plus the exact command, with the local port Alma chose) and runs it only if the person allows; cancelling runs nothing and the channel stays unavailable with `channels.state.error`. The command comes from a pure function: it is always `tailscale serve` pointing at Alma's local listener and never `funnel`; a test asserts it for every input. [gap]
+- **AC-2.9** (US-2) Given the wizard, when it shows `remote.wizard.acl.hint`, then it is text only: Alma reads no Tailscale policy and never edits it. [manual]
+- **AC-2.11** (US-2) Given remote access starts for the first time, when Alma picks its local listening port, then it picks a free one and saves it; later starts reuse the saved port, and the `tailscale serve` command shown in AC-2.8 carries it. Given the saved port is taken at a later start, then the channel does not serve, its status is `channels.state.error` with `remote.wizard.fail.portTaken` naming the port, and the tab offers `remote.wizard.port.pick`; Alma changes nothing on its own, neither the saved port nor the Serve entry. [gap]
+- **AC-2.16** (US-2) Given the person presses `remote.wizard.port.pick`, when Alma picks another free port and saves it, then the `tailscale serve` command changes with it and goes through the native confirmation of AC-2.8 before it runs; nothing runs without it. [gap]
+- **AC-2.12** (US-2) Given remote access is turned off or Alma quits, when it does, then Alma removes the Serve entry it created and only that one; an entry the person made themselves is never removed. Removing needs no native dialog, on turning remote access off or on quitting (it narrows access). [gap]
+- **AC-2.13** (US-2) Given the person already uses Tailscale Serve on the path Alma needs, when the wizard or the channel would publish, then Alma refuses, overwrites nothing and shows `remote.wizard.fail.serveBusy`. [gap]
+- **AC-2.14** (US-2) Given the wizard, when it reaches the HTTPS step and the end of pairing, then it shows the three short notices `remote.wizard.notice.plan` (with a link to Tailscale's terms; it states no plan limits), `remote.wizard.notice.certs` and `remote.wizard.notice.rename`. The link opens a constant URL in the system browser through `main`, with no native dialog. [manual]
+- **AC-2.15** (US-2) Given the PC's `*.ts.net` name recorded when devices were paired, when Alma finds a different name (at start or while running), then the tab shows `remote.wizard.renamed` and offers `remote.wizard.renamed.revoke`, which leads to the native confirmation of AC-6.5 so the old phones can pair again. [gap]
+- **AC-2.10** (US-2) Given Tailscale reports an expiry for the PC's node key, when fewer than 14 days remain, then the tab shows `remote.wizard.keyExpiry` with the days left; with no expiry reported, nothing is shown. [gap]
+
+### The transport strategy and the shared layer (US-10)
+- **AC-3.1** (US-10) Given the local test transport, when a request without device credentials reaches any operation except pairing, then it is refused and no data is returned. The same test runs against the Tailscale transport's request handler. [gap]
+- **AC-3.2** (US-10) Given the same device, scope and operation presented through two different transports, when the authorization function runs, then it returns the same verdict: the function takes no transport input. [gap]
+- **AC-3.3** (US-10) Given a request that arrives from an address inside the tailnet but carries no valid device credential, when it is handled, then it is refused: being on the network never suffices. [gap]
+- **AC-3.4** (US-10) Given any transport, when it chooses where to listen, then it never binds all interfaces (`0.0.0.0` or `::`); the Tailscale transport listens on loopback behind `tailscale serve`, and a request that reaches loopback from any local process still needs a valid device credential. The bind decision is a pure function with its own test, including a negative fixture. [gap]
+- **AC-3.5** (US-10) Given the Tailscale transport is selected but Tailscale or Serve is unavailable, when the channel starts, then it does not serve and its status is `channels.state.error` with the concrete cause of AC-2.4. [gap]
+- **AC-3.6** (US-10) Given the phone calls any operation outside the closed list of the narrow API (BR-7), when it is handled, then it is refused as unknown; nothing reaches `window.desktop` IPC, the `home.*` window requests, settings, secrets, vault or files. A snapshot test of the route table fails if a route is added without updating it. [gap]
+- **AC-3.7** (US-10) Given a settings document that names the local test transport, or any code path reachable from settings or the wizard, when the channel is built in a shipped configuration, then that transport cannot be selected: the settings schema rejects it. [gap]
+- **AC-3.8** (US-10) Given the built PWA, when its files are scanned, then no hard-coded host or origin is found; it takes the PC's address from where it was loaded and from the QR. [gap]
+
+### Pairing (US-3)
+- **AC-4.1** (US-3) Given remote access is on, when the person starts pairing, then the PC creates a one-use pairing secret and shows a QR with `remote.pair.qr.hint` (3 minutes) carrying the PC's address, the secret in the URL fragment after `#` (which browsers never send to a server) and the fingerprint of the PC's key; with remote access off, no pairing can start. [gap]
+- **AC-4.2** (US-3) Given a valid, unexpired secret presented with a phone's new public key, when the PC receives it, then it does not issue a device: it shows the pairing request with a 6-digit code (`remote.pair.code.compare`, the same code on the phone's screen), a field `remote.pair.name` for the device's name, and `remote.pair.approve` / `remote.pair.reject`. [gap]
+- **AC-4.3** (US-3) Given the person presses approve, when `main` shows the native confirmation `main.remote.pair` with the name and the code, then pairing completes only on "Allow": a device exists with its own key, the typed name and no scope of its own (scopes are global, BR-25); the secret is burned; the request and the approval are audited (BR-30); the phone shows the paired state. [gap]
+- **AC-4.4** (US-3) Given the person rejects, closes the request or cancels the native dialog, when the PC handles it, then no device is created, the secret is burned and the phone shows an error. [gap]
+- **AC-4.5** (US-3) Given a secret already used, rejected or older than 3 minutes (checked on the PC's clock), when it is presented again, then it is refused with `remote.pair.expired` and nothing is created: a secret is good for exactly one presentation. [gap]
+- **AC-4.6** (US-3) Given 3 bad secrets (wrong, already used or expired; a reject by the person does not count), when another pairing is tried, then pairing is locked for 5 minutes by time (`remote.pair.locked` with the minutes left), whatever the secret, and unlocks by itself. [gap]
+- **AC-4.7** (US-3) Given a photographed QR (a secret with no human approval), when an attacker presents it, then the PC still waits for the person's approval, and without it no key is issued. [gap]
+- **AC-4.8** (US-3) [manual] Pair a real phone end to end: scan, compare the 6-digit code on both screens, name it, approve on the PC, then see the phone show the paired state. Checked with an Android and an iPhone.
+- **AC-4.9** (US-3) Given more than 5 pairing requests in one minute in total (any phone), when another arrives, then it is refused with `remote.pwa.rateLimited` and nothing changes. [gap]
+- **AC-4.10** (US-3) Given a pairing request is already pending, when another arrives, then it is refused with `remote.pair.busy`. [gap]
+- **AC-4.11** (US-3) Given 5 devices are already paired (dormant ones count), when a sixth pairing starts or arrives, then it is refused with `remote.pair.limit` and nothing is created. [gap]
+- **AC-4.12** (US-3) Given the key the PWA meets does not match the fingerprint in the QR, when the PWA starts pairing, then it aborts and shows `remote.pwa.fingerprint`, sending nothing to that host. [gap]
+- **AC-4.13** (US-3, US-7) Given a pairing, when the person approves, then the phone registers a WebAuthn passkey with the PC as part of pairing (the PC keeps only its public part, for the step-up). Given the phone cannot create one, then pairing still completes with `remote.pwa.passkey.none` shown, and that phone cannot open or disarm (AC-5.21). [gap]
+
+### Scopes (US-4 to US-7)
+- **AC-5.1** (US-4, US-5, US-6) Given a paired device and an operation of an enabled scope, when the request is authorized, then it runs. Given the scope is disabled, then it is refused, the phone shows `remote.pwa.scopeOff`, and nothing executes. [gap]
+- **AC-5.2** (US-4, US-5, US-6) Given the person changes a scope on the PC, when the next request arrives (also on an open connection), then the new state applies to every device with no re-pairing: scopes are global. [gap]
+- **AC-5.3** (US-4) Given a key the PC does not know (never paired, revoked or deleted) or one idle for more than 15 days, when it calls any operation, then it is refused with no data and the same answer in each case; the PWA then shows `remote.pwa.revoked` and wipes itself (AC-8.5). [gap]
+- **AC-5.4** (US-4) Given a request that is not valid for its operation's schema (malformed, missing fields) or over the limits of BR-31, when it is handled, then it is rejected before any handler runs. [gap]
+- **AC-5.5** (US-4) Given the chat scope and a message of at most 8000 characters from a device, when it arrives, then it runs the agent chosen on the PC (`channels.agent`) on the single shared remote thread and the answer returns to the phone; a failed run returns `chan.failed`; a message that cannot be delivered to the PC shows `remote.pwa.notDelivered`, never a silent loss; a longer message is refused with `remote.pwa.tooLong`. [gap]
+- **AC-5.6** (US-5) Given the approve scope, when an approval of the remote thread is pending, then the device sees what the Telegram surface shows (`chan.allowQuestion` or `chan.flagged`, the reason, `chan.tool`, the input cut at 1500 characters) and can answer allow or deny through the existing broker (`respondApproval`) for `write` and `exec` calls; approvals of any other thread are neither listed nor answerable from the phone. [gap]
+- **AC-5.7** (US-5) Given an approval already answered on another surface (app, Telegram, WhatsApp, voice) or unknown, when the device answers it, then the answer is ignored, nothing runs twice, and the phone shows `remote.pwa.alreadyAnswered`. [gap]
+- **AC-5.8** (US-5) Given any approval (`write`, `exec` or `publish`), when it is shown on the phone, then answering is valid once: "Siempre permitir" is never offered, so the phone can never write an `alwaysAllowTools` rule. [gap]
+- **AC-5.9** (US-5) Given the approve scope is off, when approvals are pending, then the device cannot see or answer them and they stay pending for the other surfaces. [gap]
+- **AC-5.10** (US-6) Given the home automation scope, when a device lists or controls things, then the narrow API calls the same functions as the `home_*` tools and applies the same `ToolRisk` and approval policy as the tool (`home_control` is `home`: it does not ask); a sensitive thing is never controlled through the everyday control (spec 013 AC-6.1), and the house being off or disconnected returns the existing explanations, never a blank. The phone never talks to Home Assistant. [gap]
+- **AC-5.11** (US-6) Given the cameras scope and a camera in the allow-list (AC-5.22), when a device asks for a camera picture, then it receives one still through the existing `cameraSnapshot`, seen in transit only: nothing is saved to the PC's inbox or anywhere else on the PC. No live video exists in 026 and no operation asks a vision model about a picture; a camera that fails returns the existing cause, never a blank. Cellular data is ignored: no warning, no block. [gap]
+- **AC-5.12** (US-7) Given the home scope is on and the locks-and-alarms sub-switch is off, when a device asks to control a lock, an alarm, a siren or a gate, garage or door cover, then it is refused with `remote.pwa.sensitiveOff` and nothing executes: remote control of those is off by default. [gap]
+- **AC-5.13** (US-7) Given the sub-switch is on, when a device asks to open or disarm a sensitive thing without a valid step-up, then it is refused (`remote.pwa.stepUp.failed`) and nothing executes. A step-up is a WebAuthn passkey assertion that the PC verifies, needed on every such action with no time window. With a valid step-up the action proceeds into the ordinary approval flow (`home_secure_control` is `publish`: the person is asked on the phone, spec 013 AC-6.2b), so the phone shows two confirmations. [gap]
+- **AC-5.14** (US-7) Given a step-up the person cancels or fails on the phone, when the PC is told, then the action does not run and `remote.pwa.stepUp.failed` is shown. [gap]
+- **AC-5.15** (US-4) [manual] On a real phone, chat, approve, list the house and fetch a camera picture, each with its scope on and off. Checked after implementation.
+- **AC-5.16** (US-4) Given a run started from the phone is in progress, when the person presses stop on the phone, then the run is aborted through the same path as stopping it on the PC, and its pending approvals resolve as denied (spec 004 AC-8.1). [gap]
+- **AC-5.17** (US-4) Given any operation naming a thread other than the current shared remote thread (a desktop, channel or company thread, or an earlier remote one), when it is handled, then it is refused: the phone can neither list nor read nor write another thread. [gap]
+- **AC-5.18** (US-6) Given the approval mode is "Solo lectura" (read-only), when a device controls a house thing, then the call is refused with the existing note "Bloqueado por el modo de aprobación", as the tool would be. [gap]
+- **AC-5.19** (US-6) Given a camera picture request, when it is handled, then it is authorized as a `write` call (like `camera_look`): it asks per the approval mode and "Siempre" rule, and where it asks, the approval card appears on the phone (it belongs to the remote thread). [gap]
+- **AC-5.20** (US-7) Given a sensitive thing, when the requested action is unlock, open (gate, garage, door cover) or disarm, then a step-up is required; when it is lock, close, arm_home, arm_away, a siren's trigger or silence, or a cover's stop or set-position, then no step-up is required (they neither open nor disarm); the approval card still is, as `home_secure_control` is `publish`. [gap]
+- **AC-5.21** (US-7) Given a phone with no passkey, when it asks to open or disarm, then the action is not offered and, if requested anyway, is refused with `remote.pwa.stepUp.unsupported`; there is no fallback. [gap]
+- **AC-5.22** (US-6) Given the cameras scope, when the person chooses cameras in the tab (`remote.scope.cameras.allow`), then only the cameras in that allow-list are listed or served to the phone; with an empty list none is reachable (`remote.cameras.none`), and a request for any other camera is refused with `remote.pwa.cameraOff`. Adding a camera to the list needs the native confirmation `main.remote.camera` naming it, and only "Allow" adds it; removing a camera needs none. The allow-list persists across turn-ons of remote access. [gap]
+- **AC-5.23** (US-6) Given a still larger than 2 MB, when it is fetched, then it is refused with `remote.pwa.photoTooBig` and not sent. [gap]
+- **AC-5.24** (US-4) Given the chat scope, when the person starts a new conversation on the phone (`remote.pwa.new`), then a new shared remote thread replaces the old one as the target (the old thread stays in the sidebar on the PC), like Telegram's `/nuevo` (spec 010 AC-3.10). [gap]
+- **AC-5.25** (US-5) Given a new conversation replaced the remote thread, when approvals of the old thread are pending, then the phone does not see them (AC-5.6). [gap]
+
+### Devices and revocation (US-8)
+- **AC-6.1** (US-8) [manual] The tab lists `remote.devices.title`: each device with its name, when it was paired and `remote.devices.lastSeen`; with none, `remote.devices.none`. Checked with zero, one and two paired phones.
+- **AC-6.2** (US-8) Given a device, when the person revokes it after confirming `remote.devices.revoke.confirm`, then its open connections are cut at once, its record leaves the list at once, its next request is refused (AC-5.3), the other devices are unaffected, and the revocation is audited; its earlier audit entries stay. [gap]
+- **AC-6.3** (US-8) Given a revoked device, when it tries to reconnect with its old key, then it is refused; it can return only through a full pairing. [gap]
+- **AC-6.4** (US-8) [manual] While remote access is off, the tab lists paired devices marked `remote.devices.dormant`. Checked by turning remote off with a paired phone.
+- **AC-6.5** (US-8) Given paired devices, when the person presses `remote.devices.revokeAll`, then `main` shows the native confirmation `main.remote.revokeAll`; only on "Allow" every device is revoked as in AC-6.2. [gap]
+- **AC-6.6** (US-8) Given the narrow API, when its operations are listed, then none acts on a device other than the caller's own, and on its own only the "forget" of AC-6.10: revocation is PC-only. [gap]
+- **AC-6.7** (US-8) Given a device not used for 15 days, when it next calls, then its key is refused as in AC-5.3 and it must pair again. The idle clock keeps running while remote access is off. [gap]
+- **AC-6.9** (US-8) Given a device idle for more than 15 days (dormant or not), when Alma checks, then the device is removed from the list automatically, with its push subscription (AC-11.4), and an audit entry is written with `actor: 'system'` (the app itself) and `detail.deviceId`. [gap]
+- **AC-6.10** (US-8) Given the phone's "Forget this PC" (`remote.pwa.forget`), when the PC is reachable, then the phone tells it and the PC removes that device from its list (audited as a remote operation that changes something); the phone wipes itself whether or not the PC was reachable. [gap]
+- **AC-6.8** (US-8) Given a device that proved its key, when the PC issues a session, then the session lasts 1 hour and is renewed silently by signing again with the device key; past an hour without renewal, requests are refused until renewed. [gap]
+
+### Audit (US-9)
+- **AC-7.1** (US-9) Given a remote operation that sends a chat message, starts a new conversation, stops a run, answers an approval, controls a device, requests a camera picture, performs a step-up or forgets the PC, when it is handled, then an audit entry is written with `actor: 'remote'` and `detail.deviceId`, through the existing `audit()` of `src/shared/audit.ts`. Lists, polling and other reads that show no picture are not audited. [gap]
+- **AC-7.2** (US-9) Given any remote audit entry, when it is written, then it carries identifiers and outcomes only: no message text, no pairing secret, no pairing code, no key material, no step-up proof, no push subscription. A test feeds known secrets through every remote operation and scans the trail. [gap]
+- **AC-7.3** (US-9) Given pairing, revocation and revoke-all, when they happen, then each is audited: the phone's request as `remote`, the person's approve, reject, revoke or revoke-all as `user`, all with `detail.deviceId` where a device exists. [gap]
+- **AC-7.4** (US-9) Given the trail cannot be written, when a remote operation runs, then the operation is not interrupted (spec 022 AC-3.9). [gap]
+- **AC-7.5** (US-9) Given a failed authentication, a scope refusal, a failed step-up or a failed pairing, when it happens, then it is audited with `actor: 'remote'`, outcome `denied`, `throttle: true` (one per minute for the same action and target), no names and no content, with `detail.deviceId` only when the device is known. [gap]
+- **AC-7.7** (US-9) Given a phone-initiated call that is a tool call (house control, camera picture), when it is authorized and run, then there are two audit entries: the existing tool entry (`tool.authorize` / `tool.run`, as today, the contract of spec 004 AC-9.1 intact) and a `remote` entry with `detail.deviceId` (AC-7.1). [gap]
+- **AC-7.6** (US-9) [manual] The tab has `remote.activity.title`: a list of recent remote entries read from the audit trail (when, device name or, for a deleted device, its id, action, outcome), or `remote.activity.none`. Checked after a paired phone chats and a stranger fails to authenticate.
+
+### Failures and offline (US-4 to US-8)
+- **AC-8.1** (US-4) Given the PC is asleep, Alma is closed or Tailscale is down, when the phone calls, then the PWA shows `remote.pwa.pcUnreachable` and retries; nothing is queued, and a message being typed stays in the input box. Alma does not force tray mode. [gap]
+- **AC-8.2** (US-4) Given Tailscale on the PC signs out or the tailnet goes offline while remote access is on, when it happens, then the channel status becomes `channels.state.error` with `remote.wizard.fail.tailscaleDown` (one state, one text), the PC retries by itself, shows the status in the tab and sends one desktop notification `remote.notice.down` per outage (not one per retry), and recovers by itself when Tailscale returns. [gap]
+- **AC-8.3** (US-5) Given Alma restarts while approvals were pending, when the phone answers one, then it is refused as unknown (spec 004 AC-8.3, AC-8.7) and the phone shows `remote.pwa.alreadyAnswered`. [gap]
+- **AC-8.4** (US-4) Given the connection drops while the agent is answering, when the phone reconnects, then it fetches the committed state of the conversation instead of replaying a partial draft. [gap]
+- **AC-8.5** (US-8) Given the PWA receives the refusal of AC-5.3, when it handles it, then it deletes its key, its push subscription and its app shell, and shows `remote.pwa.revoked`; the phone keeps no conversation or picture to delete. [manual] Checked by revoking a phone and reopening its PWA.
+- **AC-8.6** (US-8) [manual] The PWA has a `remote.pwa.forget` button (confirm `remote.pwa.forget.confirm`) that does the same wipe on the phone and tells the PC as in AC-6.10. Checked with a paired phone, reachable and not.
+
+### Privacy, rights and documents (US-1, US-9, US-12)
+- **AC-9.1** (US-1) Given remote access on or off, when any remote operation runs, then neither the channel nor the Tailscale transport opens an outbound connection to a host operated by Alma; the only outbound traffic of the channel itself is the content-free push of AC-11.1 to the browser vendors' push services, and all other outbound traffic belongs to the Tailscale client. [gap]
+- **AC-9.2** (US-1) [manual] The same PR contains: R-14 in `docs/security/RISKS.md`; new and updated rows in `CONTROLS.md`; the data row, the Tailscale and push-service provider rows, the public certificate name and the audit note in `PRIVACY.md`; ADR 0020 and its index row; and the amendments of §7.1. Checked by reading the PR diff against §7.
+- **AC-9.3** (US-1) [manual] Every key of §6.1 exists in its dictionary (shared dictionaries for the PC, the PWA's own small es/en dictionary for the phone, each with a parity test); the parity and hardcoded-text gates of spec 025 pass. Checked by `pnpm run test`.
+- **AC-9.4** (US-12) Given "Borrar mi historial" (`privacy.erase`), when the person confirms, then every device is revoked as in AC-6.2 and all device records and push subscriptions are deleted, and the erase entry still records only counts. [gap]
+- **AC-9.5** (US-12) Given "Exportar mis datos" (`privacy.export`), when it runs, then the export also contains the device list (names, paired and last-seen dates), never key material, push keys or subscriptions. [gap]
+
+### Limits (US-4 to US-6)
+- **AC-10.1** (US-4) Given a request body over 1 MB, a photo over 2 MB or a chat message over 8000 characters, when it arrives, then it is rejected before processing. [gap]
+- **AC-10.2** (US-4) Given a device that sends more than 60 requests in a minute, when another arrives, then it is refused with `remote.pwa.rateLimited`; other devices are unaffected. [gap]
+- **AC-10.3** (US-4) Given a device with 2 connections open, when it opens a third, then the third is refused. [gap]
+- **AC-10.4** (US-4) Given a request the PC does not finish within 30 seconds, when the time passes, then it ends with an error and releases the connection. [gap]
+
+### Content-free push (US-11)
+- **AC-11.1** (US-11) Given the approve scope is on, a device has a push subscription, and an approval of the remote thread becomes pending, when it does, then the PC sends the device one push with no content, directly to the browser vendor's push service, with no Alma server involved; the phone's service worker shows the fixed text `remote.pwa.push.text`. The push carries no tool name, input, thread title or reason. [gap]
+- **AC-11.2** (US-11) Given nothing is pending, the approve scope is off, or the device has no subscription, when time passes, then no push is sent. [gap]
+- **AC-11.3** (US-11) Given push keys and subscriptions, when they are stored, then they are sealed with `safeStorage` and never appear in logs, audit entries or errors. [gap]
+- **AC-11.4** (US-11) Given a device is revoked, revoked by "revoke all", or erased, when it happens, then its push subscription is deleted. [gap]
+- **AC-11.5** (US-11) Given a push that fails, when the push service errors or is unreachable, then the approval stays pending and unaffected. [gap]
+- **AC-11.6** (US-11) [manual] On iOS the PWA must be installed to the home screen to receive the push; the behavior is to be verified on a real iPhone before `ready` (the design reference leaves it unverified). Checked with an iPhone.
+
+## 6. Business rules
+D1-D9 and the answers to OQ-1 to OQ-21 are the human's. Open questions are not rules (§8).
+
+- **BR-1** (D1) There is one security layer, the remote channel, in `src/coordinator/channels`. The transport is a strategy: one interface, one implementation per transport, no `if` on the transport inside the security layer. A transport only moves bytes and carries no authority.
+- **BR-2** (D2, D3, OQ-17) Order: the common channel with the local test transport, then Tailscale, then the relay in a later spec (027+). The local test transport exists only in tests and is not selectable in a shipped build. Cloudflare bring-your-own is not offered in v1.
+- **BR-3** (D3) Alma-operated servers never see content on any path. This spec adds no Alma server; the third parties in the path are Tailscale's infrastructure and, for the content-free push, the browser vendors' push services.
+- **BR-4** (D4, OQ-1) Each phone is a device with its own revocable key. A device is created only by pairing (BR-21). The wizard lives in the installed app as the tab "Remote access"; there is no installer wizard.
+- **BR-5** (D5, OQ-6) Scopes are chat, approve, home automation and cameras. They are global, not per device, all off every time remote access is turned on, and each is switched on separately on the PC. Locks and alarms are a sub-switch under home automation, off by default; when on, opening and disarming need a step-up (BR-24).
+- **BR-6** (D6) Every remote action goes to the existing audit trail (`src/shared/audit.ts`), `actor: 'remote'`, the device id in `detail.deviceId`. The audit module is not changed.
+- **BR-7** (D7) The phone talks to a narrow, purpose-built API: a closed list of operations (chat send, read and stop on the one remote thread; approvals list and answer for that thread; house list and control; camera pictures of the allowed cameras; pairing; session; status; push subscription; forget the caller's own device). It is not the desktop UI and does not reuse `window.desktop` or the window's `home.*` requests (those run with no approval because the person is the actor, spec 013 AC-9.6; a phone is not). No operation acts on another device, and none asks a vision model.
+- **BR-8** (D8, OQ-9) The wizard detects Tailscale, opens the official download behind a native confirmation (the `src/main/guard.ts` pattern: pure decision in a function, dialog in `main`), runs `tailscale serve` after a native confirmation that shows the exact command, tests the connection and shows the concrete cause on failure. Alma only detects Tailscale and opens the official download: it never installs it, never uses `winget`, never uses Funnel and never edits Tailscale ACLs; it shows recommended ACLs as text (exact wording is a plan and UI-key matter). Headscale is not supported in v1. Alma picks a free local port the first time and saves it, and the `tailscale serve` command carries it; a taken port is a clear error. When remote access is turned off or Alma quits, Alma removes only the Serve entry it created, never one the person made; if the person already uses Serve on the same path, Alma refuses and says why.
+- **BR-9** (D9) No Alma accounts. A device's identity is its key. The Tailscale account is Tailscale's, not Alma's.
+- **BR-10** Remote access is opt-in and off by default. It stays off by default until spec 001 delivers code signing and Electron Fuses (R-06); flipping the default is a spec change, not a code change.
+- **BR-11** Turning remote access on needs a native confirmation in `main`. The remote-access settings are not changeable through the coordinator's `settings.patch`, and no agent tool touches remote access, pairing or devices (so this spec adds no tool and no new `ToolRisk`).
+- **BR-12** The `approve` scope is a remote front-end onto the existing approval broker. ToolRisk classes, approval modes, `publish` always asking and never "always", and "first answer wins" across surfaces apply unchanged (spec 004). The phone sees only the approvals of its current remote thread and may answer `write`, `exec` and `publish` calls; every answer is valid once and the phone can never choose "Siempre permitir".
+- **BR-13** (OQ-14) The narrow API calls the same functions as `home_control` and `camera_*` and applies the same `ToolRisk` and approval policy as those tools: house control (`home`) does not ask; camera pictures (`write`) ask where the mode asks, on the phone; "Solo lectura" also blocks house control from the phone. A phone-initiated tool call leaves two audit entries: the tool's own (`tool.authorize` / `tool.run`, spec 004 contract intact) and a `remote` entry with the device id. The phone never reaches Home Assistant.
+- **BR-14** (OQ-9) The network position never authenticates. The listener never binds all interfaces; the Tailscale transport listens on loopback behind `tailscale serve` (Serve is private to the tailnet; Funnel, the public one, is never used), so the phone's address is an HTTPS `*.ts.net` name.
+- **BR-15** Secrets of this feature (pairing secret, pairing code, device key material, step-up proof, push keys and subscriptions, the PC's key) never appear in logs, audit entries, error messages, fixtures or prompts. Any secret the PC must keep is sealed with `safeStorage` through `main/settings.ts`, never written in clear.
+- **BR-16** Settings of this feature live in `main/settings.ts` with a type and default in `shared`; `shared` holds the remote API schemas (Zod) and the pure decisions (authorize, pairing state, bind check, serve command, confirmations required); I/O is a thin shell (Constitution IV).
+- **BR-17** (OQ-20) UI work for this spec, on the PC (tab, wizard, device list, dialogs) and on the phone (PWA), loads the `console-ui` and `umbra-ui` skills at the plan and implement stages, and the plan names the components and tokens it uses. The PWA's style is `umbra-ui` adapted to touch.
+- **BR-18** (OQ-12) The phone client is a separate small PWA served by the PC over the transport. It is built independent of its origin (no hard-coded host) so spec 027 can reuse it.
+- **BR-19** Failure texts name a concrete cause, never a generic error (D8). The causes available at this stage are those in AC-2.4, AC-2.5 and AC-8.2.
+- **BR-20** UI text, by dictionary key (§6.1). The PC's keys live in the shared dictionaries; the phone's keys (`remote.pwa.*`) live in the PWA's own small es/en dictionary, which follows the phone's language (OQ-20).
+- **BR-21** (OQ-2) Pairing: the QR carries the PC's address, a one-use secret in the URL fragment after `#`, and the fingerprint of the PC's key; it expires in 3 minutes; a secret is good for one attempt. A 6-digit code is shown on the PC and on the phone and the person compares it. After 3 bad secrets (wrong, used or expired; a reject by the person does not count), pairing locks for 5 minutes by time. At most 5 pairing requests per minute in total are accepted, and only one pairing can be pending. The person names the device at approval. Scanning alone grants nothing.
+- **BR-22** (OQ-3, OQ-4) At most 5 devices can be paired (dormant ones count). A session lasts 1 hour and is renewed silently by signing with the device key; a device idle for 15 days must pair again; the idle clock keeps running while remote access is off, and an expired device is removed from the list automatically. Revoking cuts open connections at once and deletes the record from the list at once; its audit entries stay. A refusal of a key is the same for a never-paired, revoked, deleted or idle-expired key, and the PWA wipes itself on any such refusal. "Revoke all" exists and needs a native confirmation. Revocation is PC-only in v1.
+- **BR-23** (OQ-3, OQ-18) The phone's key is a non-exportable WebCrypto key in browser storage. In 026 every request is authenticated as a paired, non-revoked device; the mechanism (a signature per request, or a session credential issued after a signature) is a plan decision recorded in the ADR. The session-key end-to-end encryption layer is designed with the relay (027+).
+- **BR-24** (OQ-5) The step-up is a WebAuthn passkey assertion verified by the PC, on every such action, with no time window and no fallback: a phone without a passkey cannot do those actions. It applies to the sensitive things of spec 013 (locks, alarms, sirens, gate, garage and door covers) only in the opening and disarming direction (unlock, open, disarm); closing, locking and arming need none, and neither do a siren's trigger or silence or a cover's stop or set-position. It is added to the existing approval card, not a replacement: the phone shows two confirmations. The passkey is registered on the phone during pairing.
+- **BR-25** (OQ-6, OQ-25) Chat: one shared remote thread answered by the agent chosen on the PC (like Telegram); the phone can cancel a run and can start a new conversation (a new shared remote thread, like Telegram's `/nuevo`); no access to desktop or company threads, or to earlier remote threads.
+- **BR-26** (OQ-7) Cameras in 026 are still pictures only, through the existing `cameraSnapshot`, seen in transit and not saved to the PC's inbox. The scope does not include asking the vision model about a picture. Every camera is enabled one by one in an allow-list, each addition confirmed natively; none is reachable until chosen; the list persists across turn-ons of remote access. A still over 2 MB is refused with a message. Cellular data is ignored. Live video is out of scope and becomes its own later spec.
+- **BR-27** (OQ-8) Push without content: the fixed text "Alma te necesita" (shown by the phone's service worker in the phone's language), sent only when an approval of the remote thread is pending, by the PC directly to the browser vendor's push service with no Alma server. The push keys are sealed with `safeStorage`; revoking a device deletes its subscription. iOS needs the PWA installed to the home screen; iOS behavior stays to verify.
+- **BR-28** (OQ-9, OQ-13) The PWA is served over Tailscale Serve HTTPS on the PC's `*.ts.net` name. The person turns on MagicDNS and "Enable HTTPS" in the Tailscale admin console; Alma tells them and detects when it is missing (AC-2.4).
+- **BR-29** (OQ-15, D8, OQ-3, OQ-9) Native confirmations in `main`, not clickable from the page: turning remote access on (listing dormant devices); turning on each scope; turning on locks and alarms; adding a camera to the allow-list; approving a pairing (the name is typed in the tab and shown in the dialog with the code); "Revoke all"; running `tailscale serve` (showing the command); opening the Tailscale download. Narrowing (turning a scope or remote access off, the tray kill switch, revoking one device, removing a camera from the allow-list, removing Alma's own Serve entry) needs none, and neither does opening the link to Tailscale's terms.
+- **BR-30** (OQ-10) Audit: every remote operation that changes something or shows a picture, plus failures (failed authentication, scope refusal, failed step-up, failed pairing) throttled to one per minute with no names; lists and polling are not audited. A phone-initiated tool call has two entries (BR-13). The automatic removal of an idle-expired device is audited with `actor: 'system'`. The remote-activity list on the PC is a view over these entries.
+- **BR-31** (OQ-19) Limits: approval input shown up to 1500 characters (existing); request body 1 MB; photo 2 MB; chat message 8000 characters; 60 requests per minute per device; 2 simultaneous connections per device; 30-second timeouts; the wizard's connection test waits 10 seconds for the phone.
+- **BR-32** (OQ-11) The phone keeps only its key and the app shell: no conversation, approval or picture cache. A device the PC no longer knows wipes itself on its next connection; a "Forget this PC" button wipes it on demand, tells the PC when it can reach it (the PC removes the device from its list), and wipes the phone regardless.
+- **BR-33** (OQ-4) Remote works only while Alma runs and the PC is awake; the phone says so clearly; there is no message queue and tray mode is not forced.
+- **BR-34** (OQ-3, OQ-23) Turning remote access off keeps paired devices dormant, not forgotten; the native confirmation that turns it on again lists the dormant devices that will return, but not scopes, because every turn-on starts with all scopes off.
+- **BR-35** (OQ-21) "Borrar mi historial" also revokes all devices and deletes their records; "Exportar mis datos" includes the device list.
+- **BR-36** (OQ-10) A tray item turns remote access off at once with no confirmation.
+- **BR-37** (OQ-13) "Signed out" and "tailnet offline" are one state with one text; Alma retries by itself and tells the person on the PC with the status in the tab and one desktop notification per outage; the tab warns 14 days before the PC's Tailscale node key expires.
+- **BR-38** (OQ-13) The wizard shows three short, factual notices: Tailscale's free Personal plan is for non-commercial use (a link to Tailscale's terms; Alma states no limits), enabling HTTPS publishes the machine name in public certificate logs, and renaming the PC breaks every paired phone.
+- **BR-39** (OQ-13) After a rename Alma detects the changed name, warns in the tab and offers to revoke the old phones so they can pair again (through the native confirmation of "Revoke all").
+
+### 6.1 UI text keys
+The values are an initial wording; the dictionaries are the source once implemented. Keys marked (reuse) already exist. `{days}` and `{minutes}` take plural forms per spec 025 AC-2.6 where the wording needs them.
+
+| Key | es (rioplatense) | en (US) |
+|---|---|---|
+| `settings.tab.remote` | Acceso remoto | Remote access |
+| `remote.enable` | Activar el acceso remoto | Turn on remote access |
+| `remote.offByDefault.hint` | Está apagado. Mientras lo esté, Alma no acepta conexiones desde ningún celular. | It is off. While it is off, Alma accepts no connection from any phone. |
+| `remote.scope.chat` | Chat | Chat |
+| `remote.scope.approve` | Aprobar acciones | Approve actions |
+| `remote.scope.home` | Domótica | Home automation |
+| `remote.scope.cameras` | Cámaras (fotos) | Cameras (pictures) |
+| `remote.scope.sensitive` | Cerraduras y alarmas | Locks and alarms |
+| `remote.scope.sensitive.hint` | Abrir o desarmar pide siempre tu passkey en el celular. | Opening or disarming always asks for your passkey on the phone. |
+| `remote.scope.cameras.allow` | Cámaras permitidas | Allowed cameras |
+| `remote.cameras.none` | Ninguna cámara permitida todavía. Elegí cuáles se pueden ver desde el celular. | No camera allowed yet. Choose which ones can be seen from the phone. |
+| `remote.wizard.tailscale.found` | Tailscale está instalado y conectado. | Tailscale is installed and connected. |
+| `remote.wizard.tailscale.missing` | Tailscale no está instalado en esta PC. | Tailscale is not installed on this PC. |
+| `remote.wizard.tailscale.disconnected` | Tailscale está instalado pero desconectado. | Tailscale is installed but disconnected. |
+| `remote.wizard.tailscale.download` | Descargar Tailscale | Download Tailscale |
+| `remote.wizard.serve` | Publicar con Tailscale Serve | Publish with Tailscale Serve |
+| `remote.wizard.test` | Probar la conexión | Test the connection |
+| `remote.wizard.test.ok` | La conexión funciona. | The connection works. |
+| `remote.wizard.fail.noInternet` | La PC no tiene internet. | This PC has no internet. |
+| `remote.wizard.fail.tailscaleDown` | Tailscale está desconectado. | Tailscale is disconnected. |
+| `remote.wizard.fail.httpsOff` | MagicDNS o el HTTPS de Tailscale no están activados en tu cuenta. Activalos en la consola de Tailscale. | MagicDNS or Tailscale HTTPS is not turned on in your account. Turn them on in the Tailscale admin console. |
+| `remote.wizard.fail.listener` | Alma no pudo abrir la escucha remota: {reason} | Alma could not open the remote listener: {reason} |
+| `remote.wizard.fail.portTaken` | El puerto {port} está ocupado por otro programa. | Port {port} is in use by another program. |
+| `remote.wizard.port.pick` | Elegir otro puerto | Pick another port |
+| `remote.wizard.fail.serveBusy` | Tailscale Serve ya está en uso en esa ruta. Alma no lo va a pisar. | Tailscale Serve is already in use on that path. Alma will not overwrite it. |
+| `remote.wizard.fail.phoneSilent` | El celular no responde. | The phone is not answering. |
+| `remote.wizard.acl.hint` | Recomendación: limitá en la política de acceso de Tailscale quién puede llegar a esta PC. Alma nunca la modifica. | Recommendation: in your Tailscale access policy, limit who can reach this PC. Alma never edits it. |
+| `remote.wizard.notice.plan` | El plan gratuito Personal de Tailscale es solo para uso no comercial. Mirá los términos de Tailscale. | Tailscale's free Personal plan is for non-commercial use only. See Tailscale's terms. |
+| `remote.wizard.notice.certs` | Al activar el HTTPS de Tailscale, el nombre de esta PC queda en registros públicos de certificados. | Turning on Tailscale HTTPS puts this PC's name in public certificate logs. |
+| `remote.wizard.notice.rename` | Si le cambiás el nombre a esta PC, todos los celulares emparejados dejan de funcionar y hay que emparejarlos de nuevo. | If you rename this PC, every paired phone stops working and must be paired again. |
+| `remote.wizard.renamed` | El nombre de esta PC cambió. Los celulares emparejados ya no la encuentran. | This PC's name changed. Paired phones can no longer find it. |
+| `remote.wizard.renamed.revoke` | Revocar los celulares viejos | Revoke the old phones |
+| `remote.wizard.keyExpiry` | La clave de Tailscale de esta PC vence en {days} días. Renovala en Tailscale. | This PC's Tailscale key expires in {days} days. Renew it in Tailscale. |
+| `remote.notice.down` | El acceso remoto no está disponible: Tailscale está desconectado. | Remote access is unavailable: Tailscale is disconnected. |
+| `remote.pair.qr.hint` | Escaneá este código con el celular. Sirve una sola vez y vence en {minutes} min. | Scan this code with your phone. It works once and expires in {minutes} min. |
+| `remote.pair.code.compare` | Confirmá que el celular muestra este código: {code} | Check that the phone shows this code: {code} |
+| `remote.pair.name` | Nombre del celular | Phone name |
+| `remote.pair.approve` | Aprobar | Approve |
+| `remote.pair.reject` | Rechazar | Reject |
+| `remote.pair.expired` | El código venció. Generá uno nuevo. | The code expired. Create a new one. |
+| `remote.pair.locked` | Demasiados intentos. Probá de nuevo en {minutes} min. | Too many attempts. Try again in {minutes} min. |
+| `remote.pair.busy` | Ya hay un emparejamiento en curso. | A pairing is already in progress. |
+| `remote.pair.limit` | Ya hay 5 celulares emparejados. Revocá uno primero. | 5 phones are already paired. Revoke one first. |
+| `remote.devices.title` | Celulares emparejados | Paired phones |
+| `remote.devices.none` | Ningún celular emparejado. | No phones paired. |
+| `remote.devices.lastSeen` | Visto {when} | Last seen {when} |
+| `remote.devices.dormant` | Dormido | Dormant |
+| `remote.devices.revoke` | Revocar | Revoke |
+| `remote.devices.revokeAll` | Revocar todos | Revoke all |
+| `remote.devices.revoke.confirm` | ¿Revocar «{name}»? Pierde el acceso al instante. | Revoke “{name}”? It loses access at once. |
+| `remote.activity.title` | Actividad remota | Remote activity |
+| `remote.activity.none` | Todavía no hay actividad remota. | No remote activity yet. |
+| `tray.remote.off` | Apagar el acceso remoto | Turn off remote access |
+| `main.remote.enable` | Alma va a aceptar conexiones de celulares emparejados. | Alma is going to accept connections from paired phones. |
+| `main.remote.enableDetail` | Cada celular nuevo necesita tu aprobación en esta PC. | Each new phone needs your approval on this PC. |
+| `main.remote.dormant` | Estos celulares ya emparejados van a volver a conectarse: {names} | These already paired phones will be able to connect again: {names} |
+| `main.remote.scope` | Los celulares emparejados van a poder usar: {scope} | Paired phones will be able to use: {scope} |
+| `main.remote.sensitive` | Los celulares emparejados van a poder abrir y desarmar cerraduras y alarmas, con tu passkey y tu aprobación. | Paired phones will be able to open and disarm locks and alarms, with your passkey and your approval. |
+| `main.remote.camera` | Los celulares emparejados van a poder ver fotos de la cámara: {camera} | Paired phones will be able to see pictures from the camera: {camera} |
+| `main.remote.pair` | Aprobar el celular «{name}» con el código {code}. | Approve the phone “{name}” with the code {code}. |
+| `main.remote.revokeAll` | Todos los celulares emparejados pierden el acceso. | All paired phones lose access. |
+| `main.remote.serve` | Alma va a ejecutar este comando de Tailscale: | Alma is going to run this Tailscale command: |
+| `main.remote.download` | Alma va a abrir la descarga oficial de Tailscale en tu navegador: | Alma is going to open the official Tailscale download in your browser: |
+| `remote.pwa.pairing.waiting` | Esperando que aprobés en la PC… | Waiting for you to approve on the PC… |
+| `remote.pwa.fingerprint` | Esta PC no coincide con el código escaneado. No se emparejó. | This PC does not match the scanned code. Nothing was paired. |
+| `remote.pwa.revoked` | Este celular ya no tiene acceso. Volvé a emparejarlo desde la PC. | This phone no longer has access. Pair it again from the PC. |
+| `remote.pwa.pcUnreachable` | No se puede llegar a la PC. Tiene que estar prendida y con Alma abierto. | Can't reach the PC. It must be on, with Alma running. |
+| `remote.pwa.notDelivered` | No se pudo entregar el mensaje. | The message could not be delivered. |
+| `remote.pwa.tooLong` | El mensaje es demasiado largo. | The message is too long. |
+| `remote.pwa.photoTooBig` | La imagen pesa más de 2 MB. No se mostró. | The picture is over 2 MB. It was not shown. |
+| `remote.pwa.cameraOff` | Esta cámara no está permitida para el acceso remoto. | This camera is not allowed for remote access. |
+| `remote.pwa.passkey.none` | No se pudo crear una passkey: este celular no va a poder abrir ni desarmar. | Could not create a passkey: this phone will not be able to open or disarm. |
+| `remote.pwa.new` | Conversación nueva | New conversation |
+| `remote.pwa.stop` | Detener | Stop |
+| `remote.pwa.rateLimited` | Demasiados pedidos. Esperá un momento. | Too many requests. Wait a moment. |
+| `remote.pwa.scopeOff` | Esta función está apagada en la PC. | This feature is turned off on the PC. |
+| `remote.pwa.sensitiveOff` | Las cerraduras y alarmas están apagadas para el acceso remoto. | Locks and alarms are turned off for remote access. |
+| `remote.pwa.stepUp.failed` | No se pudo confirmar con tu passkey. No se hizo nada. | Could not confirm with your passkey. Nothing was done. |
+| `remote.pwa.stepUp.unsupported` | Este celular no tiene passkey: no puede abrir ni desarmar. | This phone has no passkey: it cannot open or disarm. |
+| `remote.pwa.alreadyAnswered` | Ya se respondió en otro lugar. | Already answered elsewhere. |
+| `remote.pwa.push.text` | Alma te necesita | Alma needs you |
+| `remote.pwa.forget` | Olvidar esta PC | Forget this PC |
+| `remote.pwa.forget.confirm` | ¿Olvidar esta PC? Tendrás que emparejar de nuevo. | Forget this PC? You will have to pair again. |
+| `channels.state.off` / `.connecting` / `.online` / `.error` (reuse) | existing | existing |
+| `channels.agent` (reuse) | existing | existing |
+| `main.security.title` / `.allow` / `.cancel` (reuse), `main.error.cancelled` (reuse) | existing | existing |
+| `chan.allowQuestion`, `chan.flagged`, `chan.tool`, `chan.failed` (reuse on the PC; the PWA dictionary carries equivalent wording) | existing | existing |
+
+The step-up prompt the phone's own system shows is the system's text, not Alma's, and is not a key.
+
+## 7. Constraints and risks
+- **Layers touched** (`docs/architecture.md`): `shared` (remote API schemas, pure authorization, pairing state, bind check, serve command, required confirmations, i18n keys, settings type and default); `coordinator/channels` (the channel, the transport interface, the Tailscale and test transports, device store, push sender, wiring to the approval broker and house service); `main` (settings keys, native confirmations, opening the download, running `tailscale serve`, the tray item, audit of settings); `renderer` (Remote access tab, wizard, device list, activity list); `preload`/`desktop-api` (the typed bridge for the tab); and a new small client (the PWA). The PWA is not `renderer`: where its source lives, how it is built and what `tests/architecture.test.ts` lets it import is a layer decision for the plan, recorded in ADR 0020.
+- **Dependencies, explicit (not scope):**
+  - **R-02** (Home Assistant listens on `0.0.0.0`, `coordinator/home/engine.ts`): a separate `/fix` that merges **before implementation starts**.
+  - **R-01** (vulnerable dependencies, Electron below 44.9.1): a separate chore, **blocked on the human's decision** about the `libsignal` exception or replacing baileys (RISKS R-01, R-05). It must be merged **before a release that includes remote access**, not before implementation.
+  - **R-06 / spec 001** (signing, Fuses, update channel): remote access ships opt-in and off by default (BR-10) and may do so before 001; it cannot be on by default until 001 delivers signing and Fuses.
+- **Security / privacy:**
+  - ToolRisk: no new tool, so no new `ToolRisk` (BR-11). The channel invokes existing functions with the risk of their tool (BR-13).
+  - New attack surface: a loopback listener behind Tailscale Serve, an unauthenticated pairing endpoint reachable by any member of the tailnet (limited by BR-21), a key per device, a passkey step-up, a push sender. New risk **R-14** (remote attack surface) in `docs/security/RISKS.md`.
+  - New third parties: Tailscale (its coordination service and relay see that devices exist and where they connect from; not the content, per the design reference) and the browser vendors' push services (Apple, Google, Mozilla: they learn that a content-free notification was sent to a subscription and when).
+  - New stored personal data: device records on the PC (name, public key, paired and last-seen dates); push subscriptions and the PC's keys, sealed with `safeStorage`. The phone holds only a key and the app shell (BR-32).
+  - Docs in the same PR (Constitution V): `docs/security/RISKS.md` (R-14), `CONTROLS.md` (a remote-channel authentication row, per-device keys, step-up, remote audit, kill switch; update the "only the owner uses the remote channels" row), `PRIVACY.md` (data inventory row; Tailscale and push-service provider rows; the audit note; the public certificate name below).
+- **Performance / platform:** Windows-first; Alma must be running and the PC awake (BR-33); Tailscale's own limits and terms apply; camera pictures are capped at 2 MB; browsers require a secure context for service workers, WebCrypto keys, WebAuthn and push, which `tailscale serve` HTTPS provides.
+- **Verified facts about Tailscale** (sources to re-check on the official pages before `ready`):
+  - From Tailscale's "Enabling HTTPS" documentation (`https://tailscale.com/docs/how-to/set-up-https-certificates`): the person must turn on MagicDNS and then "Enable HTTPS" under HTTPS Certificates in the admin console; the certificates are recorded in public Certificate Transparency logs, so the machine's name becomes public; the MagicDNS name changes if the machine is renamed; turning HTTPS off breaks existing links; Serve is private to the tailnet and Funnel is the public one.
+  - From Tailscale's pricing page (found through a search, not yet read directly): the free Personal plan is for non-commercial use only and business use needs a paid plan. Third-party pages say Personal allows 6 users since April 2026; older pages say 3 users and 100 devices, likely stale. Not verified; the wizard states no plan limits and links to Tailscale's terms (BR-38).
+- **Constraint derived from browser behavior:** browser storage and passkeys are bound to an origin, so renaming the PC changes the `*.ts.net` origin, and the paired phones lose their keys and passkeys and must pair again. Alma warns in the wizard (BR-38), detects a rename and offers to revoke the old phones (BR-39, AC-2.15).
+- **ADR:** [0020](../../../docs/adr/0020-remote-access-one-security-layer-transport-strategy.md) records the transport strategy and the one shared security layer, the PWA served by the PC over Serve HTTPS, the non-exportable device key, the passkey for step-up only, dormant devices, and the deferral of end-to-end encryption to the relay.
+
+### 7.1 Specs to amend in the same PR
+Amendments are made when the plan lands, not in this draft.
+
+| Spec | What changes |
+|---|---|
+| 004 approvals | a fifth surface to answer approvals (the remote `approve` scope) and its rules |
+| 006 settings | a new "Remote access" tab and its settings section |
+| 013 / 014 house | remote clients reach the house only through the remote channel; R-02 change if the fix touches the engine bind |
+| 022 security and privacy | BR-9 inventory (Tailscale, push services), BR-12 owner-only access, AC-3.11 list of audited actions (`actor: 'remote'` events), AC-8.2 erase and AC-8.1 export of device records |
+| 023 app shell | the tray kill switch item |
+
+## 8. Open Questions
+Unchecked items block `ready`. Checked items are answered and written into §3/§5/§6. All 28 are answered; only the human sets `ready`.
+
+- [x] OQ-1 Wizard location. In the installed app as the tab "Remote access"; no NSIS installer wizard. (BR-4, §3.)
+- [x] OQ-2 Pairing mechanics. QR carries address, a one-use secret after `#` and the PC key fingerprint; 3 minutes; 6-digit code compared on both screens; one attempt per secret; 3 bad secrets (wrong, used or expired; a reject does not count) then a 5-minute lockout by time; 5 requests per minute in total; one pending pairing; the person names the device at approval. (BR-21, AC-4.x.)
+- [x] OQ-3 Revoked, lost, off. Non-exportable WebCrypto key; revoke cuts at once; "Revoke all" with native confirmation; PC-only; off keeps devices dormant and the turn-on dialog lists them; revoked record deleted at once, audit stays. (BR-22, BR-23, BR-34, AC-1.x, AC-6.x.)
+- [x] OQ-4 Capacity and presence. At most 5 devices; 1-hour session renewed silently by signing; 15 days idle means pair again; works only while Alma runs and the PC is awake; no queue; no forced tray. The idle clock keeps running while dormant and an expired device is removed automatically. (BR-22, BR-33, AC-6.7 to AC-6.9, AC-8.1.)
+- [x] OQ-5 Step-up. WebAuthn passkey verified by the PC, every action, no window, no fallback; only opening and disarming of the sensitive things; added to the approval card. Sirens and cover stop or position need none; the passkey is registered during pairing. (BR-24, AC-4.13, AC-5.13, AC-5.20, AC-5.21.)
+- [x] OQ-6 Scope defaults and chat/approve. Global scopes, all off every time remote access is turned on; locks and alarms a sub-switch; the phone approves `write`, `exec` and `publish`, each answer valid once, never "Siempre permitir"; only its own remote conversation; one shared remote thread with the agent chosen on the PC; the phone can cancel and start a new conversation; no desktop or company threads. (BR-5, BR-12, BR-25, AC-5.x.)
+- [x] OQ-7 Cameras. Stills only through `cameraSnapshot`, seen in transit and not saved to the PC; no vision-model questions; an allow-list, every camera enabled one by one; a still over 2 MB refused with a message; cellular data ignored; live video is a later spec. (BR-26, AC-5.11, AC-5.22, AC-5.23.) Adding a camera needs a native confirmation, removing one none.
+- [x] OQ-8 Web Push. Content-free, fixed text, only for a pending approval of the remote thread, sent by the PC directly to the browser vendor's push service, keys in `safeStorage`, revoke deletes the subscription; iOS to verify. (BR-27, AC-11.x.)
+- [x] OQ-9 Tailscale exposure. Tailscale Serve HTTPS; Alma runs `tailscale serve` after a native confirmation showing the command; detect and open the official download only; never Funnel; ACLs shown as text (wording is a plan and UI-key matter); a free local port picked and saved, a clear error and a "pick another port" button if it is taken later (Alma changes nothing on its own); Headscale not supported in v1; on off or quit Alma removes only its own Serve entry; refuses and says why if the person already uses Serve on that path. (BR-8, BR-14, BR-28, AC-2.8 to AC-2.13, AC-2.16.)
+- [x] OQ-10 Audit, visibility, kill switch. Failures audited and throttled; only changes and pictures; remote-activity list on the PC; tray kill switch without confirmation. (BR-30, BR-36, AC-1.13, AC-7.x.)
+- [x] OQ-11 What the phone keeps. Only the key and the app shell; "Forget this PC"; the phone wipes on its next connection after a revoke. (BR-32, AC-8.5, AC-8.6.) "Forget this PC" tells the PC when reachable and wipes the phone regardless. (AC-6.10.)
+- [x] OQ-12 Phone client delivery. The PWA is served by the PC over the transport, built independent of its origin. (BR-18, AC-3.8.)
+- [x] OQ-13 Tailscale terms, notices and states. Signed out and offline are one state and one text; automatic retry; the status in the tab and one desktop notification per outage; a warning 14 days before the node key expires; three short factual notices in the wizard (free plan non-commercial with a link and no limits stated, public certificate name, rename breaks phones); after a rename Alma detects it, warns and offers to revoke the old phones. (BR-37 to BR-39, AC-2.10, AC-2.14, AC-2.15, AC-8.2.)
+- [x] OQ-14 Phone call, risk, mode and audit. The narrow API uses the same functions and the same risk and approval policy as the tools; read-only mode blocks house control; camera pictures ask on the phone; a phone-initiated tool call leaves two audit entries (the tool's own and a `remote` one). (BR-13, AC-5.10, AC-5.18, AC-5.19, AC-7.7.)
+- [x] OQ-15 Native confirmations. Turning remote on, each scope, locks and alarms, approving a pairing (plus, by other answers, revoke all, `tailscale serve`, the download). (BR-29, AC-1.x.)
+- [x] OQ-16 R-01 timing. Merged before a release that includes remote access. (§7.)
+- [x] OQ-17 Test transport. Only in tests, not selectable in a shipped build. (BR-2, AC-3.7.)
+- [x] OQ-18 Encryption above the transport. Authenticate each request with the device key now; session-key end-to-end encryption with the relay (027+). (BR-23, ADR 0020.)
+- [x] OQ-19 Limits. 1 MB request, 2 MB photo, 8000-character chat message, 60 requests per minute, 2 connections per device, 30 s timeouts, 10 s for the wizard test, 1500 characters of approval input. (BR-31, AC-10.x.)
+- [x] OQ-20 The phone's language and look. The phone's language with its own small es/en dictionary; `umbra-ui` adapted to touch. (BR-17, BR-20.)
+- [x] OQ-21 Privacy rights over devices. Erase also revokes all devices and deletes their records; export includes the device list. (BR-35, AC-9.4, AC-9.5.)
+- [x] OQ-22 Lockout count. Only a bad secret (wrong, used or expired) counts toward the 3-strike lockout; a reject by the person does not. (BR-21, AC-4.6.)
+- [x] OQ-23 Idle and dormant clocks, saved scopes. The 15-day idle clock keeps running while dormant; an expired device is removed automatically; every turn-on starts with all scopes off, so the turn-on dialog lists dormant devices but not scopes. (BR-22, BR-34, AC-1.12, AC-6.7, AC-6.9.)
+- [x] OQ-24 Step-up, what was left. Sirens (trigger, silence) and cover stop or set-position need no step-up; the passkey is registered during pairing. (BR-24, AC-4.13, AC-5.20.)
+- [x] OQ-25 Approvals and chat, what was left. The phone never chooses "Siempre permitir" (each answer is valid once); it can start a new conversation (a new shared remote thread). (BR-12, BR-25, AC-5.8, AC-5.24.)
+- [x] OQ-26 "Forget this PC". It tells the PC when reachable (the PC removes the device from its list) and the phone wipes itself regardless. (BR-32, AC-6.10.)
+- [x] OQ-27 A saved port taken at a later start. The channel stays in error with a clear message and a "pick another port" button; Alma changes nothing on its own, and the new command goes through the native confirmation. (AC-2.11, AC-2.16, BR-8.)
+- [x] OQ-28 Native confirmation for the camera allow-list. Adding a camera needs one, removing one none. (BR-29, AC-5.22.)

@@ -45,5 +45,6 @@ Templates: [`../templates/`](../templates). Pipeline: [`docs/pipeline.md`](../..
 | # | Spec | Status |
 |---|---|---|
 | 001 | [release-packaging](./001-release-packaging/spec.md) | draft: packager, signing, update channel and versioning not decided |
+| 026 | [remote-access](./026-remote-access/spec.md) | ready: remote channel (phone pairing, scopes, step-up, audit) over a swappable transport, Tailscale first; all open questions answered; depends on R-02 (before implementation) and R-01 (before release) |
 
 Numbering: next free `NNN`, never reused. A spec that is abandoned stays, with its status line explaining why in §1.
