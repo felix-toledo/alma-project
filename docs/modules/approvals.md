@@ -1,6 +1,6 @@
 # Approvals
 
-> The policy that decides, before every tool call, whether the person must say yes first: four approval modes, "always allow" rules, a reviewer model, a boss review in companies, and the question itself (answerable in the app, from Telegram buttons or by voice). Spec: [004 Aprobaciones](../../.specify/specs/004-approvals/spec.md). Test status: 63 criteria, 20 with a test, 34 without a test (`[gap]`), 9 checked by hand (`[manual]`).
+> The policy that decides, before every tool call, whether the person must say yes first: four approval modes, "always allow" rules, a reviewer model, a boss review in companies, and the question itself (answerable in the app, from Telegram buttons, by voice, or from a paired phone). Spec: [004 Aprobaciones](../../.specify/specs/004-approvals/spec.md). Test status: 63 criteria, 20 with a test, 34 without a test (`[gap]`), 9 checked by hand (`[manual]`).
 
 ## What it does
 
@@ -34,7 +34,7 @@
 
 ## How it works
 
-Files: `src/coordinator/approval.ts` (`ApprovalBroker`, `authorize`, `autoReview`, `bossReview`), `src/coordinator/agent.ts` (`executeTool` builds the request), `src/coordinator/index.ts` (broker, `rememberAlwaysAllow`, notifications), `channels/telegram.ts`, `voice/assistant.ts`, `src/main/index.ts` (`alwaysAllow` message, confirmation dialog), renderer `ToolCard.tsx`, `ChatView.tsx`, `SettingsDialog.tsx`, `Sidebar.tsx`, `lib/state.ts`, `lib/format.ts`.
+Files: `src/coordinator/approval.ts` (`ApprovalBroker`, `authorize`, `autoReview`, `bossReview`), `src/coordinator/agent.ts` (`executeTool` builds the request), `src/coordinator/index.ts` (broker, `rememberAlwaysAllow`, notifications), `channels/telegram.ts`, `channels/remote/approvals.ts`, `voice/assistant.ts`, `src/main/index.ts` (`alwaysAllow` message, confirmation dialog), renderer `ToolCard.tsx`, `ChatView.tsx`, `SettingsDialog.tsx`, `Sidebar.tsx`, `lib/state.ts`, `lib/format.ts`.
 
 Order of decision in `authorize` (checked against the code):
 
@@ -113,6 +113,7 @@ All live in `settings.json` (main). Pending approvals are in memory only: after 
 - The reviewer receives the tool input (it can contain file contents or commands) and the person's latest message (cut as above). That goes to whichever provider is configured for review, or to the boss agent's provider ([providers](providers.md), [security](security.md)).
 - Non-`read` calls are audited: `tool.authorize` / `denied`, `tool.run` / `ok` or `error`, with risk, thread, agent, decision note, argument names and the command line for `run_command`. Reads are not audited. Argument values are not stored.
 - Telegram buttons are accepted only from the bound private chat of an allowed user; callback data must match `ap:<id>:(allow|always|deny)`.
+- A paired phone answers through the same broker (first answer wins, later ones get `already-answered`); it needs the approve scope and sees the request cut at 1500 characters ([remote-access](remote-access.md)). Since spec 028 the phone also sees and answers the approvals of a run it started in a conversation by id, and only that device does; the policy is not stricter for it, so in «Permitir todo» mode `exec` and `write` do not ask in a phone-started run either, while `publish` always asks. With the approve scope off the phone shows that the run waits for an approval on the PC and the approval stays pending for the other surfaces. A phone-started run in a Telegram, WhatsApp or voice conversation does not send or speak its approval prompt on that channel.
 
 ## How it is tested
 

@@ -24,7 +24,8 @@ export const ALLOWLIST: Record<string, string> = {
   'src/coordinator/tools/htmlEntities.ts': 'decodes &aacute; and its kin to letters when a page is read: data, never shown',
   'src/shared/agentNames.ts': 'first names given to new agents: names, not text to translate',
   'src/main/instagram-labels.ts': "the Spanish words of Instagram's own page that the publisher looks for: matched against the page, never shown (spec 025 AC-3.8)",
-  'src/shared/i18n/en/languages.ts': 'the language selector names each option in its own language, so «Español» sits in the en dictionary (spec 025 BR-3)'
+  'src/shared/i18n/en/languages.ts': 'the language selector names each option in its own language, so «Español» sits in the en dictionary (spec 025 BR-3)',
+  'src/remote-client/i18n/es.ts': "the PWA's own Spanish dictionary (spec 026 BR-20): Spanish lives here, as in the PC's es dictionary"
 }
 
 const ES_DICTIONARY = /^src\/shared\/i18n\/es(\.ts$|\/)/
@@ -256,7 +257,7 @@ export function scanFile(file: string, source: string): Finding[] {
     }
   }
 
-  if (file.startsWith('src/renderer/') && file.endsWith('.tsx')) {
+  if ((file.startsWith('src/renderer/') || file.startsWith('src/remote-client/')) && file.endsWith('.tsx')) {
     const counted = new Set<number>()
     for (const text of jsx) add('R2', text)
     for (const m of lexed.skeleton.matchAll(USER_ATTRIBUTES)) {

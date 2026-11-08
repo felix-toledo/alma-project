@@ -15,7 +15,8 @@ import { routines } from './en/routines'
 import { tools } from './en/tools'
 import { vault } from './en/vault'
 import { voice } from './en/voice'
+import { remote } from './en/remote'
 import type { es } from './es'
 import type { Message } from './messages'
 
-export const en = { ...ambience, ...channels, ...chat, ...companies, ...common, ...coordinator, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice } satisfies Record<keyof typeof es, Message>
+export const en = { ...ambience, ...channels, ...chat, ...companies, ...common, ...coordinator, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice, ...remote } satisfies Record<keyof typeof es, Message>

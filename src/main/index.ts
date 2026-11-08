@@ -25,13 +25,16 @@ import type {
   HostRequest,
   ParentToCoordinator,
   PublicSettings,
+  RemoteSettings,
   SecretProviderId,
   Settings
 } from '../shared/types'
 import { audit, initAudit } from '../shared/audit'
+import { planRemoteChange, stripRemotePatch } from '../shared/remote/confirmations'
 import { newCommands } from './guard'
 import { connectInstagram, disconnectInstagram, instagramStatus, publishToInstagram } from './instagram'
-import { mainError, securityDialog, trayMenu } from './messages'
+import { hostConfirmation, mainError, REMOTE_OPEN_URLS, remoteDialog, securityDialog, trayMenu, trayState } from './messages'
+import { movedExclusions } from './remote-exclusions'
 import { renderSvgToPng } from './render'
 import { decrypt, encrypt, SettingsStore } from './settings'
 
@@ -68,6 +71,8 @@ let coordinator: UtilityProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let quitting = false
+/** Paired device names, owned by the coordinator; the turn-on dialog lists them (spec 026 AC-1.11). */
+let dormantDeviceNames: string[] = []
 
 function postToCoordinator(message: ParentToCoordinator, transfer?: Electron.MessagePortMain[]): void {
   coordinator?.postMessage(message, transfer)
@@ -77,6 +82,59 @@ function pushSettings(updated: Settings): void {
   postToCoordinator({ type: 'settings', settings: updated })
   applyBackgroundSettings(updated)
   applyVoiceHotkey(updated)
+}
+
+/** The settings save behind both the window and the tray kill switch (spec 026 T34). */
+function updateSettings(patch: Partial<PublicSettings>): PublicSettings {
+  // The two changes that hand an agent more power than the person gave it get a native confirmation first.
+  const commands = patch.mcpServers ? newCommands(settings.get().mcpServers, patch.mcpServers) : []
+  const unlocking = patch.approvalMode === 'always-allow' && settings.get().approvalMode !== 'always-allow'
+  if (commands.length || unlocking) {
+    const text = securityDialog(settings.get().language, commands.length ? 'mcp' : 'always-allow', commands)
+    const answer = dialog.showMessageBoxSync(mainWindow!, {
+      type: 'warning',
+      buttons: [text.allow, text.cancel],
+      defaultId: 1,
+      cancelId: 1,
+      title: text.title,
+      message: text.message,
+      detail: text.detail
+    })
+    if (answer !== 0) {
+      audit({ action: 'settings.update', actor: 'user', target: commands.length ? 'mcpServers' : 'approvalMode', outcome: 'denied' })
+      throw new Error(mainError(settings.get().language, 'cancelled'))
+    }
+  }
+  // Remote access widenings get one native confirmation each; a refusal saves nothing (spec 026 BR-29, AC-1.4).
+  let remote: RemoteSettings | undefined
+  if (patch.remote) {
+    const planned = planRemoteChange(settings.get().remote, { ...settings.get().remote, ...patch.remote }, dormantDeviceNames, { activeVault: settings.get().activeVault })
+    for (const confirmation of planned.confirmations) {
+      const text = remoteDialog(settings.get().language, confirmation)
+      const answer = dialog.showMessageBoxSync(mainWindow!, {
+        type: 'warning',
+        buttons: text.buttons,
+        defaultId: text.defaultId,
+        cancelId: text.defaultId,
+        title: text.title,
+        message: text.message,
+        detail: text.detail
+      })
+      if (answer !== 0) {
+        audit({ action: 'settings.update', actor: 'user', target: 'remote', outcome: 'denied' })
+        throw new Error(mainError(settings.get().language, 'cancelled'))
+      }
+    }
+    remote = planned.next
+  }
+  const effective = remote ? { ...patch, remote } : patch
+  const changed = changedKeys(effective as Record<string, unknown>)
+  pushSettings(settings.update(effective))
+  // The ones that widen what agents may do get their new value in the trail; the rest, just the name.
+  if (changed.length) {
+    audit({ action: 'settings.update', actor: 'user', target: changed.join(','), outcome: 'ok', ...(changed.includes('approvalMode') ? { detail: { approvalMode: settings.get().approvalMode } } : {}) })
+  }
+  return settings.getPublic()
 }
 
 let voiceHotkey = ''
@@ -142,6 +200,42 @@ async function handleHostRequest(request: HostRequest): Promise<{ ok: boolean; m
       return { ok: true, message: encrypt(request.text) }
     case 'secret.open':
       return { ok: true, message: decrypt(request.text) }
+    case 'remote.confirm': {
+      const confirmation = hostConfirmation(request.kind, request.params)
+      if (!confirmation) return { ok: false, message: mainError(settings.get().language, 'missing-data') }
+      const text = remoteDialog(settings.get().language, confirmation)
+      const answer = dialog.showMessageBoxSync(mainWindow!, {
+        type: 'warning',
+        buttons: text.buttons,
+        defaultId: text.defaultId,
+        cancelId: text.defaultId,
+        title: text.title,
+        message: text.message,
+        detail: text.detail
+      })
+      return { ok: answer === 0, message: '' }
+    }
+    case 'remote.open': {
+      const url = REMOTE_OPEN_URLS[request.target as keyof typeof REMOTE_OPEN_URLS]
+      if (!url) return { ok: false, message: mainError(settings.get().language, 'unknown-target') }
+      if (request.target === 'tailscale-download') {
+        const text = remoteDialog(settings.get().language, { kind: 'download', url })
+        const answer = dialog.showMessageBoxSync(mainWindow!, {
+          type: 'warning',
+          buttons: text.buttons,
+          defaultId: text.defaultId,
+          cancelId: text.defaultId,
+          title: text.title,
+          message: text.message,
+          detail: text.detail
+        })
+        if (answer !== 0) return { ok: false, message: '' }
+      }
+      await shell.openExternal(url)
+      return { ok: true, message: '' }
+    }
+    case 'net.online':
+      return { ok: net.isOnline(), message: '' }
   }
 }
 
@@ -203,8 +297,11 @@ function startCoordinator(): void {
         notify(message.title, message.body, message.threadId, message.always)
         break
       case 'settings.patch':
-        pushSettings(settings.update(message.patch))
+        pushSettings(settings.update(stripRemotePatch(message.patch)))
         mainWindow?.webContents.send('settings:changed')
+        break
+      case 'remote.devices':
+        dormantDeviceNames = message.names
         break
     }
   })
@@ -270,10 +367,11 @@ function createWindow(): void {
 }
 
 function applyBackgroundSettings(current: Settings): void {
-  if (current.background.runInTray && !tray) {
+  const rule = trayState(current)
+  if (rule.icon && !tray) {
     tray = new Tray(join(RESOURCES, 'tray.png'))
     tray.on('click', showWindow)
-  } else if (!current.background.runInTray && tray) {
+  } else if (!rule.icon && tray) {
     tray.destroy()
     tray = null
   }
@@ -284,6 +382,14 @@ function applyBackgroundSettings(current: Settings): void {
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: text.open, click: showWindow },
+        ...(rule.remoteOff
+          ? [
+              {
+                label: text.remoteOff,
+                click: () => updateSettings({ remote: { ...settings.get().remote, enabled: false } })
+              } as const
+            ]
+          : []),
         { type: 'separator' },
         {
           label: text.quit,
@@ -358,34 +464,7 @@ function registerIpc(): void {
 
   handle('settings:get', (): PublicSettings => settings.getPublic())
 
-  handle('settings:update', (_event, patch: Partial<PublicSettings>): PublicSettings => {
-    // The two changes that hand an agent more power than the person gave it get a native confirmation first.
-    const commands = patch.mcpServers ? newCommands(settings.get().mcpServers, patch.mcpServers) : []
-    const unlocking = patch.approvalMode === 'always-allow' && settings.get().approvalMode !== 'always-allow'
-    if (commands.length || unlocking) {
-      const text = securityDialog(settings.get().language, commands.length ? 'mcp' : 'always-allow', commands)
-      const answer = dialog.showMessageBoxSync(mainWindow!, {
-        type: 'warning',
-        buttons: [text.allow, text.cancel],
-        defaultId: 1,
-        cancelId: 1,
-        title: text.title,
-        message: text.message,
-        detail: text.detail
-      })
-      if (answer !== 0) {
-        audit({ action: 'settings.update', actor: 'user', target: commands.length ? 'mcpServers' : 'approvalMode', outcome: 'denied' })
-        throw new Error(mainError(settings.get().language, 'cancelled'))
-      }
-    }
-    const changed = changedKeys(patch as Record<string, unknown>)
-    pushSettings(settings.update(patch))
-    // The ones that widen what agents may do get their new value in the trail; the rest, just the name.
-    if (changed.length) {
-      audit({ action: 'settings.update', actor: 'user', target: changed.join(','), outcome: 'ok', ...(changed.includes('approvalMode') ? { detail: { approvalMode: settings.get().approvalMode } } : {}) })
-    }
-    return settings.getPublic()
-  })
+  handle('settings:update', (_event, patch: Partial<PublicSettings>): PublicSettings => updateSettings(patch))
 
   handle('settings:setApiKey', (_event, provider: SecretProviderId, apiKey: string): PublicSettings => {
     if (!['anthropic', 'xai', 'deepseek', 'vercel', 'meta', 'openai', 'telegram', 'elevenlabs', 'email'].includes(provider)) throw new Error(mainError(settings.get().language, 'unknown-provider'))
@@ -427,6 +506,20 @@ function registerIpc(): void {
   })
 
   handle('vault:defaultPath', () => join(app.getPath('documents'), 'Alma', 'Vault'))
+
+  // A folder renamed in Alma's own vault view keeps its remote exclusion: no dialog, only existing entries move (spec 028 AC-1.11).
+  handle('remote:moveExclusions', (_event, args: unknown): void => {
+    const vault = settings.get().activeVault
+    const onDisk = (rel: string): boolean => {
+      const target = resolve(vault, rel)
+      return !!vault && isInside(vault, target) && existsSync(target)
+    }
+    const vaultExcluded = movedExclusions(settings.get().remote, args, onDisk)
+    if (!vaultExcluded) return
+    pushSettings(settings.update({ remote: { ...settings.get().remote, vaultExcluded } }))
+    audit({ action: 'settings.update', actor: 'user', target: 'remote.vaultExcluded', outcome: 'ok' })
+    mainWindow?.webContents.send('settings:changed')
+  })
 }
 
 app.on('second-instance', showWindow)

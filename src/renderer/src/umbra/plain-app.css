@@ -235,3 +235,27 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { border-color
 .modal { max-width: 94vw; }
 /* Aro de foco de los campos: no se recorta contra el borde del panel */
 .tab-content :is(input, select, textarea):focus-visible, .modal-pad :is(input, select, textarea):focus-visible { box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--focus-ring); }
+
+/* ---------- Minimalist Alma scrollbar ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(140 185 255 / 0.35) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(140 185 255 / 0.28);
+  border-radius: var(--r-pill);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(140 185 255 / 0.55);
+  box-shadow: var(--glow-soft);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}

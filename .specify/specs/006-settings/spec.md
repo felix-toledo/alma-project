@@ -136,6 +136,10 @@ coordinator right after it is saved.
 - **AC-9.5** (US-8) Esc or a click on the backdrop closes the dialog, with no unsaved-changes prompt; the dialog opens on `providers` unless a caller asks for another tab. [manual] Press Esc.
 - **AC-9.6** (US-8) The General tab has a language selector with «Español» and «English» (each labelled in its own language); choosing one saves `language` and the whole app switches live. Owner: `../025-i18n-es-en/spec.md`. [manual] Switch language with the dialog open and watch the dialog's own text change.
 
+### Dialog: Acceso remoto (US-7)
+- **AC-10.1** (US-7) Given a fresh install, when settings load, then remote access and every scope are off; every turn-on starts with all scopes and locks off and keeps the camera list. Test: tests/remote-settings.test.ts › "a fresh install has remote access off and every scope off", "every turn-on starts with all scopes and locks off and keeps the camera list"
+- **AC-10.2** (US-7) [manual] Given the settings dialog, when the Acceso remoto tab opens, then it shows the off-by-default switch, the Tailscale wizard, the pairing QR, the paired phones, the four scopes and the recent activity; the tab is checked by hand like every screen.
+
 ## 6. Business rules
 - **BR-1** Settings live in `settings.json` inside Electron's `userData` folder; `ALMA_USER_DATA` overrides that folder. (src/main/settings.ts, src/main/index.ts)
 - **BR-2** The old `%APPDATA%\MultiAgente` profile is copied once, only if `ALMA_USER_DATA` is unset and the new folder has no `settings.json`. (src/main/index.ts)
@@ -152,6 +156,8 @@ coordinator right after it is saved.
 - **BR-13** Settings changes that affect the tray, login item and global voice hotkey are applied at the moment they are pushed. (src/main/index.ts)
 - **BR-14** Mail server guessing: gmail/googlemail, outlook/hotmail/live/msn, yahoo, icloud/me/mac have fixed hosts and ports; any other domain gets `imap.<domain>:993` and `smtp.<domain>:465`. (src/shared/defaults.ts)
 - **BR-15** `language` (`es` | `en`) is a plain, non-secret setting; its rules (default, live change, what it drives) are owned by `../025-i18n-es-en/spec.md`. Spanish text quoted in this spec is the `es` value of a dictionary key (rioplatense, unchanged).
+
+- **BR-16** Remote access is off by default at every level: the feature switch, each of the four scopes, and the Serve. Turning the feature on starts with all scopes and locks off (spec 026 BR-10). *Amended by [028](../028-remote-vault-and-threads/spec.md) (2026-11-08): the tab lists six scopes (plus Notes and History), the continue-conversations sub-switch under History and the exclusion list of vault folders (with its stale marker); the new ones are off at every turn-on and each needs its own native confirmation, and the exclusion list is kept across turn-ons.*
 
 ## 7. Constraints and risks
 - Layers: `shared` (types, defaults), `main` (store, safeStorage, dialogs, IPC), `renderer` (dialog), `coordinator` (receives `init` and `settings` messages, sends `settings.patch`/`alwaysAllow`).

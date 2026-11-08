@@ -293,7 +293,7 @@ show up without restarting, and everything Alma "knows" can be inspected, edited
   `trash` request is a host action, not a tool.
 - **Security / privacy:** every path is confined; hidden folders are unusable; `alma-vault://` serves only the active vault, refuses hidden segments and
   symlink escapes, and is allowed by the window CSP for `img-src`, `connect-src` and `frame-src`; remote images are blocked by the CSP. Vault content is
-  user data; it leaves the machine only when it is sent to a model provider as search results/context/attachments (009, 002). The audit log records
+  user data; it leaves the machine only when it is sent to a model provider as search results/context/attachments (009, 002) *(Amended by [028](../028-remote-vault-and-threads/spec.md), 2026-11-08: also served read-only to the owner's own paired phone over the tailnet when the remote Notes scope is on; the vault, its tools and the protocol are not changed)*. The audit log records
   `vault.trash` with the vault-relative path and `actor: 'agent'`. Update `docs/security/` only if this changes.
 - **Platform:** Windows paths: the renderer builds `settings.activeVault + '\\' + path` for `openPath`; case-insensitive name collision checks in the
   renderer; `fs.watch` recursive is native on Windows (not guaranteed on Linux); `rename` allows case-only renames.

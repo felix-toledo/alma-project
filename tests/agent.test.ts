@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultSettings } from '../src/shared/defaults'
-import type { Block, LiveEvent, Settings, Thread } from '../src/shared/types'
+import type { Block, Company, LiveEvent, Settings, Thread } from '../src/shared/types'
+import type { CompanyEngine } from '../src/coordinator/company/engine'
 import type { Provider, ReviewVerdict, TurnRequest, TurnResult } from '../src/coordinator/providers/types'
 
 // A scripted provider: each test decides what the "model" answers for every turn.
@@ -344,5 +345,66 @@ describe('voice conversation tool (spec 024)', () => {
     await start('gracias, nada más')
     expect(events.some((e) => e.type === 'approval.request')).toBe(false)
     expect(thread.toolStates.e1.status).toBe('done')
+  })
+})
+
+describe('a company head agent in a chat the user opened', () => {
+  async function headRun(): Promise<{ system: string; tools: string[]; engine: InstanceType<typeof CompanyEngine>; company: Company }> {
+    const { CompanyEngine } = await import('../src/coordinator/company/engine')
+    const { CompanyStore } = await import('../src/coordinator/company/store')
+    const base = settings.agents[0]
+    const company: Company = {
+      id: 'acme',
+      name: 'Acme',
+      mission: '',
+      goals: '',
+      vault: workspace,
+      color: '#000',
+      budgetUsd: 0,
+      members: [
+        { id: 'general', title: 'CEO', reportsTo: null, collaborates: [], budgetUsd: 0 },
+        { id: 'ana', title: 'Analista', reportsTo: 'general', collaborates: [], budgetUsd: 0 }
+      ],
+      email: { address: '', imapHost: '', imapPort: 993, smtpHost: '', smtpPort: 465 },
+      whatsapp: false,
+      createdAt: 0
+    }
+    settings.companies = [company]
+    settings.agents = [
+      { ...base, id: 'general', name: 'La general', companyId: company.id },
+      { ...base, id: 'ana', name: 'Ana', companyId: company.id }
+    ]
+    const engine = new CompanyEngine({
+      settings: () => settings,
+      store: new CompanyStore(workspace),
+      runMember: () => ({ threadId: 'x', done: Promise.resolve('') }),
+      complete: async () => ({ text: '' }),
+      writeNote: async () => {},
+      notify: () => {},
+      emit: () => {}
+    })
+    let system = ''
+    let tools: string[] = []
+    script = (request) => {
+      if (lastToolResults(request).length > 0) return turn([text('Listo.')])
+      system = request.system
+      tools = request.tools.map((t) => t.name)
+      return turn([toolUse('m1', 'schedule_meeting', { topic: 'Plan de X', agenda: ['X'], participants: ['ana'], at: '2030-05-14T15:00' })])
+    }
+    thread.messages.push({ role: 'user', content: [text('creá una reunión mañana a las 3pm para hablar de X')], ts: 0 })
+    const profile = settings.agents.find((a) => a.id === 'general')!
+    await runAgent(profile, thread.messages, { ...context(), company: { company, memberId: 'general', engine } })
+    return { system, tools, engine, company }
+  }
+
+  it('is offered schedule_meeting, knows the local date and its team ids, and schedules without asking', async () => {
+    const { system, tools, engine, company } = await headRun()
+    expect(tools).toContain('schedule_meeting')
+    expect(system).toMatch(/Local date and time: \w+day, /)
+    expect(system).toContain('(id ana)')
+    expect(events.some((e) => e.type === 'approval.request')).toBe(false)
+    expect(thread.toolStates.m1.status).toBe('done')
+    const [meeting] = engine.snapshot(company.id).meetings
+    expect(meeting).toMatchObject({ topic: 'Plan de X', chair: 'general', participants: ['general', 'ana'], at: new Date('2030-05-14T15:00').getTime() })
   })
 })

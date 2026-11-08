@@ -1,6 +1,6 @@
 import * as z from 'zod/v4'
 import { chainOfCommand, colleagues, directReports } from '../shared/company'
-import { audit } from '../shared/audit'
+import { toolTrail } from './tool-trail'
 import { formatDateTime } from '../shared/i18n/format'
 import { translate, translateText } from '../shared/i18n/messages'
 import type { AgentProfile, Block, ChatMessage, EventScope, Language, LiveEvent, ProviderId, Routine, Settings, SubagentRun, Thread, ToolState, ToolText, Usage } from '../shared/types'
@@ -68,7 +68,7 @@ export interface RunContext {
 }
 
 /** Tools every agent gets regardless of its profile: they act on the app (vault, schedule), not on the workspace. */
-function appTools(ctx: RunContext): ToolDefinition[] {
+export function appTools(ctx: RunContext): ToolDefinition[] {
   return [
     ...(ctx.knowledge ? knowledgeTools : []),
     ...routineTools,
@@ -366,17 +366,8 @@ async function executeTool(
     rememberAlwaysAllow: ctx.rememberAlwaysAllow,
     boss: bossOf(ctx)
   })
-  // Reads aren't trailed; anything that changes, runs or sends is, with who allowed it and what it was about.
   const trail = (outcome: 'ok' | 'denied' | 'error', action: string): void => {
-    if (risk === 'read') return
-    const args = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
-    audit({
-      action,
-      actor: 'agent',
-      target: use.name,
-      outcome,
-      detail: { risk, thread: ctx.thread.id, agent: profile.id, decision: authorization.note, args: Object.keys(args).join(','), ...(use.name === 'run_command' && typeof args.command === 'string' ? { command: args.command } : {}) }
-    })
+    toolTrail({ risk, name: use.name, input, threadId: ctx.thread.id, agentId: profile.id, note: authorization.note }, outcome, action)
   }
   if (!authorization.allowed) {
     trail('denied', 'tool.authorize')

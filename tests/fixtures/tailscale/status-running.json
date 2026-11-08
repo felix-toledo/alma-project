@@ -1,0 +1,154 @@
+{
+  "Version": "1.104.5-t788384763-gd9218e278",
+  "TUN": true,
+  "BackendState": "Running",
+  "HaveNodeKey": true,
+  "AuthURL": "",
+  "TailscaleIPs": [
+    "100.64.0.1",
+    "fd7a:115c:a1e0::1"
+  ],
+  "Self": {
+    "ID": "nEXAMPLECNTRL",
+    "NodeID": 1,
+    "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+    "HostName": "ALMA-PC",
+    "DNSName": "alma-pc.tail0000.ts.net.",
+    "OS": "windows",
+    "UserID": 1,
+    "TailscaleIPs": [
+      "100.64.0.1",
+      "fd7a:115c:a1e0::1"
+    ],
+    "AllowedIPs": [
+      "100.64.0.1/32",
+      "fd7a:115c:a1e0::1/128"
+    ],
+    "Addrs": [
+      [],
+      [],
+      [],
+      []
+    ],
+    "CurAddr": "",
+    "Relay": "sao",
+    "PeerRelay": "",
+    "RxBytes": 0,
+    "TxBytes": 0,
+    "Created": "2026-11-07T05:16:34.706246531Z",
+    "LastWrite": "0001-01-01T00:00:00Z",
+    "LastSeen": "0001-01-01T00:00:00Z",
+    "LastHandshake": "0001-01-01T00:00:00Z",
+    "Online": true,
+    "ExitNode": false,
+    "ExitNodeOption": false,
+    "Active": false,
+    "PeerAPIURL": [
+      "http://100.64.0.1:56422",
+      "http://[fd7a:115c:a1e0::1]:45874"
+    ],
+    "TaildropTarget": 0,
+    "NoFileSharingReason": "",
+    "Capabilities": [
+      "HTTPS://TAILSCALE.COM/s/DEPRECATED-NODE-CAPS#see-https://github.com/tailscale/tailscale/issues/11508",
+      "default-auto-update",
+      "https",
+      "https://tailscale.com/cap/file-sharing",
+      "https://tailscale.com/cap/is-admin",
+      "https://tailscale.com/cap/is-owner",
+      "https://tailscale.com/cap/ssh",
+      "https://tailscale.com/cap/tailnet-lock",
+      "probe-udp-lifetime",
+      "ssh-behavior-v1",
+      "ssh-env-vars",
+      "store-appc-routes",
+      "tailnet-display-name"
+    ],
+    "CapMap": {
+      "default-auto-update": [
+        true
+      ],
+      "https": null,
+      "https://tailscale.com/cap/file-sharing": null,
+      "https://tailscale.com/cap/is-admin": null,
+      "https://tailscale.com/cap/is-owner": null,
+      "https://tailscale.com/cap/ssh": null,
+      "https://tailscale.com/cap/tailnet-lock": null,
+      "probe-udp-lifetime": null,
+      "ssh-behavior-v1": null,
+      "ssh-env-vars": null,
+      "store-appc-routes": null,
+      "tailnet-display-name": [
+        "user@example.com"
+      ]
+    },
+    "InNetworkMap": true,
+    "InMagicSock": false,
+    "InEngine": false,
+    "KeyExpiry": "2027-05-06T05:16:34Z"
+  },
+  "Health": [],
+  "MagicDNSSuffix": "tail0000.ts.net",
+  "CurrentTailnet": {
+    "Name": "user@example.com",
+    "StableID": "nEXAMPLECNTRL",
+    "MagicDNSSuffix": "tail0000.ts.net",
+    "MagicDNSEnabled": true
+  },
+  "CertDomains": [
+    "alma-pc.tail0000.ts.net"
+  ],
+  "ExtraRecords": null,
+  "Peer": {
+    "nodekey:0000000000000000000000000000000000000000000000000000000000000000": {
+      "ID": "nEXAMPLECNTRL",
+      "NodeID": 1,
+      "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+      "HostName": "localhost",
+      "DNSName": "ipad-10th-gen-wifi.tail0000.ts.net.",
+      "OS": "iOS",
+      "UserID": 1,
+      "TailscaleIPs": [
+        "100.64.0.3",
+        "fd7a:115c:a1e0::3"
+      ],
+      "AllowedIPs": [
+        "100.64.0.3/32",
+        "fd7a:115c:a1e0::3/128"
+      ],
+      "Addrs": [],
+      "CurAddr": "",
+      "Relay": "sao",
+      "PeerRelay": "",
+      "RxBytes": 0,
+      "TxBytes": 0,
+      "Created": "2026-11-07T18:12:59.202344515Z",
+      "LastWrite": "2026-11-07T15:28:14.0669193-03:00",
+      "LastSeen": "0001-01-01T00:00:00Z",
+      "LastHandshake": "0001-01-01T00:00:00Z",
+      "Online": true,
+      "ExitNode": false,
+      "ExitNodeOption": false,
+      "Active": false,
+      "PeerAPIURL": [
+        "http://100.64.0.3:63777",
+        "http://[fd7a:115c:a1e0::3]:45326"
+      ],
+      "TaildropTarget": 1,
+      "NoFileSharingReason": "",
+      "InNetworkMap": true,
+      "InMagicSock": true,
+      "InEngine": false,
+      "KeyExpiry": "2027-05-06T18:12:59Z"
+    }
+  },
+  "User": {
+    "1": {
+      "ID": 1,
+      "LoginName": "user@example.com",
+      "DisplayName": "Example User",
+      "ProfilePicURL": ""
+    }
+  },
+  "ClientVersion": null
+}

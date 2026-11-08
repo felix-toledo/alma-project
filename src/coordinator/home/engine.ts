@@ -134,7 +134,8 @@ export function managedConfig(port: number, timeZone: string, language: Language
     `  time_zone: ${timeZone}`,
     `  language: ${language}`,
     'http:',
-    '  server_host: 0.0.0.0',
+    // Loopback only (R-02): the app reaches HA through WSL's localhost relay, so no LAN interface needs it.
+    '  server_host: 127.0.0.1',
     `  server_port: ${port}`,
     // RTSP cameras: see FFMPEG_SCRIPT.
     'ffmpeg:',

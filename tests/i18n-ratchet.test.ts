@@ -198,3 +198,13 @@ describe('AC-2.5 the allowlist', () => {
     }
   })
 })
+
+describe('AC-6.8 (028) the hardcoded-text gate covers the phone client', () => {
+  it('AC-6.8 (028) the hardcoded-text gate covers src/remote-client', () => {
+    expect(rules('src/remote-client/screens/X.tsx', 'export const X = () => <p>Pick a folder to read</p>')).toEqual(['R2'])
+    expect(scanFile('src/remote-client/screens/X.tsx', "export const X = () => <button aria-label=\"Go back\">{t('a.b')}</button>").map((f) => f.text)).toEqual(['Go back'])
+    expect(rules('src/remote-client/screens/X.tsx', "export const X = () => <p>{t('remote.pwa.retry')}</p>")).toEqual([])
+    // Spanish in a phone component is caught as it is anywhere outside the dictionary.
+    expect(rules('src/remote-client/screens/X.tsx', 'export const X = () => <p>No hay notas todavía</p>')).toEqual(['R1', 'R2'])
+  })
+})

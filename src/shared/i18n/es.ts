@@ -15,7 +15,8 @@ import { routines } from './es/routines'
 import { tools } from './es/tools'
 import { vault } from './es/vault'
 import { voice } from './es/voice'
+import { remote } from './es/remote'
 import type { Message } from './messages'
 
 // es.ts is the source of the keys: `en` must define exactly the same ones.
-export const es = { ...ambience, ...channels, ...chat, ...companies, ...common, ...coordinator, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice } satisfies Record<string, Message>
+export const es = { ...ambience, ...channels, ...chat, ...companies, ...common, ...coordinator, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice, ...remote } satisfies Record<string, Message>

@@ -1,31 +1,16 @@
 import { compareText } from '../../../shared/i18n/format'
 import type { Language } from '../../../shared/i18n/language'
 import type { VaultEntry } from '../../../shared/types'
+import { baseName, parentOf, resolveVaultAsset } from '../../../shared/vault/paths'
+
+// The pure path and name rules live in shared/vault so the phone's Notes use the very same ones.
+export { baseName, fuzzyScore, IMAGE_EXT, join, noteName, parentOf } from '../../../shared/vault/paths'
 
 export interface TreeNode {
   name: string
   path: string
   kind: 'file' | 'folder'
   children: TreeNode[]
-}
-
-export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i
-
-export function baseName(path: string): string {
-  return path.split('/').pop() ?? path
-}
-
-export function parentOf(path: string): string {
-  const i = path.lastIndexOf('/')
-  return i < 0 ? '' : path.slice(0, i)
-}
-
-export function join(...parts: string[]): string {
-  return parts.filter(Boolean).join('/')
-}
-
-export function noteName(path: string): string {
-  return baseName(path).replace(/\.(md|excalidraw)$/i, '')
 }
 
 /** URL the renderer can load for a vault file; served by the main process, confined to the active vault. */
@@ -58,44 +43,11 @@ export function buildTree(entries: VaultEntry[], language: Language): TreeNode[]
   return root.children
 }
 
-/**
- * Subsequence match like a quick switcher: every query character must appear in order. Higher is better;
- * consecutive runs and matches at word starts score more, and the file name counts more than its folder.
- */
-export function fuzzyScore(query: string, text: string): number {
-  const q = query.toLowerCase().replace(/\s+/g, '')
-  if (!q) return 1
-  const t = text.toLowerCase()
-  const nameStart = t.lastIndexOf('/') + 1
-  let score = 0
-  let ti = 0
-  let run = 0
-  for (const char of q) {
-    const found = t.indexOf(char, ti)
-    if (found < 0) return 0
-    run = found === ti ? run + 1 : 1
-    const wordStart = found === 0 || /[\s/_\-.]/.test(t[found - 1])
-    score += run * 2 + (wordStart ? 6 : 0) + (found >= nameStart ? 3 : 0)
-    ti = found + 1
-  }
-  return score - t.length * 0.05
-}
-
-/** Resolves an image reference written in `notePath` to a vault path: relative first, then by file name (wiki-style embeds). */
+/** The URL for an image reference written in `notePath`: remote ones pass through, vault ones resolve as on the phone (shared rule). */
 export function resolveAsset(target: string, notePath: string, entries: VaultEntry[]): string | null {
   if (/^https?:\/\//.test(target)) return target
-  const files = entries.filter((e) => e.kind === 'file')
-  const parts: string[] = []
-  for (const part of join(parentOf(notePath), target).split('/')) {
-    if (part === '..') parts.pop()
-    else if (part && part !== '.') parts.push(part)
-  }
-  const relative = parts.join('/')
-  if (files.some((e) => e.path === relative)) return assetUrl(relative)
-  if (files.some((e) => e.path === target)) return assetUrl(target)
-  const wanted = baseName(target).toLowerCase()
-  const byName = files.find((e) => baseName(e.path).toLowerCase() === wanted)
-  return byName ? assetUrl(byName.path) : null
+  const path = resolveVaultAsset(target, notePath, entries)
+  return path === null ? null : assetUrl(path)
 }
 
 // Anything (a chat tool card, a search hit) can ask the app to show a note in the vault view.

@@ -1,4 +1,5 @@
 import { defaultTexts } from './i18n/defaultTexts'
+import { defaultRemote } from './remote/settings'
 import type { Language } from './i18n/language'
 import type { AgentProfile, ProviderId, Settings, Thread } from './types'
 
@@ -146,6 +147,7 @@ export function defaultSettings(language: Language = 'es'): Settings {
     },
     email: { address: '', imapHost: '', imapPort: 993, smtpHost: '', smtpPort: 465 },
     whatsapp: { enabled: false, agentId: 'general', threadId: null },
+    remote: defaultRemote(),
     companies: [],
     companySecrets: {},
     home: { enabled: false, mode: 'managed', externalUrl: '', mirrored: false, agentId: '', visionProvider: '', visionModel: '' }

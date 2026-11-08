@@ -21,6 +21,7 @@ export const coordinator = {
   'error.noVault': 'No hay un vault abierto.',
   'error.runBusy': 'Ya hay una ejecución en curso en esta conversación.',
   'error.noAgents': 'No hay agentes configurados.',
+  'error.noRemote': 'El acceso remoto no está en marcha.',
   'error.cannotWork': 'No puede trabajar: {why}.',
   'error.companyNoVault': 'La empresa no tiene un vault.',
   'error.routineMissing': 'La rutina no existe.',

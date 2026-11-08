@@ -111,7 +111,7 @@ A person needs to hand work to an agent and see what it does without losing the 
 - **AC-5.4** (US-6) Given a vault file dragged onto the chat, then it becomes an attachment chip; attachments are cleared only after the message was accepted, and each chip can be removed with X. [manual]
 - **AC-5.5** (US-6) Given an image pasted into the box or dragged from the computer, then it is saved in `<userData>/inbox/` through `files.saveImage` and shown as a chip; when sent, the message carries "Imagen adjunta (mirala con look_at_image): <ruta>" for the agent. Only `image/*` files are taken; other dropped files are ignored. [manual]
 - **AC-5.6** (US-6) Given a picture with no name or the default name `image.png`, then it is named `imagen-<timestamp>.png`. [manual]
-- **AC-5.7** (US-6) Given `files.saveImage`, then the stored file name is `<base36 time>-<name>` with every character outside `w`, `.` and `-` runs replaced by `_`, keeping the last 60 characters. [gap]
+- **AC-5.7** (US-6) Given `files.saveImage`, then the stored file name is `<base36 time>-<name>` with every run of characters outside letters, digits, `_`, `.` and `-` replaced by `_`, keeping the last 60 characters. Test: tests/tools.test.ts › "AC-5.7 keeps letters, digits, dots and dashes and replaces only unsafe runs with _"
 - **AC-5.8** (US-6) Given the composer, then it shows the approval-mode selector (the global setting, not per thread), the agent's model ("modelo automático" when empty) and effort, and the placeholder changes with state: "El agente está trabajando…" while running, "¿Qué querés saber de lo adjuntado?" with attachments. [manual]
 - **AC-5.9** (US-6) Given a workspace image request (`files.image`), when the path is outside the thread's working folder or the thread has no folder, then the request fails with a message and no data is returned. Test: tests/tools.test.ts › "rejects paths that escape the workspace", tests/tools.test.ts › "requires a workspace"
 - **AC-5.10** (US-6) Given a workspace image request, when the file is not a PNG/JPEG/WebP ("El archivo no es una imagen PNG, JPEG o WebP.") or is larger than 12 MB ("La imagen es demasiado grande para la vista previa."), then the request fails with that message. [gap]
@@ -134,7 +134,7 @@ A person needs to hand work to an agent and see what it does without losing the 
 ## 6. Business rules
 - **BR-1** Threads live one per file, `<userData>/threads/<id>.json`, JSON, mode 0600, written atomically; saves are debounced 300 ms. (src/coordinator/store.ts)
 - **BR-2** The default title is "Nueva conversación"; it is replaced by the first line of the first message (57 characters + "…" when over 60). An empty rename restores the default. (src/coordinator/store.ts, src/coordinator/index.ts)
-- **BR-3** Only one run per thread at a time. (src/coordinator/index.ts)
+- **BR-3** Only one run per thread at a time. (src/coordinator/index.ts) *Amended by [028](../028-remote-vault-and-threads/spec.md) (2026-11-08): a paired phone becomes another starter of runs: a send into a running conversation is refused as busy (never queued or interrupting), a device has at most one phone-started run, and running conversations stay exempt from retention (BR-6).*
 - **BR-4** Before each new message, tool calls left without results are closed with error results. (src/coordinator/agent.ts)
 - **BR-5** The voice session thread is reused for 60 minutes (`VOICE_SESSION_MS`). (src/coordinator/index.ts)
 - **BR-6** Retention: `privacy.threadRetentionDays` (default 0 = keep); checked at start, on every settings change, and every 12 h; running threads are never deleted. (src/coordinator/index.ts, src/shared/defaults.ts)
@@ -143,7 +143,7 @@ A person needs to hand work to an agent and see what it does without losing the 
 - **BR-9** Remote images in model output are never loaded; the page CSP allows images only from itself, `data:`, `blob:`, `alma-vault:` and local 127.0.0.1. (src/renderer/src/components/Markdown.tsx, src/renderer/index.html)
 - **BR-10** Links in chat open in the system browser if http(s); the app window never navigates away. (src/main/index.ts)
 - **BR-11** A new conversation uses the default agent and the open thread's folder, else the default folder. (src/renderer/src/App.tsx)
-- **BR-12** Company agents' threads are hidden from the Chat tab and shown under Empresas. (src/renderer/src/App.tsx)
+- **BR-12** Company agents' threads are hidden from the Chat tab and shown under Empresas. (src/renderer/src/App.tsx) *Amended by [028](../028-remote-vault-and-threads/spec.md) (2026-11-08): the phone's conversation list reuses this definition exactly (`listableThreads` in `src/shared/threads.ts`, also used by the Chat tab, AC-2.10); company threads are never listed or continued from the phone.*
 - **BR-13** The approval mode chosen in the composer is a global setting. (src/renderer/src/components/ChatView.tsx)
 - **BR-14** The view follows the output only while the person is within 80 px of the end. (src/renderer/src/components/ChatView.tsx)
 

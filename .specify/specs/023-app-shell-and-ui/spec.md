@@ -53,6 +53,8 @@ and every screen shares the same look, sounds and focus behavior with options to
 - **AC-1.7** (US-2) Given `background.launchAtLogin` changes, when settings are pushed, then Windows' login item is set to the app path with `--hidden` (packaged) or the app folder plus `--hidden` (unpackaged). [manual] Toggle it and look in Windows «Aplicaciones de inicio».
 - **AC-1.8** (US-1) On macOS-style activation (`activate`) the window is shown or recreated; closing all windows does not quit on macOS. [gap]
 
+- **AC-1.9** (US-1, US-2) Given remote access on, when the window closes with run-in-tray off, then the tray icon stays so the server is never invisible; the tray menu offers turning remote access off only while it is on. Test: tests/remote-main.test.ts › "the tray icon exists while remote is on even with tray mode off, and is gone when both are off", "the tray menu carries the remote kill-switch text"
+
 ### Notifications and reminders (US-3, US-4)
 - **AC-2.1** (US-3) Given the coordinator sends `notify` without `always`, when the window is visible and focused, then no OS notification is shown. [gap]
 - **AC-2.2** (US-3) Given `notify` without `always` and the window hidden, minimized or unfocused, when notifications are supported, then an OS notification with the title, body and Alma icon is shown. [gap]
@@ -140,6 +142,8 @@ and every screen shares the same look, sounds and focus behavior with options to
 - **BR-15** Sections are `chat`, `vault`, `companies`, `home`; local keys `alma.mode`, `alma.company`, `alma.vault.chat`, `umbra.prefs`. (src/renderer/src/App.tsx, umbra/useUISound.ts)
 - **BR-16** The hidden render window uses partition `alma-render` and cancels every request that is not `data:` or `about:`. (src/main/render.ts)
 - **BR-17** The app is styled with the `console-ui` and `umbra-ui` conventions. Interface text comes from the `es`/`en` dictionaries and follows the `language` setting live (`../025-i18n-es-en/spec.md`); the Spanish is rioplatense as before and the English is US English. Spanish text quoted in this spec is the `es` value of a dictionary key. (docs/architecture.md)
+
+- **BR-18** While remote access is on, the tray icon stays even with run-in-tray off; turning remote access off is its kill switch (spec 026). *Amended by [028](../028-remote-vault-and-threads/spec.md) (2026-11-08): the kill switch also aborts the runs a phone started and denies their pending approvals; the tray item itself is unchanged, and the "Remote access" tab gains the Notes and History scopes, the sub-switch and the exclusion list.*
 
 ## 7. Constraints and risks
 - Layers: `main` (`src/main/index.ts`, `render.ts`, `guard.ts`, `instagram.ts`), `preload` (`src/preload/index.ts`, `api.d.ts`), `shared` (`desktop-api.ts`, `types.ts`), `renderer` (`App.tsx`, `main.tsx`, `components/Sidebar.tsx`, `umbra/*`, `styles.css`, `lib/*`). The renderer has no component tests; its logic is covered only by typecheck, lint and manual runs.

@@ -62,6 +62,9 @@ const api: DesktopApi = {
     connect: (): Promise<InstagramStatus> => ipcRenderer.invoke('instagram:connect'),
     disconnect: (): Promise<InstagramStatus> => ipcRenderer.invoke('instagram:disconnect')
   },
+  remote: {
+    moveExclusions: (from: string, to: string): Promise<void> => ipcRenderer.invoke('remote:moveExclusions', { from, to })
+  },
   onOpenThread(listener: (threadId: string) => void): () => void {
     const handler = (_event: unknown, threadId: string): void => listener(threadId)
     ipcRenderer.on('app:openThread', handler)

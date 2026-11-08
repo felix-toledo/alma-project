@@ -1,0 +1,29 @@
+{
+  "TCP": {
+    "443": {
+      "HTTPS": true
+    },
+    "8444": {
+      "HTTPS": true
+    }
+  },
+  "Web": {
+    "alma-pc.tail0000.ts.net:443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:8443"
+        },
+        "/other": {
+          "Proxy": "http://127.0.0.1:9000"
+        }
+      }
+    },
+    "alma-pc.tail0000.ts.net:8444": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:9001"
+        }
+      }
+    }
+  }
+}

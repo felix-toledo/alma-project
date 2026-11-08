@@ -18,7 +18,7 @@ Agents do not touch the shell. They reach it only through coordinator messages: 
 ## How to use it
 
 - **Launch twice**: the second launch brings the first window to the front.
-- **Close the window**: with «Al cerrar la ventana, seguir en la bandeja del sistema» (keep running in the tray on close) on, Alma hides. Click the tray icon, or use its menu «Abrir Alma» (open) / «Salir» (quit). «Salir» is the real exit.
+- **Close the window**: with «Al cerrar la ventana, seguir en la bandeja del sistema» (keep running in the tray on close) on, Alma hides. Click the tray icon, or use its menu «Abrir Alma» (open) / «Salir» (quit). «Salir» is the real exit. While remote access is on, the tray icon stays even with «run in tray» off, so the server is never invisible; turning remote access off is its kill switch ([remote-access](remote-access.md)).
 - **Start with Windows**: «Configuración» → General → «Abrir al iniciar Windows (minimizada)». It starts hidden (`--hidden`), tray and coordinator still start.
 - **Move between sections**: the four tabs at the top of the sidebar: «Chat», «Vault», «Empresas», «Casa». «Nueva conversación» (new conversation) shows in Chat only. At the bottom: the MCP count (when servers exist), the voice button (when voice is enabled), «Rutinas (n)» and «Configuración».
 - **First run**: with no conversation the screen shows «Alma» and a «Nueva conversación» button, plus «Primero cargá una API key en Configuración» (load an API key first) when no provider has a key.

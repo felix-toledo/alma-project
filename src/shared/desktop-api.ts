@@ -23,6 +23,10 @@ export interface DesktopApi {
     connect(): Promise<InstagramStatus>
     disconnect(): Promise<InstagramStatus>
   }
+  remote: {
+    /** After a successful rename or move in the vault view: the folder's remote exclusions follow it (no dialog). */
+    moveExclusions(from: string, to: string): Promise<void>
+  }
   /** A notification was clicked: show this thread. */
   onOpenThread(listener: (threadId: string) => void): () => void
   /** A reminder fired: shown inside the app too, since OS toasts can be dropped. */

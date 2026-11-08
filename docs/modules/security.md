@@ -17,8 +17,8 @@ For an agent, these are limits, not tools: it cannot reach the local network wit
 
 ## How to use it
 
-1. **Export**: «Configuración → General → Exportar mis datos…». Pick a folder; Alma creates `alma-export-YYYYMMDD-HHMMSS` there.
-2. **Erase**: **Borrar mi historial** (erase my history). Confirm «No se puede deshacer. Tu vault, tus claves y tus canales no se tocan.» (cannot be undone; vault, keys and channels are untouched).
+1. **Export**: «Configuración → General → Exportar mis datos…». Pick a folder; Alma creates `alma-export-YYYYMMDD-HHMMSS` there. It includes `remote-devices.json` (paired phone names and dates, no key material).
+2. **Erase**: **Borrar mi historial** (erase my history). Confirm «No se puede deshacer. Tu vault, tus claves y tus canales no se tocan.» (cannot be undone; vault, keys and channels are untouched). Paired phones are revoked and the remote directory is deleted.
 3. **Retention**: «Borrar conversaciones sin actividad» (delete idle conversations): «Nunca» (never), 30, 90, 180 or «Al año» (365) days. Default never.
 4. **Confirmation dialog**: when you pick «Permitir todo» (allow all) or add an MCP stdio server, a system dialog «Confirmar cambio de seguridad» appears. «Cancelar» is the default.
 5. **Read the trail**: files in `%APPDATA%\Alma\audit\*.jsonl` (one JSON per line). There is no screen for it. Verifying the chain from the app is not possible today (see the table below).
@@ -95,8 +95,9 @@ What leaves the machine (BR-9 of the spec, outbound hosts checked against the co
 | `api.telegram.org`, WhatsApp, Instagram, your IMAP/SMTP server | Messages, photos, bot token in file-download URLs, posts (after approval), credentials and mail | Channels enabled |
 | `huggingface.co` | One-time model downloads, no personal data | First use |
 | MCP servers you add | Whatever the tools send them | Tool calls |
+| Your own paired phone, over the tailnet (spec 028) | Notes and images of the active vault minus the excluded folders (Notes scope, read-only); titles and user/assistant text of your conversations (History scope); with «continue conversations» on, messages typed on the phone enter a conversation and go to its provider like any message | Only while the matching remote switch is on. The phone stores none of it. Until spec 028, vault content left the machine only toward a model provider |
 
-Nothing is sent to servers run by Alma: there are none.
+Nothing is sent to servers run by Alma: there are none. The remote channel is described in [remote-access](remote-access.md); its threats and limits (a stolen unlocked phone can make an agent work inside a desktop conversation, and in «Permitir todo» mode `exec` and `write` do not ask) are R‑14 in [RISKS](../security/RISKS.md).
 
 ## Documented controls vs. the code
 
@@ -122,7 +123,7 @@ Each row takes a control claimed in [CONTROLS](../security/CONTROLS.md), [RISKS]
 | SSRF: private names, names resolving to private IPs, every redirect checked (CONTROLS §4) | `tools/web.ts`, `tests/web.test.ts`. DNS rebinding is left open (R-09), as stated. | Match |
 | Mail with TLS ≥ 1.2 and mandatory STARTTLS (CONTROLS §2) | `email.ts`: `minVersion: 'TLSv1.2'`, `doSTARTTLS` on non-993, `requireTLS` on non-465. | Match |
 | `pnpm audit` in CI and Dependabot (CONTROLS §4) | `ci.yml` runs `pnpm audit --audit-level=high`; `.github/dependabot.yml` exists. | Match |
-| Home Assistant listens on `0.0.0.0`, 7 days of history (RISKS R-02, CONTROLS §6) | `engine.ts`: `server_host: 0.0.0.0`, `purge_keep_days: 7`. | Match (the risk is real and open) |
+| Home Assistant listens on loopback only, 7 days of history (RISKS R-02, CONTROLS §6) | `engine.ts`: `server_host: 127.0.0.1`, `purge_keep_days: 7`; `tests/home.test.ts` › "R-02". | Match (R-02 fixed) |
 | Export, erase, retention (CONTROLS §6, PRIVACY §3) | `privacy.ts` and `applyRetention`, every 12 h. | Match |
 | Model providers receive data "when an agent uses that provider" (PRIVACY §2) | Also true for the auto-review model (tool input, your latest message) and for the vision model (pictures). PRIVACY §1 mentions the camera-vision flow in the cameras row only; the provider table in §2 lists neither auto-review nor `look_at_image`, and no part of the document says that auto-review sends tool input and your latest message. | Mismatch (omission) |
 
@@ -152,7 +153,7 @@ Ordered by priority:
 8. `coordinator:connect` rejections are not audited.
 9. `send_telegram` is `memory` risk and can send any allowed image to your Telegram without asking.
 10. `saveInboxImage` sanitizes names with `/[^w.-]+/g` (a literal `w`), turning most letters of received file names into `_` (`src/coordinator/index.ts:352`). Probably a typo for `\w`; confinement is not weakened.
-11. Home Assistant on `0.0.0.0` is still open (R-02).
+11. Home Assistant on `0.0.0.0` was open (R-02); fixed, it now binds `127.0.0.1`.
 12. «Borrar mi historial» leaves the audit trail, company task data, routines state and the vault. Confirm it is intended.
 13. 33 of 56 criteria have no test, including all secret-sealing and privacy-rights behavior. Dependency vulnerabilities and signing are tracked in [spec 001](../../.specify/specs/001-release-packaging/spec.md).
 

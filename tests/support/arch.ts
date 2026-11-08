@@ -11,7 +11,7 @@ export interface Rule {
 
 /** The layer map from docs/architecture.md, one rule per arrow that must not exist. */
 export const RULES: Rule[] = [
-  { name: 'shared is a leaf: it cannot know who uses it', from: /^src\/shared\//, forbid: /^src\/(main|coordinator|renderer|preload)\// },
+  { name: 'shared is a leaf: it cannot know who uses it', from: /^src\/shared\//, forbid: /^src\/(main|coordinator|renderer|preload|remote-client)\// },
   {
     name: 'renderer talks to the rest only through IPC: no main/coordinator, no node, no electron, no node-only shared modules',
     from: /^src\/renderer\//,
@@ -19,7 +19,28 @@ export const RULES: Rule[] = [
   },
   { name: 'coordinator never reaches into main or renderer', from: /^src\/coordinator\//, forbid: /^src\/(main|renderer|preload)\// },
   { name: 'only coordinator/index.ts touches electron; logic stays testable without it', from: /^src\/coordinator\/(?!index\.ts$)/, forbid: /^electron$/ },
-  { name: 'main never reaches into coordinator or renderer', from: /^src\/main\//, forbid: /^src\/(coordinator|renderer)\// }
+  { name: 'main never reaches into coordinator or renderer', from: /^src\/main\//, forbid: /^src\/(coordinator|renderer)\// },
+  {
+    name: 'the phone client sees only itself, the remote contracts and the pure vault logic',
+    from: /^src\/remote-client\//,
+    forbid: /^(src\/(?!remote-client\/|shared\/remote\/|shared\/vault\/)|node:|electron$)/
+  },
+  { name: 'nobody imports the phone client', from: /^src\/(?!remote-client\/)/, forbid: /^src\/remote-client\// },
+  {
+    name: 'the remote contracts stay browser-safe: no node, no electron, no audit',
+    from: /^src\/shared\/remote\//,
+    forbid: /^(node:|electron$|src\/shared\/audit(\.|$))/
+  },
+  {
+    name: 'the vault logic and thread helpers shared with the phone stay browser-safe: no node, no electron, no audit',
+    from: /^src\/shared\/(vault\/|threads\.ts$)/,
+    forbid: /^(node:|electron$|src\/shared\/audit(\.|$))/
+  },
+  {
+    name: 'what the phone reads and runs (notes, threads, runs, thread view, quiet) touches no disk, network, agent or entry point',
+    from: /^src\/coordinator\/channels\/remote\/(notes|threads|runs|thread-view|quiet)\.ts$/,
+    forbid: /^(node:(fs|http|https|http2|net|tls|dns|dgram|child_process)(\/|$)|src\/coordinator\/(agent|index)$)/
+  }
 ]
 
 const IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)['"]([^'"]+)['"]/g

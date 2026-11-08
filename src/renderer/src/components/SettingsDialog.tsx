@@ -28,6 +28,7 @@ import { AmbienceSettings } from '../umbra/AmbienceControls'
 import { Icon } from '../umbra/Icon'
 import { TeamsSettings } from '../companies/TeamsSettings'
 import { HomeSettings } from '../home/HomeSettings'
+import { RemoteSettings } from '../remote/RemoteSettings'
 
 interface Props {
   settings: PublicSettings
@@ -41,8 +42,8 @@ interface Props {
   initialTab?: Tab
 }
 
-export type Tab = 'providers' | 'agents' | 'teams' | 'approvals' | 'images' | 'telegram' | 'whatsapp' | 'email' | 'voice' | 'instagram' | 'mcp' | 'home' | 'general' | 'ambience'
-const TABS: Tab[] = ['providers', 'agents', 'teams', 'approvals', 'telegram', 'whatsapp', 'email', 'voice', 'images', 'instagram', 'home', 'mcp', 'general', 'ambience']
+export type Tab = 'providers' | 'agents' | 'teams' | 'approvals' | 'images' | 'telegram' | 'whatsapp' | 'email' | 'voice' | 'instagram' | 'mcp' | 'home' | 'remote' | 'general' | 'ambience'
+const TABS: Tab[] = ['providers', 'agents', 'teams', 'approvals', 'telegram', 'whatsapp', 'email', 'voice', 'images', 'instagram', 'home', 'remote', 'mcp', 'general', 'ambience']
 const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 export function SettingsDialog(props: Props): React.JSX.Element {
@@ -79,6 +80,7 @@ export function SettingsDialog(props: Props): React.JSX.Element {
             {tab === 'teams' && <TeamsSettings settings={props.settings} onChange={props.onChange} onSettingsReplaced={props.onSettingsReplaced} />}
             {tab === 'approvals' && <ApprovalsTab {...props} />}
             {tab === 'home' && <HomeSettings settings={props.settings} onChange={props.onChange} onSettingsReplaced={props.onSettingsReplaced} />}
+            {tab === 'remote' && <RemoteSettings settings={props.settings} onChange={props.onChange} onSettingsReplaced={props.onSettingsReplaced} />}
             {tab === 'mcp' && <McpTab {...props} />}
             {tab === 'images' && <ImagesTab {...props} />}
             {tab === 'telegram' && <TelegramTab {...props} />}

@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { editFileTool, globToRegExp, listDirTool, readFileTool, searchFilesTool, writeFileTool } from '../src/coordinator/tools/fs'
-import { resolveInWorkspace } from '../src/coordinator/tools/paths'
+import { inboxFileName, resolveInWorkspace } from '../src/coordinator/tools/paths'
+import { readSources } from './support/arch'
 import { runCommandTool } from '../src/coordinator/tools/shell'
 import { ToolError, truncateMiddle, type ToolContext } from '../src/coordinator/tools/types'
 
@@ -28,6 +29,25 @@ describe('resolveInWorkspace', () => {
 
   it('requires a workspace', () => {
     expect(() => resolveInWorkspace('', 'a.txt')).toThrow(/No working folder is selected/)
+  })
+})
+
+describe('inboxFileName', () => {
+  it('AC-5.7 keeps letters, digits, dots and dashes and replaces only unsafe runs with _', () => {
+    expect(inboxFileName('captura de pantalla 2026.png')).toBe('captura_de_pantalla_2026.png')
+    expect(inboxFileName('a/b\\c:d-e.jpg')).toBe('a_b_c_d-e.jpg')
+  })
+
+  it('AC-5.7 keeps the last 60 characters', () => {
+    const name = `${'x'.repeat(80)}.png`
+    expect(inboxFileName(name)).toBe(name.slice(-60))
+  })
+
+  // Guards the typo class `[^w.-]` (literal w, missing backslash) anywhere in src/.
+  it('no source regex negates a literal w instead of \w', () => {
+    const typo = /\[\^w[\].\-]/
+    const hits = Object.entries(readSources(join(__dirname, '..'))).filter(([, text]) => typo.test(text))
+    expect(hits.map(([file]) => file)).toEqual([])
   })
 })
 

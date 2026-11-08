@@ -139,9 +139,9 @@ The agent loop ([src/coordinator/agent.ts](src/coordinator/agent.ts)) is provide
 | [docs/architecture.md](docs/architecture.md) | Processes, layers and where each new thing goes |
 | [docs/development.md](docs/development.md) | Guide to install, run, test and extend Alma on Windows |
 | [docs/pipeline.md](docs/pipeline.md) | The route from an idea to production and which gate stops you at each stretch |
-| [docs/modules/](docs/modules) | One document per module (chat, agents, approvals, providers, settings, companies, vault and knowledge, Telegram, WhatsApp, Instagram, MCP, routines, voice, images, Office, web and mail, home, security, app shell): what it does, how it is used, how it works |
+| [docs/modules/](docs/modules) | One document per module (chat, agents, approvals, providers, settings, companies, vault and knowledge, Telegram, WhatsApp, Instagram, MCP, routines, voice, images, Office, web and mail, home, security, app shell, remote access): what it does, how it is used, how it works |
 | [docs/references/](docs/references) | Reference tables written by hand against the code: settings, data on disk, tools, limits, IPC messages |
-| [docs/adr/](docs/adr) | Architecture decisions (ADR 0001 to 0019) |
+| [docs/adr/](docs/adr) | Architecture decisions (ADR 0001 to 0021) |
 | [docs/security/](docs/security) | Controls (SOC 2 / ISO 27001 / 27701), privacy and open risks |
 | [docs/HOME-AUTOMATION-PLAN.md](docs/HOME-AUTOMATION-PLAN.md) | Plan and status of the home automation module |
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability |
@@ -149,7 +149,7 @@ The agent loop ([src/coordinator/agent.ts](src/coordinator/agent.ts)) is provide
 ### Specifications (`.specify/`)
 
 - `memory/constitution.md`: the project's constitution. If anything contradicts it, it wins.
-- `specs/NNN-name/`: one folder per feature with `spec.md`, `plan.md` and `tasks.md` (001 packaging, 002 chat, 003 agents, 004 approvals, 005 providers, 006 settings, 007 companies, 008 vault, 009 knowledge and memory, 010 Telegram, 011 WhatsApp, 012 Instagram, 013 and 014 home, 015 files and commands, 016 web and mail, 017 MCP, 018 routines, 019 voice, 020 images, 021 Office and drawings, 022 security, 023 app shell and UI, 024 voice control, models and Meta, 025 language es/en). Each acceptance criterion cites the test that covers it, or is marked `[gap]` (the test is missing) or `[manual]` (checked by hand). Index in [.specify/specs/README.md](.specify/specs/README.md).
+- `specs/NNN-name/`: one folder per feature with `spec.md`, `plan.md` and `tasks.md` (001 packaging, 002 chat, 003 agents, 004 approvals, 005 providers, 006 settings, 007 companies, 008 vault, 009 knowledge and memory, 010 Telegram, 011 WhatsApp, 012 Instagram, 013 and 014 home, 015 files and commands, 016 web and mail, 017 MCP, 018 routines, 019 voice, 020 images, 021 Office and drawings, 022 security, 023 app shell and UI, 024 voice control, models and Meta, 025 language es/en, 026 remote access). Each acceptance criterion cites the test that covers it, or is marked `[gap]` (the test is missing) or `[manual]` (checked by hand). Index in [.specify/specs/README.md](.specify/specs/README.md).
 - `templates/`: templates for spec, plan, tasks and a guide to writing the documentation.
 
 ### Tests (`tests/`)

@@ -37,3 +37,8 @@ export function displayPath(workspace: string, absolute: string): string {
   const rel = relative(workspace, absolute)
   return (rel || '.').split(sep).join('/')
 }
+
+/** Safe stored name for a picture the user sent: unsafe runs become `_`, the last 60 characters are kept. */
+export function inboxFileName(name: string): string {
+  return name.replace(/[^\w.-]+/g, '_').slice(-60)
+}

@@ -1,0 +1,107 @@
+/* Acceso remoto: status badge, wizard actions, notices. Only app tokens, both themes work. */
+
+/* Status and dormant markers reuse the app's .badge; warnings reuse .text-warn. */
+
+.remote-wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.remote-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.remote-notices {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.remote-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.remote-pair-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.remote-pair-head h3 {
+  margin: 0;
+}
+
+.remote-qr-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 16px;
+}
+
+.remote-qr {
+  width: 200px;
+  height: 200px;
+  background: #fff;
+  padding: 12px;
+  border-radius: 20px;
+  box-shadow: 0 0 0 1px var(--border), 0 0 48px var(--glow);
+}
+
+.remote-code {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 6px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 16px 12px;
+  box-shadow: 0 0 32px var(--glow);
+}
+
+.remote-devices {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remote-devices li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.remote-dormant {
+  margin-left: 8px;
+}
+
+.remote-sub {
+  margin-left: 24px;
+}
+
+.remote-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

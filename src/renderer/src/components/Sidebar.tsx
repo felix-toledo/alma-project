@@ -1,7 +1,7 @@
 import type { AgentProfile, McpServerStatus, PendingApproval, ThreadSummary, VoiceState } from '../../../shared/types'
 import { request } from '../lib/coordinator'
 import { agentName, relativeTime, threadTitle } from '../lib/format'
-import { BookOpen, Briefcase, Building2, Home, MessageCircle, MessageSquare, Mic, Plus, Repeat, Send, Settings, X } from 'lucide-react'
+import { BookOpen, Briefcase, Building2, Home, MessageCircle, MessageSquare, Mic, Plus, Repeat, Send, Settings, Smartphone, X } from 'lucide-react'
 import { useT } from '../i18n/useT'
 import { Icon } from '../umbra/Icon'
 import { Logo } from './Logo'
@@ -85,6 +85,7 @@ export function Sidebar(props: Props): React.JSX.Element {
                 {thread.channel === 'telegram' && <span className="channel-icon" title={t('sidebar.channel.telegram')}><Icon icon={Send} size={14} /></span>}
                 {thread.channel === 'voice' && <span className="channel-icon" title={t('sidebar.channel.voice')}><Icon icon={Mic} size={14} /></span>}
                 {thread.channel === 'whatsapp' && <span className="channel-icon" title={t('sidebar.channel.whatsapp')}><Icon icon={MessageCircle} size={14} /></span>}
+                {thread.channel === 'remote' && <span className="channel-icon" title={t('sidebar.channel.remote')}><Icon icon={Smartphone} size={14} /></span>}
                 {thread.channel === 'company' && <span className="channel-icon" title={t('sidebar.channel.company')}><Icon icon={Briefcase} size={14} /></span>}
                 <span className="ellipsis">{threadTitle(thread.title, t)}</span>
               </div>

@@ -11,6 +11,8 @@ export const main = {
   'main.error.rejectedOrigin': 'Origen no autorizado',
   'main.error.cancelled': 'Cambio cancelado.',
   'main.error.unknownProvider': 'Proveedor desconocido',
+  'main.error.unknownTarget': 'Destino desconocido.',
+  'main.error.missingData': 'Faltan datos para el diálogo.',
   'main.error.unknownCompany': 'Empresa desconocida',
   'main.error.pathMissing': 'La ruta no existe.',
   'main.error.noPrograms': 'Alma no abre programas ni scripts.',

@@ -71,7 +71,8 @@ export const CHANNEL_GUIDES = {
 - The user can interrupt you by speaking: what you did not get to say they did not hear.`,
   company: `This conversation was opened by the company (a task, a review or a preparation): you work alone, with the user not watching. Finish with a clear result.`,
   whatsapp: `This conversation is on WhatsApp, in the user's chat with themselves: answer briefly and clearly, without tables or long code blocks. Audio arrives transcribed. To write to another person use send_whatsapp (the user approves every send).`,
-  telegram: `This conversation is on Telegram, from the phone: answer briefly and clearly, without tables or long code blocks (Telegram does not show them well). The user's audio arrives transcribed.`
+  telegram: `This conversation is on Telegram, from the phone: answer briefly and clearly, without tables or long code blocks (Telegram does not show them well). The user's audio arrives transcribed.`,
+  remote: `This conversation is on the user's own phone, through remote access: answer briefly and clearly, without tables or long code blocks.`
 } as const
 
 export const KNOWLEDGE_GUIDE = `Memory and knowledge (the user's vault):

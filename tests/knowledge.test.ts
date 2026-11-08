@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync, existsSync, symlinkSync } from 'node:fs'
 import { rename } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ftsQuery, KnowledgeBase, MEMORY_FILE, parseMemories } from '../src/coordinator/knowledge/base'
+import { ToolError } from '../src/coordinator/tools/types'
 import { EMBEDDING_DIMS } from '../src/coordinator/knowledge/db'
 import type { Embedder } from '../src/coordinator/knowledge/embedder'
 import { chunkMarkdown, splitFrontmatter } from '../src/coordinator/knowledge/markdown'
@@ -179,5 +180,29 @@ describe('KnowledgeBase', { timeout: 30_000 }, () => {
     expect(trashed).toEqual([join(root, 'nota.md')])
     expect(existsSync(join(root, 'nota.md'))).toBe(false)
     expect(kb.status().files).toBe(0)
+  })
+  it('AC-7.4 (028) readBytes refuses .., an absolute path, a dot segment and a junction that leaves the vault', async () => {
+    const { kb, root } = await openVault({ 'Notas/a.png': 'PNGDATA', '.interna/s.md': 'secreto' })
+    const outside = mkdtempSync(join(tmpdir(), 'alma-outside-'))
+    dirs.push(outside)
+    writeFileSync(join(outside, 'secret.md'), 'fuera')
+    symlinkSync(outside, join(root, 'enlace'), 'junction')
+    expect(new TextDecoder().decode((await kb.readBytes('Notas/a.png', 100)).bytes)).toBe('PNGDATA')
+    const refusal = async (path: string): Promise<string | undefined> =>
+      kb.readBytes(path, 100).then(
+        () => undefined,
+        (error: unknown) => (error instanceof ToolError ? error.text.key : String(error))
+      )
+    expect(await refusal('../fuera.md')).toBe('tool.cwd.outside')
+    expect(await refusal(join(outside, 'secret.md'))).toBe('tool.cwd.outside')
+    expect(await refusal('.interna/s.md')).toBe('tool.kb.hidden')
+    expect(await refusal('enlace/secret.md')).toBe('tool.cwd.outside')
+  })
+
+  it('AC-7.4 (028) readBytes refuses a file over maxBytes and a folder', async () => {
+    const { kb } = await openVault({ 'Notas/a.png': 'x'.repeat(100) })
+    expect((await kb.readBytes('Notas/a.png', 100)).bytes).toHaveLength(100)
+    await expect(kb.readBytes('Notas/a.png', 99)).rejects.toMatchObject({ text: { key: 'tool.kb.tooBig' } })
+    await expect(kb.readBytes('Notas', 100)).rejects.toMatchObject({ text: { key: 'tool.kb.noNote' } })
   })
 })

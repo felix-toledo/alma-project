@@ -115,6 +115,11 @@ Agents can write files, run PowerShell, send mail and move locks. The person nee
 - **AC-11.3** (US-7) Given an answer that is neither yes nor no, when heard, then Alma asks again once ("No te entendí. ¿Sí o no?"); after two unclear answers the approval is left pending in the app. [gap]
 - **AC-11.4** (US-7) Given the voice path, when the person says yes, then it is always a one-time allow: voice cannot answer "Siempre permitir". [gap]
 
+### Answering from a paired phone
+- **AC-12.1** (US-7) Given a paired phone with the approve scope on, when an approval on the remote thread is requested, then the phone lists it with the same question Telegram shows, the input cut at 1500 characters, and answers allow or deny through the existing broker. Test: tests/remote-approvals.test.ts › "allow y deny llegan al broker existente", "la entrada se corta a 1500 caracteres"
+- **AC-12.2** (US-7) Given an approval already answered on another surface, or an unknown id, when the phone answers, then it gets 409 already-answered and nothing runs twice. Test: tests/remote-approvals.test.ts › "409 already-answered y nada corre dos veces", "un id desconocido da 409 already-answered"
+- **AC-12.3** (US-7) Given the approve scope off, when the phone lists or answers, then it sees nothing and everything stays pending; the phone never answers always, like voice. Test: tests/remote-approvals.test.ts › "con approve apagado no se ven ni se responden, y siguen pendientes", "el esquema no tiene always y la tarjeta nunca lo ofrece (ni en publish)"
+
 ## 6. Business rules
 - **BR-1** Order of decision in `authorize` (src/coordinator/approval.ts): `read` → allowed; mode `blocked` → denied (all other risks, including `memory`, `home`, `publish`); `memory` → allowed; `home` → allowed; `publish` → boss review / ask (ignores every rule below); the agent's auto-approve list → allowed; `alwaysAllowTools` → allowed; then by mode.
 - **BR-2** Modes (`ApprovalMode`): `needs-approval` "Pedir aprobación" (default), `auto-review` "Auto-review", `always-allow` "Permitir todo", `blocked` "Solo lectura". (src/shared/types.ts, src/shared/defaults.ts, src/renderer/src/lib/format.ts)
@@ -144,6 +149,8 @@ Agents can write files, run PowerShell, send mail and move locks. The person nee
 - **BR-15** Telegram approval text shows the input JSON cut at 1500 characters; buttons carry `ap:<approvalId>:<decision>`. (src/coordinator/channels/telegram.ts)
 - **BR-16** By voice, a maximum of two attempts to understand yes or no. (src/coordinator/voice/assistant.ts)
 - **BR-17** Switching the mode to "Permitir todo" from another mode needs a native confirmation in main ("Confirmar cambio de seguridad"; detail: publications still ask). Cancelling throws "Cambio cancelado." (src/main/index.ts; see 022)
+
+- **BR-18** Answers from a paired phone reuse the existing approval broker: the first answer from any surface (app, Telegram, voice, phone) wins and later ones get `already-answered`. The phone offers allow and deny only, never always (spec 026 BR-12). *Amended by [028](../028-remote-vault-and-threads/spec.md) (2026-11-08): the phone also answers the approvals of a run it started in a conversation by id, only that device and only with the approve scope on; first answer wins and "always" stays unavailable, unchanged.*
 
 ## 7. Constraints and risks
 - Layers touched: `shared` (types `ApprovalMode`, `PendingApproval`, `ToolState`, `LiveEvent` `approval.request` / `approval.resolved`, request `approval.respond` / `approval.pending`); `coordinator` (`approval.ts`, `agent.ts` `executeTool`, `index.ts` broker and `rememberAlwaysAllow`, `channels/telegram.ts`, `channels/whatsapp.ts`, `voice/assistant.ts`); `main` (`index.ts`: notification, `alwaysAllow` message, confirmation dialog); `renderer` (`ToolCard.tsx`, `ChatView.tsx` mode selector, `SettingsDialog.tsx` Aprobaciones tab and agent editor, `Sidebar.tsx`, `lib/state.ts`, `lib/format.ts`).

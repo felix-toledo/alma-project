@@ -185,6 +185,11 @@ function applyEvent(state: AppState, event: LiveEvent): AppState {
     case 'home.plan':
     case 'home.rules':
     case 'home.flow':
+    // The remote tab (T37) keeps its own state.
+    case 'remote.status':
+    case 'remote.pairing':
+    case 'remote.devices':
+    case 'remote.tested':
       return state
   }
 }

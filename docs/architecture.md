@@ -29,6 +29,7 @@ What the pieces are, what can talk to what, and where each new thing goes. The r
 | `renderer` | pantallas y estado de UI | importar `main`/`coordinator`, `electron`, `node:*`, `shared/audit` |
 | `main` | windows, settings on disk, native dialogs, secrets (`safeStorage`) | import `coordinator`/`renderer` |
 | `coordinator` | everything that thinks or does I/O for an agent | import `main`/`renderer`; touch `electron` outside `index.ts` |
+| `remote-client` | the phone PWA, served by the PC over the tailnet | import `node:*`/`electron`/`main`/`coordinator`/`renderer`, hard-code hosts, be imported by anyone |
 
 Only typed messages travel between layers. If two layers need the same thing, it goes to `shared` (if it is pure) or a message is sent (if not).
 
@@ -59,6 +60,7 @@ To add a rule: a new entry in `RULES` + a fixture in the test that breaks it. To
 | A model provider | `src/coordinator/providers/` implementing `Provider` | a test with a fake provider, like `tests/providers.test.ts` |
 | A setting | type and default in `shared/types` and `shared/defaults`; read/write in `main/settings.ts`; screen in `SettingsDialog` | if it runs new code, a native confirmation (`main/guard.ts`) |
 | A screen | `src/renderer/src/<area>/`, with the `console-ui` and `umbra-ui` skills | logic with rules goes to `shared/` + a test |
+| A phone (PWA) screen | `src/remote-client/screens/` | contract in `shared/remote/api.ts`, text in `remote-client/i18n/` (own dictionaries, Spanish and English); the bundle is checked for no Node imports and no hard-coded host |
 | A business rule | pure function in `shared/` (or next to the tool) | spec first (Constitution I) |
 
 ## 5. Tests

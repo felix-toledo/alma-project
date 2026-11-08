@@ -36,6 +36,8 @@ The document has two halves inside the standard sections: **Part A, engine and d
 
 **Operate a device.** On Dispositivos, tap the switch of a light, plug, fan or cover. On the plan, tap the icon. Right-click or select it to open the device panel: editable name, brightness slider, warm/neutral/cool buttons (2700/4000/6000 K), 8 color swatches, volume, cover position, fan speed, climate setpoint, room selector, sensors, "Quitar dispositivo" (remove). Locks and alarm panels have buttons in the panel only, each behind a native `confirm` («¿Abrir x?»). Unavailable devices show no controls.
 
+**From the phone.** A paired phone with the house scope drives the same devices and rules; locks, alarms and gates ask for the phone's passkey instead of the PC dialog ([remote-access](remote-access.md)).
+
 **Ask Alma.** Example phrases:
 
 - «prendeme la luz de la cocina» (turn on the kitchen light)
@@ -99,6 +101,8 @@ Pieces:
 **Install.** `engine.ts` checks WSL (`wsl --status`) and free disk (`NEEDED_BYTES` = 6.5 GB), downloads `crane` v0.22.1 and verifies its pinned SHA-256, unpacks it with Windows' own `System32\tar.exe`, exports the official image `ghcr.io/home-assistant/home-assistant:2026.10.1` (linux/amd64, no Docker) as a tar, runs `wsl --import alma-home <vm folder> <tar> --version 2`, copies SonoffLAN, and writes the config. Heavy operations are serialized: a second request returns the running one.
 
 **Start.** HA runs as a child process `wsl.exe -d alma-home --exec /bin/sh /usr/local/bin/alma-ha.sh` with a clean environment. `configuration.yaml` is rewritten on every start (name Casa, metric, language `es`, host time zone, http on all interfaces, recorder purge 7 days, logger warning, includes for `automations.yaml`, `scenes.yaml`, `scripts.yaml`, created as `[]` if missing). RTSP cameras go through an ffmpeg wrapper that forces TCP, because WSL's NAT drops UDP. Boot waits up to 8 minutes. On the first start Alma runs onboarding: owner `alma` with a random password, closes the wizard steps, mints a long-lived token (3650 days), and stores both sealed.
+
+**Bind.** HA listens on `127.0.0.1` only (`server_host` in the generated `configuration.yaml`, rewritten at every start); the app reaches it through WSL's localhost relay, and nothing on the LAN can (R-02).
 
 **Ports and adoption.** Port 8123; if busy, 18123 (saved in `engine.json`); if that is busy too, `error`. If 8123 is busy and Alma holds credentials for `http://127.0.0.1:<port>` and HA answers `/api/config`, Alma adopts that running engine instead of starting a second one (this is how an engine left running by a previous Alma is picked up).
 
@@ -223,7 +227,7 @@ Plumbing integrations not listed as connected accounts: sun, radio_browser, goog
 
 ## Security and privacy
 
-- **Asks first:** locks, alarms, sirens and garage/gate/door covers, on every call (`home_secure_control` is `publish`). Camera, add/edit/remove, modes and rules tools follow the approval mode. The Casa window asks with a native `confirm` before operating a lock or alarm.
+- **Asks first:** locks, alarms, sirens and garage/gate/door covers, on every call (`home_secure_control` is `publish`). Camera, add/edit/remove, modes and rules tools follow the approval mode. The Casa window asks with a native `confirm` before operating a lock or alarm; a paired phone asks for a passkey step-up (60 s, single use, bound to the exact action).
 - **Blocks:** `home_control` refuses sensitive things and calls nothing, not even for the other matches; `home_call_service` refuses the `lock`, `alarm_control_panel` and `siren` domains. Company agents get no `home_*` tools.
 - **Stores:** the HA token and owner password are sealed with the OS keychain (`auth.json`). Pictures from cameras stay in `<data>/inbox/`; `erasePersonalFiles` empties it ([security.md](security.md)).
 - **Leaves the machine:** camera stills and plan photos go to the configured vision provider (a third party) and, when asked or when a watch matches, to Telegram. The engine downloads crane and SonoffLAN from GitHub and the HA image from `ghcr.io`. Brand accounts (Tuya code, eWeLink password) travel from the person to HA; when an agent drives `home_add_device`, the tool says the person types them in chat, so they pass through the model provider.

@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Remote access: one security layer, the transport is a strategy

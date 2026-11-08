@@ -176,6 +176,89 @@ export interface WhatsAppSettings {
   threadId: string | null
 }
 
+/** What a paired phone may do: chat, answer approvals, control the house, see camera stills (spec 026), read notes and conversations (spec 028). */
+export type RemoteScope = 'chat' | 'approve' | 'home' | 'cameras' | 'vault' | 'history'
+
+/** Remote access from the person's own phone over Tailscale (spec 026). Off by default; scopes are global. */
+export interface RemoteSettings {
+  enabled: boolean
+  /** Only 'tailscale' is valid; the test transport is not a setting (AC-3.7). */
+  transport: 'tailscale'
+  scopes: Record<RemoteScope, boolean>
+  /** The locks-and-alarms sub-switch under home automation. */
+  sensitive: boolean
+  /** The continue-conversations sub-switch under History (spec 028 BR-18); off at every turn-on. */
+  continueHistory: boolean
+  /** Camera entity ids the phone may see (allow-list, persists across turn-ons). */
+  cameras: string[]
+  /** Vault-relative folders the Notes scope never reaches (spec 028 BR-14); kept across turn-ons. */
+  vaultExcluded: string[]
+  /** Agent that answers the remote thread. */
+  agentId: string
+}
+
+/** Why the remote channel is not serving (spec 026 AC-2.4): exactly one cause, never generic. */
+export type RemoteFailure = 'noInternet' | 'tailscaleDown' | 'httpsOff' | 'listener' | 'phoneSilent' | 'portTaken' | 'serveBusy'
+
+/** What the Remote access tab shows about the channel. */
+export interface RemoteStatus {
+  state: 'off' | 'connecting' | 'online' | 'error'
+  address?: string
+  failure?: RemoteFailure
+  detail?: string
+  keyExpiresInDays?: number
+  renamed?: boolean
+}
+
+/** The slice of Tailscale state the PC wizard needs (T36; adapted from the T29 detection). */
+export interface WizardTailscale {
+  state: 'missing' | 'disconnected' | 'connected'
+  https: boolean
+  serving: boolean
+}
+
+/** Starting a pairing from the window (T15/T38): the reasons the tab can show. */
+export type PairStartResult = { ok: true } | { ok: false; reason: 'off' | 'busy' | 'locked' | 'limit' | 'no-host' }
+/** Approving a pairing from the window (T15/T38). */
+export type PairApproveResult =
+  | { ok: true; deviceId: string }
+  | { ok: false; reason: 'invalid' | 'denied' | 'mismatch' | 'locked' | 'expired' | 'limit' }
+
+/** One row of the remote activity list (T27): newest first, names resolved. */
+export interface ActivityEntry {
+  ts: string
+  /** The device name, or its id when deleted (AC-7.6); empty when no device took part. */
+  device: string
+  action: string
+  outcome: string
+}
+
+/** The wizard connection test (T30): Tailscale presence plus the channel status. */
+export interface RemoteDetect {
+  tailscale: WizardTailscale
+  status: RemoteStatus
+}
+
+/** One row of the paired-device list (plan 3); dormancy is global, mapped per row. */
+export interface DeviceView {
+  id: string
+  name: string
+  pairedAt: number
+  lastSeen: number | null
+  dormant: boolean
+}
+
+export type { ApprovalView } from './remote/api'
+
+/** What the pairing wizard shows (plan 3); null clears it. */
+export interface PairingView {
+  stage: 'offer' | 'request' | 'locked'
+  qrDataUrl?: string
+  expiresAt?: number
+  code?: string
+  lockedUntil?: number
+}
+
 export interface WhatsAppStatus {
   state: 'off' | 'connecting' | 'qr' | 'online' | 'error'
   /** QR to scan from WhatsApp → Dispositivos vinculados, as a data URL. */
@@ -214,6 +297,7 @@ export interface Settings {
   voice: VoiceSettings
   email: EmailSettings
   whatsapp: WhatsAppSettings
+  remote: RemoteSettings
   companies: Company[]
   /** Company mailbox passwords by company id, encrypted at rest like the API keys; never sent to the window. */
   companySecrets: Record<string, string>
@@ -445,6 +529,9 @@ export interface SubagentRun {
   messages: ChatMessage[]
 }
 
+/** Where a channel thread happens besides the app; shown as an icon in the sidebar. */
+export type ThreadChannel = 'telegram' | 'voice' | 'whatsapp' | 'company' | 'remote'
+
 export interface Thread {
   id: string
   title: string
@@ -452,9 +539,8 @@ export interface Thread {
   /** Who answers in this conversation, over the agent's own provider and model. */
   model?: ModelChoice
   workspace: string
-  /** Where the conversation happens besides the app; shown as an icon in the sidebar. */
   /** 'company': a task, review or meeting prep an agent of a company worked on by itself. */
-  channel?: 'telegram' | 'voice' | 'whatsapp' | 'company'
+  channel?: ThreadChannel
   createdAt: number
   updatedAt: number
   messages: ChatMessage[]
@@ -552,6 +638,21 @@ export type CoordinatorRequest =
   | { method: 'chat.stop'; threadId: string }
   | { method: 'approval.respond'; approvalId: string; decision: 'allow' | 'deny' | 'always' }
   | { method: 'approval.pending' }
+  /** Recent remote-trail entries for the tab (newest first; T27, shown in T38). */
+  | { method: 'remote.activity' }
+  | { method: 'remote.pair.start' }
+  | { method: 'remote.pair.approve'; name: string }
+  | { method: 'remote.pair.reject' }
+  | { method: 'remote.pair.cancel' }
+  | { method: 'remote.revoke'; deviceId: string }
+  | { method: 'remote.revokeAll' }
+  | { method: 'remote.test'; deviceId: string }
+  | { method: 'remote.status' }
+  | { method: 'remote.devices' }
+  | { method: 'remote.detect' }
+  | { method: 'remote.serve' }
+  | { method: 'remote.pickPort' }
+  | { method: 'remote.open'; target: 'tailscale-download' | 'tailscale-terms' }
   | { method: 'mcp.status' }
   /** Copies the conversations and what Alma remembers of the person into a new folder inside `targetDir`; returns its path. */
   | { method: 'privacy.export'; targetDir: string }
@@ -685,6 +786,10 @@ export type LiveEvent =
   | { type: 'knowledge.status'; status: KnowledgeStatus | null }
   | { type: 'telegram.status'; status: TelegramStatus }
   | { type: 'whatsapp.status'; status: WhatsAppStatus }
+  | { type: 'remote.status'; status: RemoteStatus }
+  | { type: 'remote.pairing'; pairing: PairingView | null }
+  | { type: 'remote.devices'; devices: DeviceView[] }
+  | { type: 'remote.tested'; deviceId: string; ok: boolean }
   | { type: 'voice.status'; status: VoiceStatus }
   /** `last`: the end of this utterance; the window answers with voice.played once it has played everything. */
   | { type: 'voice.play'; playback: VoicePlayback; last: boolean }
@@ -721,6 +826,12 @@ export type HostRequest =
   /** Encrypts / decrypts a secret with the OS keychain (safeStorage), which only main can use. */
   | { action: 'secret.seal'; text: string }
   | { action: 'secret.open'; text: string }
+  /** A native confirmation the coordinator needs (spec 026): pair, tailscale serve, revoke all. */
+  | { action: 'remote.confirm'; kind: 'pair' | 'serve' | 'revokeAll'; params: Record<string, string> }
+  /** Opens one fixed page in the browser (spec 026 AC-2.2); main chooses the URL, never the coordinator. */
+  | { action: 'remote.open'; target: 'tailscale-download' | 'tailscale-terms' }
+  /** The OS network flag, no probe (spec 026 PD-13). */
+  | { action: 'net.online' }
 
 export type CoordinatorToParent =
   /** The user picked "Siempre permitir": main persists it in settings and pushes them back. */
@@ -730,3 +841,5 @@ export type CoordinatorToParent =
   | { type: 'notify'; title: string; body: string; threadId?: string; always?: boolean }
   /** The coordinator changed settings (routines from an agent, the bound Telegram chat): main persists and pushes them back. */
   | { type: 'settings.patch'; patch: Partial<Omit<Settings, 'providers'>> }
+  /** The coordinator owns the device list: main caches the names for the turn-on dialog (spec 026 AC-1.11). */
+  | { type: 'remote.devices'; names: string[] }

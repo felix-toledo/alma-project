@@ -29,7 +29,7 @@ The policy deciding which tool calls ask the person first (ask, auto-review, all
 _Avoid_: permissions, safety level
 
 **Tool risk**:
-The class a tool declares — `read`, `write`, `exec`, `memory`, `publish`, `home` — which the approval policy keys on. `publish` always asks.
+The class a tool declares — `read`, `write`, `exec`, `memory`, `publish`, `home` — which the approval policy keys on. `publish` always asks. Besides acting outward on the user's behalf, `publish` is also the class for a model creating or changing autonomous agents (a company, spec 029).
 _Avoid_: danger level, scope
 
 **Reminder** / **Routine**:
@@ -63,15 +63,15 @@ The folder a thread's file tools are confined to (`read_file`, `write_file`, `ru
 _Avoid_: workspace (the code says `workspace`, the UI says "carpeta"), project folder, cwd
 
 **Channel thread**:
-A thread created by something other than the chat box: `telegram`, `whatsapp`, `voice` or `company`. It shows a channel icon in the sidebar; routine and house-rule threads have none.
+A thread created by something other than the chat box: `telegram`, `whatsapp`, `voice`, `company` or `remote` (the paired phone). It shows a channel icon in the sidebar; routine and house-rule threads have none.
 _Avoid_: external chat, remote thread
 
 **Attachment**:
-A vault file the person drags onto the composer; it is appended to the message as a numbered "Adjuntos del vault" block and treated as data, not instructions. A pasted picture is not an attachment, it goes to the inbox.
+A vault file the person drags onto the composer; it is appended to the message as a numbered "Adjuntos del vault" block and treated as data, not instructions. A pasted picture is not an attachment, it goes to the inbox. Spec 030 (draft) widens this: the person can also attach pictures and files of an allowed type (2 MiB each, 5 and 10 MiB per message) from the composer, stored under `inbox/attachments/`, read by the agent through `read_attachment` (pictures through `look_at_image`) and deleted after 30 days without the conversation being opened.
 _Avoid_: upload, context file
 
 **Inbox**:
-The `<userData>/inbox/` folder that holds pictures pasted in chat, received over Telegram, or taken from cameras. `look_at_image` may read from it.
+The `<userData>/inbox/` folder that holds pictures pasted in chat, received over Telegram, or taken from cameras; its `attachments/` subfolder (spec 030) holds files attached in chat. `look_at_image` may read from it.
 _Avoid_: downloads, uploads folder
 
 **Effort**:
@@ -339,7 +339,7 @@ The one-time ritual that turns a phone into a device: a one-use QR that expires 
 _Avoid_: login, linking (WhatsApp's QR is a linked device), enrolment
 
 **Scope** (remote):
-One capability a device may use: chat, approve, home automation or cameras (still pictures of the cameras the person allowed one by one, seen in transit and never saved on the PC; each camera added needs a native confirmation and the list persists across turn-ons). Scopes are global (not per device), all off every time remote access is turned on, and each is enabled separately on the PC. Locks and alarms are a sub-switch under home automation, off by default and, when on, opening and disarming need a step-up. Unrelated to **Tool risk**, which classifies tools, not capabilities.
+One capability a device may use: chat, approve, home automation, cameras (still pictures of the cameras the person allowed one by one, seen in transit and never saved on the PC; each camera added needs a native confirmation and the list persists across turn-ons), and, since spec [028](../.specify/specs/028-remote-vault-and-threads/spec.md), **Notes** and **History**: six in all. Scopes are global (not per device), all off every time remote access is turned on, and each is enabled separately on the PC. Locks and alarms are a sub-switch under home automation, and **Continue conversations** a sub-switch under History; each is off by default and needs its own native confirmation (locks and alarms also need a step-up to open or disarm). Unrelated to **Tool risk**, which classifies tools, not capabilities.
 _Avoid_: permission, role, access level
 
 **Step-up**:
@@ -349,6 +349,26 @@ _Avoid_: 2FA, PIN, re-login
 **Dormant device**:
 A paired device while remote access is off: it stays in the list, cannot connect, and returns when remote access is turned on again (the native confirmation names it). Its 15-day idle clock keeps running, so a long-dormant device is removed automatically. Not the same as a revoked device, which is deleted at once.
 _Avoid_: disabled device, inactive device
+
+**Notes scope** (remote):
+Spec [028](../.specify/specs/028-remote-vault-and-threads/spec.md), status `ready` (built, close-out pending). A scope that lets a paired phone browse, read and filter by name the notes of the active vault, read-only, minus the folders on the **Exclusion list**; no content or semantic search. Only the active vault is served, `Alma/` has no special rule, and nothing is stored on the phone. Notes (`.md`) are rendered and images shown up to 2 MB; any other file type is listed but not served; a note over 1 MB is refused; a path with a different casing is served under the vault's real casing. The remote chat agent's own `read_note` and `search_knowledge` are a separate path that this scope does not gate. Its own switch, global, off every time remote access is turned on, with its own native confirmation naming the vault folder. Not the same as History.
+_Avoid_: vault access, vault permission
+
+**History scope** (remote):
+Spec [028](../.specify/specs/028-remote-vault-and-threads/spec.md), status `ready` (built, close-out pending). A scope that lets a paired phone list and read the conversations the PC's Chat tab lists (company-agent threads never), as text of user and assistant messages only. Its own switch, global, off every time remote access is turned on, with its own native confirmation. Continuing conversations is a further sub-switch under History (**Continue conversations**), also off at every turn-on and with its own native confirmation, so History can be read-only; turning History off turns the sub-switch off too. A message the phone sends into a conversation is written by id and never re-points the shared remote thread; the approvals of a run the phone started are shown to it only when the approve scope is on, and the app's normal approval policy applies (`publish` always asks).
+_Avoid_: chat history, thread access
+
+**Continue conversations** (remote):
+The sub-switch under the History scope that lets a paired phone send a message into a listed conversation by its id (up to 8000 characters) and stop the run it started. The conversation keeps its own agent, model and working folder, and the PC runs it through the same entry as a message typed on the PC; a conversation that is already running answers busy and nothing is queued. Nothing goes out to the conversation's own channel (Telegram, WhatsApp, voice). The Chat tab's shared remote thread is governed by the chat scope, not by this sub-switch.
+_Avoid_: reply from the phone, remote edit
+
+**Run tie** (remote):
+The in-memory link between a device and the run it started (in the shared remote thread or in a conversation by id). It gives one phone-started run per device, shows a device the approvals of its own run only, and lets Alma abort that device's runs when access is cut (kill switch, remote off, revoke, History or the sub-switch off). It is never written to disk: a restart ends every run anyway.
+_Avoid_: session, lock, owner
+
+**Exclusion list** (remote):
+The folders of the vault that the person chose on the PC to hide from the phone. Excluding a folder needs no confirmation (it narrows access) and removing an exclusion asks a native confirmation (it widens access); there is no allow-list. Matched by vault-relative path, case-insensitive, covering every folder under it. Kept across turn-ons of remote access. A folder renamed or moved in Alma's own vault view takes its exclusion along; one renamed outside Alma shows as stale in the «Acceso remoto» tab and its new location is not excluded until the person excludes it.
+_Avoid_: blocklist, hidden folders (those are dot-folders the vault already hides from everyone)
 
 ## Language: images and interface
 

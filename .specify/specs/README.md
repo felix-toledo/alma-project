@@ -39,12 +39,16 @@ Templates: [`../templates/`](../templates). Pipeline: [`docs/pipeline.md`](../..
 | 023 | [app-shell-and-ui](./023-app-shell-and-ui/spec.md) | windows, tray, IPC, console-style UI |
 | 024 | [voice-control-models-and-meta](./024-voice-control-models-and-meta/spec.md) | voice cancel/end, model per chat, Meta default, fewer tokens, pop-up CSS |
 | 025 | [i18n-es-en](./025-i18n-es-en/spec.md) | `language` setting, es/en dictionaries, agent and voice language, docs in English (ready: the code is done; manual walks pending, see its tasks.md Close-out) |
+| 026 | [remote-access](./026-remote-access/spec.md) | remote channel (phone pairing, scopes, step-up, audit) over a swappable transport, Tailscale first, plus the installed PWA (implemented; the `[manual]` ACs need a real iPhone and the native dialogs; R-02 and R-01 closed; off by default until spec 001 delivers signing, BR-10) |
 
 ## In progress
 
 | # | Spec | Status |
 |---|---|---|
 | 001 | [release-packaging](./001-release-packaging/spec.md) | draft: packager, signing, update channel and versioning not decided |
-| 026 | [remote-access](./026-remote-access/spec.md) | ready: remote channel (phone pairing, scopes, step-up, audit) over a swappable transport, Tailscale first; all open questions answered; depends on R-02 (before implementation) and R-01 (before release) |
+| 028 | [remote-vault-and-threads](./028-remote-vault-and-threads/spec.md) | ready, no open questions: phone app reads the vault (Notes scope, read-only) and reads and continues other conversations (History scope), plus phone app polish; 027 stays reserved for the relay |
+| 029 | [alma-creates-companies](./029-alma-creates-companies/spec.md) | draft: Alma creates and edits (never deletes) companies through `publish` tools with a native approval card, sharing the Equipos creation logic; no open questions, awaiting `ready` |
+| 030 | [chat-attachments](./030-chat-attachments/spec.md) | draft: images and files (2 MiB each) in the desktop composer, `read_attachment`, privacy measures, 30-day sweep; no open questions, awaiting `ready` |
+| 032 | [remote-home-modes-and-lights](./032-remote-home-modes-and-lights/spec.md) | draft, no open questions (all 16 answered by the owner, awaiting the human's `ready`): phone Casa tab activates house modes (HA scenes; one that holds a lock/alarm/gate needs the locks sub-switch plus a passkey step-up) and sets light brightness, color (8 swatches) and white tone; 031 stays reserved for phone attachments |
 
 Numbering: next free `NNN`, never reused. A spec that is abandoned stays, with its status line explaining why in §1.

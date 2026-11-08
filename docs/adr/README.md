@@ -30,6 +30,7 @@ Rules for reading them:
 | [0017](0017-sdd-pipeline.md) | SDD pipeline | accepted |
 | [0018](0018-typed-dictionaries-no-i18n-library.md) | Typed Spanish/English dictionaries in `src/shared`, no i18n library (spec 025) | accepted |
 | [0019](0019-names-follow-language-existing-wins.md) | Names Alma writes follow the language; an existing name always wins (spec 025) | accepted |
-| [0020](0020-remote-access-one-security-layer-transport-strategy.md) | Remote access: one security layer, the transport is a strategy (spec 026) | proposed |
+| [0020](0020-remote-access-one-security-layer-transport-strategy.md) | Remote access: one security layer, the transport is a strategy (spec 026) | accepted |
+| [0021](0021-remote-access-tailscale-pwa.md) | Remote access: Tailscale transport, installed PWA, paired phones (specs 026, 028) | accepted |
 
 Candidates not written because no evidence supports them as separate decisions: the choice of Electron itself, and the choice of React/CodeMirror (the design note covers CodeMirror only as part of the vault editor, in [0006](0006-vault-as-plain-markdown.md)).

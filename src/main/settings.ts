@@ -5,6 +5,7 @@ import * as z from 'zod/v4'
 import { applyMetaDefault, DEFAULT_AGENTS, defaultSettings, looksLikeApiKey, OFFICE_TOOLS } from '../shared/defaults'
 import { type Language, parseLanguage, resolveLanguage } from '../shared/i18n/language'
 import { migrateDefaults } from '../shared/migrate'
+import { sanitizeRemote } from '../shared/remote/settings'
 import { mainError } from './messages'
 import type { PublicSettings, SecretProviderId, Settings } from '../shared/types'
 
@@ -105,6 +106,7 @@ export class SettingsStore {
         email: { ...base.email, ...stored.email },
         whatsapp: { ...base.whatsapp, ...stored.whatsapp },
         home: { ...base.home, ...stored.home },
+        remote: { ...base.remote, ...sanitizeRemote(stored.remote) },
         companies: stored.companies ?? [],
         companySecrets: Object.fromEntries(Object.entries(stored.companySecrets ?? {}).map(([id, value]) => [id, this.open(value)])),
         autoReview: { ...base.autoReview, ...stored.autoReview },

@@ -17,6 +17,7 @@ import { Sidebar, type AppMode } from './components/Sidebar'
 import { fileAttachment, type Attachment } from './lib/attachments'
 import { onConnected, onEvent, request } from './lib/coordinator'
 import { initialState, reducer } from './lib/state'
+import { isCompanyThread, listableThreads } from '../../shared/threads'
 import { VaultWelcome } from './vault/panels'
 import { useVault } from './vault/useVault'
 import { onOpenNote } from './vault/vaultLib'
@@ -142,8 +143,7 @@ export function App(): React.JSX.Element {
     void syncAll().then((threads) => {
       // Not a company chat: those open from Empresas. Settings may not be loaded yet, so ask for them.
       void window.desktop.settings.get().then((s) => {
-        const company = new Set(s.agents.filter((a) => a.companyId).map((a) => a.id))
-        const first = threads.find((t) => !company.has(t.agentId))
+        const first = listableThreads(threads, s.agents)[0]
         if (first) void openThread(first.id)
       })
     })
@@ -213,10 +213,10 @@ export function App(): React.JSX.Element {
   const companies = settings?.companies ?? []
   const shownCompany = companies.find((c) => c.id === companyId) ?? companies[0] ?? null
   // Chats with a company's agents live under Empresas, not in the Chat tab.
-  const companyAgents = new Set((settings?.agents ?? []).filter((a) => a.companyId).map((a) => a.id))
-  const chatThreads = state.threads.filter((t) => !companyAgents.has(t.agentId))
-  const companyThreads = state.threads.filter((t) => companyAgents.has(t.agentId))
-  const chatThread = state.thread && !companyAgents.has(state.thread.agentId) ? state.thread : null
+  const agents = settings?.agents ?? []
+  const chatThreads = listableThreads(state.threads, agents)
+  const companyThreads = state.threads.filter((t) => isCompanyThread(t.agentId, agents))
+  const chatThread = state.thread && !isCompanyThread(state.thread.agentId, agents) ? state.thread : null
   const renderChat = (thread: Thread, compact?: boolean): React.JSX.Element => (
     <ChatView
       key={thread.id}
@@ -263,7 +263,10 @@ export function App(): React.JSX.Element {
               activePath={vault.active}
               status={state.knowledge}
               onOpen={(path) => vault.open(path)}
-              onRenamed={vault.renamed}
+              onRenamed={(from, to) => {
+                vault.renamed(from, to)
+                void window.desktop.remote.moveExclusions(from, to).catch(() => undefined)
+              }}
               onDeleted={vault.deleted}
               onSearch={() => setVaultPanel('search')}
               onKnowledge={() => setVaultPanel('knowledge')}
@@ -330,7 +333,7 @@ export function App(): React.JSX.Element {
           activeId={state.activeId}
           running={state.running}
           approvals={state.approvals}
-          chat={state.thread && companyAgents.has(state.thread.agentId) ? renderChat(state.thread) : null}
+          chat={state.thread && isCompanyThread(state.thread.agentId, agents) ? renderChat(state.thread) : null}
           onOpenThread={(threadId) => void openThread(threadId)}
           onDeleteThread={(threadId) => void deleteThread(threadId)}
           onOpenSettings={() => openSettings('teams')}

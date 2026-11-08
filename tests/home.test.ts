@@ -409,6 +409,14 @@ describe('imágenes y motor', () => {
     expect(yaml).toContain('ffmpeg_bin: /usr/local/bin/alma-ffmpeg')
   })
 
+  it('R-02: Home Assistant listens on loopback only, never on every interface', async () => {
+    const { managedConfig } = await import('../src/coordinator/home/engine')
+    const yaml = managedConfig(18123, 'UTC')
+    expect(yaml).toContain('  server_host: 127.0.0.1')
+    // The host reaches it through WSL's localhost relay (engine.ts connects to 127.0.0.1): nothing needs a wider bind.
+    expect(yaml).not.toContain('0.0.0.0')
+  })
+
   it('decodeWsl entiende el UTF-16 de wsl.exe y el UTF-8 de Linux', async () => {
     const { decodeWsl } = await import('../src/coordinator/home/engine')
     expect(decodeWsl(Buffer.from('alma-home\r\n', 'utf16le'))).toBe('alma-home\r\n')

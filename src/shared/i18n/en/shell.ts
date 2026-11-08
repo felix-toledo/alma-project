@@ -20,6 +20,7 @@ export const shell = {
   'sidebar.channel.telegram': 'Telegram conversation',
   'sidebar.channel.voice': 'Voice conversation',
   'sidebar.channel.whatsapp': 'WhatsApp conversation',
+  'sidebar.channel.remote': 'Remote conversation',
   'sidebar.channel.company': 'Company work (task, review or preparation)',
   'sidebar.delete': 'Delete conversation',
   'sidebar.deleteConfirm': 'Delete “{title}”?',

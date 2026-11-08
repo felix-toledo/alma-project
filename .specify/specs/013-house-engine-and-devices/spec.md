@@ -117,6 +117,8 @@ Where a 013 mechanism is shared (the hub's scene/automation/camera methods, `hom
 - **AC-6.7** (US-6) Given `home_call_service` for any other domain (including `cover` on a garage or gate, or `homeassistant.turn_off`), when it runs, then it is a `write`-risk call governed by the normal approval mode (it may run without asking in "always allow" mode). [gap]
 - **AC-6.8** (US-6) Given the Casa window, when the person operates a lock or an alarm panel from the device panel, then a native `confirm` asks first ("¿Abrir «x»?" / "¿Activar la alarma?"); this is the window's own confirmation, not the approval system. [manual] Open a lock's panel and press the button.
 
+- **AC-6.9** (US-6) Given a paired phone driving a lock, alarm, siren or gate/garage cover, when the action runs, then it needs a passkey assertion made in the last 60 seconds for that exact device, thing and action; anything else is refused and nothing runs. Test: tests/remote-home.test.ts › "opening needs a valid assertion bound to this device, thing and action", "the challenge lives at 60 seconds and dies right after", "unlock, open and disarm need step-up; the rest, and nothing unknown, does not slip through"
+
 ### Adding devices (US-7)
 - **AC-7.1** (US-7) Given a config-flow form step, when it is translated, then each schema entry becomes a field with name, type (string, password, integer, float, boolean, select, multi_select, unknown), required flag, default (or suggested value), numeric limits and options; text selectors of type password and names matching password/token/secret become `password`; sections are flattened to `section.field`; a QR selector becomes the step's QR instead of a field. Test: tests/home.test.ts › "traduce el esquema de un paso a campos"
 - **AC-7.2** (US-7) Given dotted field names from a section, when data is sent, then it is nested back (`sec.host` → `{sec: {host}}`). Test: tests/home.test.ts › "anida los campos de una sección"
@@ -205,6 +207,8 @@ Where a 013 mechanism is shared (the hub's scene/automation/camera methods, `hom
 - **BR-18** Defaults for the setting: enabled false, mode managed, externalUrl '', mirrored false. (src/shared/defaults.ts)
 - **BR-19** Home tools are offered to an agent only when the feature is enabled and the agent is not working in a company. (src/coordinator/agent.ts)
 - **BR-20** Colors by name: rojo, verde, azul, amarillo, naranja, violeta/morado, rosa, celeste, blanco; temperatures: cálida 2700 K, neutra 4000 K, fría 6000 K. (tools/home.ts)
+
+- **BR-21** Remote clients reach the house only through the remote channel. Sensitive house actions from a paired phone need a passkey step-up: a 60-second single-use assertion bound to the exact device, thing and action, fail closed (spec 026 BR-24). Everyday control from the phone reuses `home_control` with the same refusals.
 
 ## 7. Constraints and risks
 - **Layers:** `src/shared/home.ts` (types, `DEVICE_DOMAINS`, `isSensitive`, popular integrations, flow types); `src/coordinator/home/{engine,ha,hub,flow,model,index}.ts` (the engine runs in the coordinator process, not in main; main only seals/opens secrets); `src/coordinator/tools/home.ts`; `src/renderer/src/home/{HomeView,DevicePanel,AddDevice,HomeSettings,homeLib,useHome}.tsx|ts`; settings in `src/main/settings.ts` (merge `home: {...base.home, ...stored.home}`) and `src/shared/defaults.ts`.

@@ -26,7 +26,16 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { repairDanglingToolUses, runAgent } from './agent'
-import { ApprovalBroker } from './approval'
+import { ApprovalBroker, authorize } from './approval'
+import { readRemoteActivity } from './channels/remote/activity'
+import { deviceExportList } from './channels/remote/devices-admin'
+import { RemoteChannel } from './channels/remote/channel'
+import { quietForPhoneRuns } from './channels/remote/quiet'
+import { DeviceStore, RemoteStateStore, type DeviceRecord } from './channels/remote/store'
+import { execTailscale, pickFreePort, TailscaleController } from './channels/remote/tailscale'
+import { TailscaleTransport } from './channels/remote/tailscale-transport'
+import { TailscaleMonitor } from './channels/remote/monitor'
+import { TransportStartError } from './channels/remote/transport'
 import { listImageModels } from './images'
 import { houseThreadTitle, routineThreadTitle } from './generated'
 import { houseRulePrompt } from './prompts/house'
@@ -48,7 +57,7 @@ import { getProvider } from './providers'
 import { RoutineRunner } from './routines'
 import { isUntitled, ThreadStore, summarize, untitledTitle } from './store'
 import { imageDataUrl } from './tools/media'
-import { resolveInWorkspace } from './tools/paths'
+import { inboxFileName, resolveInWorkspace } from './tools/paths'
 import { shownError, type Host } from './tools/types'
 import type { StateChange } from './home/hub'
 
@@ -102,6 +111,8 @@ const approvals = new ApprovalBroker((event) => {
   broadcast(event)
   if (event.type === 'approval.request') notifyApproval(event.approval)
 })
+// What Telegram, WhatsApp and the voice assistant see: nothing of a run a phone started in their conversation (spec 028 BR-34).
+const quiet = quietForPhoneRuns((threadId) => remote?.startedByPhone(threadId) ?? false, () => approvals.pending())
 const mcp = new McpManager((servers) => broadcast({ type: 'mcp.status', servers }), () => settings.language)
 
 let vaultSync = Promise.resolve()
@@ -232,12 +243,7 @@ function startRun(threadId: string, text: string, options: { noAsk?: boolean; au
     knowledge: company ? vaultFor(company.vault) : knowledge,
     emit: broadcast,
     persist: () => store.save(thread.id),
-    rememberAlwaysAllow: (toolName) => {
-      if (!settings.alwaysAllowTools.includes(toolName)) {
-        settings = { ...settings, alwaysAllowTools: [...settings.alwaysAllowTools, toolName] }
-        toParent({ type: 'alwaysAllow', toolName })
-      }
-    },
+    rememberAlwaysAllow,
     saveRoutines,
     sendTelegram: (text) => telegram.notify(text),
     whatsapp: company ? (company.whatsapp ? companyWhatsApp(company) : null) : settings.whatsapp.enabled ? whatsapp : null,
@@ -274,6 +280,13 @@ function saveRoutines(routines: Routine[]): void {
 function patchSettings(patch: Partial<Omit<Settings, 'providers'>>): void {
   settings = { ...settings, ...patch }
   toParent({ type: 'settings.patch', patch })
+}
+
+function rememberAlwaysAllow(toolName: string): void {
+  if (!settings.alwaysAllowTools.includes(toolName)) {
+    settings = { ...settings, alwaysAllowTools: [...settings.alwaysAllowTools, toolName] }
+    toParent({ type: 'alwaysAllow', toolName })
+  }
 }
 
 /** Where a reminder reaches the user: the desktop and, if connected, Telegram. */
@@ -316,8 +329,8 @@ const telegram = new TelegramChannel({
   lastAnswer,
   transcribe: (audio, mime) => voice.transcribeFile(audio, mime),
   saveImage: saveInboxImage,
-  onEvent,
-  respondApproval: (approvalId, decision) => approvals.respond(approvalId, decision),
+  onEvent: quiet.onEvent(onEvent),
+  respondApproval: quiet.respondApproval((approvalId, decision) => approvals.respond(approvalId, decision)),
   onStatus: (status) => broadcast({ type: 'telegram.status', status }),
   home: {
     enabled: () => settings.home.enabled,
@@ -327,6 +340,134 @@ const telegram = new TelegramChannel({
     cameraPhoto: (entityId) => home.hub.cameraSnapshot(entityId)
   }
 })
+
+// Created on init (devices and pairing state live under <dataDir>/remote).
+let remote: RemoteChannel | null = null
+let remoteState: RemoteStateStore | null = null
+let tailscaleController: TailscaleController | null = null
+let tailscaleMonitor: TailscaleMonitor | null = null
+
+/** Reads the device records fresh from disk (T28/T35): works even when the channel is off. */
+async function loadRemoteDevices(): Promise<DeviceRecord[]> {
+  const sealBox = {
+    seal: async (text: string) => (await host.request({ action: 'secret.seal', text })).message,
+    open: async (text: string) => (await host.request({ action: 'secret.open', text })).message
+  }
+  return (await DeviceStore.load({ dir: join(dataDir, 'remote'), now: Date.now, sealBox })).devices()
+}
+
+/** The single shared remote thread; its id lives in state.json, never in settings (AC-1.5). */
+function remoteConversation(fresh = false): Thread {
+  const threadId = remoteState?.state.threadId
+  const existing = !fresh && threadId ? store.list().find((t) => t.id === threadId) : undefined
+  const agent = settings.agents.some((a) => a.id === settings.remote.agentId) ? settings.remote.agentId : settings.defaultAgentId
+  if (existing) {
+    const thread = store.get(existing.id)
+    if (thread.agentId !== agent) {
+      thread.agentId = agent
+      store.save(thread.id)
+    }
+    return thread
+  }
+  const thread = store.create(agent, settings.defaultWorkspace, 'remote')
+  void remoteState?.update({ threadId: thread.id })
+  broadcast({ type: 'thread.updated', summary: summarize(thread) })
+  return thread
+}
+
+function createRemote(): Promise<RemoteChannel> {
+  const dir = join(dataDir, 'remote')
+  const sealBox = {
+    seal: async (text: string) => (await host.request({ action: 'secret.seal', text })).message,
+    open: async (text: string) => (await host.request({ action: 'secret.open', text })).message
+  }
+  return (async () => {
+    const deviceStore = await DeviceStore.load({ dir, now: Date.now, sealBox })
+    remoteState = await RemoteStateStore.load({ dir, sealBox })
+    const tails = new TailscaleController({
+      exec: execTailscale,
+      openExternal: async (target) => (await host.request({ action: 'remote.open', target })).ok,
+      online: async () => (await host.request({ action: 'net.online' })).ok,
+      pickPort: pickFreePort,
+      store: remoteState,
+      now: Date.now,
+      confirm: async (kind, params) => (await host.request({ action: 'remote.confirm', kind, params })).ok
+    })
+    tailscaleController = tails
+    const channel = new RemoteChannel({
+      settings: () => settings,
+      now: Date.now,
+      random: (length: number) => crypto.getRandomValues(new Uint8Array(length)),
+      store: deviceStore,
+      state: remoteState,
+      transport: async () => {
+        if (!tailscaleController) throw new TransportStartError('tailscaleDown', 'tailscale not ready')
+        const dnsName = await tailscaleController.dnsName()
+        if (!dnsName) throw new TransportStartError('tailscaleDown', 'tailscale not connected')
+        // The bundle is CJS: the coordinator runs from out/main, the PWA builds into out/remote.
+        return new TailscaleTransport({ port: await tailscaleController.ensurePort(), assetsDir: join(__dirname, '..', 'remote'), dnsName })
+      },
+      host: {
+        confirm: async (kind, params) => (await host.request({ action: 'remote.confirm', kind, params })).ok
+      },
+      onStatus: (status) => broadcast({ type: 'remote.status', status }),
+      onPairing: (pairing) => broadcast({ type: 'remote.pairing', pairing }),
+      onDevices: (devices) => {
+        broadcast({ type: 'remote.devices', devices })
+        toParent({ type: 'remote.devices', names: devices.map((device) => device.name) })
+      },
+      conversation: (fresh) => remoteConversation(fresh),
+      ask: (threadId, text) => startRun(threadId, text).done,
+      cancel: (threadId) => runs.get(threadId)?.abort(),
+      pendingApprovals: () => approvals.pending(),
+      respondApproval: (approvalId, decision) => approvals.respond(approvalId, decision),
+      onEvent,
+      direct: {
+        home,
+        toolContext: () => ({
+          workspace: settings.defaultWorkspace,
+          signal: new AbortController().signal,
+          settings,
+          host,
+          home,
+          language: settings.language
+        }),
+        authorize: (request) => authorize({ ...request, broker: approvals, rememberAlwaysAllow })
+      },
+      // The active vault of this moment, never a company's (BR-22); its folder can vanish after it was opened.
+      vault: () => {
+        const base = knowledge
+        if (!base) return null
+        return {
+          state: () => (existsSync(base.root) ? 'ready' : 'none'),
+          tree: () => base.tree(),
+          readText: (path) => base.read(path),
+          readBytes: (path, maxBytes) => base.readBytes(path, maxBytes)
+        }
+      },
+      // `store.get` throws on a missing id, so the lookup checks the list first (T36).
+      threads: {
+        list: () => store.list(),
+        get: (id) => (store.list().some((summary) => summary.id === id) ? store.get(id) : undefined),
+        isRunning: (id) => runs.has(id)
+      },
+      record: (entry) => audit(entry),
+      onTestResult: (testedDeviceId, ok) => broadcast({ type: 'remote.tested', deviceId: testedDeviceId, ok }),
+      // The only outbound call remote access makes (AC-9.1): approval pushes, empty body.
+      post: async (url, headers, body) => ({ ok: (await fetch(url, { method: 'POST', headers, body })).ok })
+    })
+    const monitor = new TailscaleMonitor({
+      read: () => tails.probe(),
+      now: Date.now,
+      store: remoteState,
+      channel,
+      notify: () => toParent({ type: 'notify', title: translate(settings.language, 'remote.notice.down.title'), body: translate(settings.language, 'remote.notice.down') })
+    })
+    tailscaleMonitor = monitor
+    if (settings.remote.enabled) monitor.start()
+    return channel
+  })()
+}
 
 // Created on init (it keeps its session in the data folder).
 let whatsapp: WhatsAppChannel
@@ -340,8 +481,8 @@ function createWhatsApp(): WhatsAppChannel {
     ask: (threadId, text) => startRun(threadId, text).done,
     lastAnswer,
     transcribe: (audio, mime) => voice.transcribeFile(audio, mime),
-    onEvent,
-    respondApproval: (approvalId, decision) => approvals.respond(approvalId, decision),
+    onEvent: quiet.onEvent(onEvent),
+    respondApproval: quiet.respondApproval((approvalId, decision) => approvals.respond(approvalId, decision)),
     onStatus: (status) => broadcast({ type: 'whatsapp.status', status })
   })
 }
@@ -356,7 +497,7 @@ const inboxDir = (): string => join(dataDir, 'inbox')
 /** Saves a picture the user sent (chat, Telegram) where look_at_image can read it. */
 function saveInboxImage(bytes: Buffer, name: string): string {
   mkdirSync(inboxDir(), { recursive: true })
-  const path = join(inboxDir(), `${Date.now().toString(36)}-${name.replace(/[^w.-]+/g, '_').slice(-60)}`)
+  const path = join(inboxDir(), `${Date.now().toString(36)}-${inboxFileName(name)}`)
   writeFileSync(path, bytes)
   return path
 }
@@ -473,8 +614,8 @@ function companyWhatsApp(company: Company): WhatsAppChannel {
       ask: (threadId, text) => startRun(threadId, text).done,
       lastAnswer,
       transcribe: (audio, mime) => voice.transcribeFile(audio, mime),
-      onEvent,
-      respondApproval: (approvalId, decision) => approvals.respond(approvalId, decision),
+      onEvent: quiet.onEvent(onEvent),
+      respondApproval: quiet.respondApproval((approvalId, decision) => approvals.respond(approvalId, decision)),
       onStatus: (status) => broadcast({ type: 'company.whatsapp', companyId: company.id, status })
     })
     companyChannels.set(company.id, channel)
@@ -514,8 +655,8 @@ function createVoice(): VoiceAssistant {
     stop: (threadId) => runs.get(threadId)?.abort(),
     lastAnswer,
     conversationEnded: (threadId) => conversationEnded(store.get(threadId).messages),
-    onEvent,
-    respondApproval: (approvalId, decision) => approvals.respond(approvalId, decision),
+    onEvent: quiet.onEvent(onEvent),
+    respondApproval: quiet.respondApproval((approvalId, decision) => approvals.respond(approvalId, decision)),
     emit: broadcast
   })
 }
@@ -592,6 +733,55 @@ async function handle(request: CoordinatorRequest): Promise<unknown> {
       return null
     case 'approval.pending':
       return approvals.pending()
+    case 'remote.activity': {
+      // The channel owns these when it runs (T35); the request reads them fresh so the
+      // tab is always current, even right after a restart.
+      return readRemoteActivity({ dataDir, devices: await loadRemoteDevices() })
+    }
+    case 'remote.pair.start':
+      return (await remote?.pairStart()) ?? { ok: false as const, reason: 'off' as const }
+    case 'remote.pair.approve':
+      if (!remote) throw new Error(translate(settings.language, 'error.noRemote'))
+      return remote.pairApprove(request.name)
+    case 'remote.pair.reject':
+      await remote?.pairReject()
+      return null
+    case 'remote.pair.cancel':
+      remote?.pairCancel()
+      return null
+    case 'remote.revoke':
+      await remote?.revokeDevice(request.deviceId)
+      return null
+    case 'remote.revokeAll':
+      return (await remote?.revokeAll()) ?? { ok: false as const }
+    case 'remote.test':
+      return remote?.testDevice(request.deviceId) ?? null
+    case 'remote.status':
+      return remote?.currentStatus() ?? { state: 'off' as const }
+    case 'remote.detect': {
+      if (!tailscaleController) return undefined
+      const current = remote?.currentStatus() ?? { state: 'off' as const }
+      const found = await tailscaleController.detect({
+        listenerUp: current.state === 'online',
+        listenerDetail: current.detail,
+        channelFailure: current.state === 'error' ? current.failure : undefined
+      })
+      if (found.failure) return { tailscale: found.tailscale, status: { state: 'error' as const, ...found.failure } }
+      return { tailscale: found.tailscale, status: current }
+    }
+    case 'remote.serve':
+      if (!tailscaleController) return { ok: false as const, failure: 'tailscaleDown' as const }
+      return tailscaleController.serve()
+    case 'remote.pickPort':
+      if (!tailscaleController) return { ok: false as const, failure: 'tailscaleDown' as const }
+      return tailscaleController.pickPort()
+    case 'remote.devices':
+      return remote?.currentDevices() ?? []
+    case 'remote.open':
+      // Main chooses the URL from the fixed id and confirms the download (T16).
+      if (request.target === 'tailscale-download' && tailscaleController) return tailscaleController.download()
+      await host.request({ action: 'remote.open', target: request.target })
+      return null
     case 'mcp.status':
       return mcp.statuses()
     case 'mcp.reconnect':
@@ -690,6 +880,9 @@ async function handle(request: CoordinatorRequest): Promise<unknown> {
       return null
     case 'privacy.export': {
       const folder = exportPersonalData(dataDir, request.targetDir)
+      // The device list (AC-9.5): names and dates, never key material. Read fresh from
+      // disk so the export is complete even when remote access is off.
+      writeFileSync(join(folder, 'remote-devices.json'), `${JSON.stringify(deviceExportList(await loadRemoteDevices()), null, 2)}\n`)
       audit({ action: 'privacy.export', actor: 'user', outcome: 'ok' })
       return folder
     }
@@ -701,7 +894,10 @@ async function handle(request: CoordinatorRequest): Promise<unknown> {
       }
       erasePersonalFiles(inboxDir())
       await voice.forgetProfile()
-      audit({ action: 'privacy.erase', actor: 'user', outcome: 'ok', detail: { threads: threads.length } })
+      // Every device revoked as in AC-6.2 (AC-9.4): the person already confirmed, so
+      // no second ask. Counts only in the entry, like the thread count.
+      const erased = await remote?.erase()
+      audit({ action: 'privacy.erase', actor: 'user', outcome: 'ok', detail: { threads: threads.length, devices: erased?.devices ?? 0 } })
       return null
     }
     case 'voice.status':
@@ -777,6 +973,12 @@ process.parentPort.on('message', (event) => {
       syncCompanyChannels()
       home = createHome()
       home.start()
+      void createRemote()
+        .then((channel) => {
+          remote = channel
+          return remote.sync()
+        })
+        .catch((error: Error) => console.error(`[remote] boot failed: ${error.message}`))
       break
     case 'settings':
       settings = message.settings
@@ -788,6 +990,12 @@ process.parentPort.on('message', (event) => {
       void whatsapp.sync()
       syncCompanyChannels()
       void home.sync()
+      if (settings.remote.enabled) tailscaleMonitor?.start()
+      else {
+        tailscaleMonitor?.stop()
+        void tailscaleController?.unserve()
+      }
+      void remote?.sync()
       break
     case 'voice.trigger':
       voice.trigger()
@@ -806,7 +1014,16 @@ const shutdown = (): void => {
   routines?.stop()
   for (const controller of runs.values()) controller.abort()
   store?.flushAll()
-  void Promise.all([mcp.closeAll(), knowledge?.close(), embedder?.close(), telegram.stop(), voice?.close(), home?.stop()]).finally(() => process.exit(0))
+  void Promise.all([
+    mcp.closeAll(),
+    knowledge?.close(),
+    embedder?.close(),
+    telegram.stop(),
+    voice?.close(),
+    home?.stop(),
+    tailscaleController?.unserve(),
+    remote?.stop()
+  ]).finally(() => process.exit(0))
 }
 process.on('SIGTERM', shutdown)
 process.on('exit', () => store?.flushAll())

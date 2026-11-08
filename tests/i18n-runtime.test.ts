@@ -239,8 +239,8 @@ describe('the language of a run in progress', () => {
 
 describe('what main shows outside the window', () => {
   it('AC-3.1 the tray menu and tooltip follow the language', () => {
-    expect(trayMenu('es')).toEqual({ open: 'Abrir Alma', quit: 'Salir', tooltip: 'Alma' })
-    expect(trayMenu('en')).toEqual({ open: 'Open Alma', quit: 'Quit', tooltip: 'Alma' })
+    expect(trayMenu('es')).toEqual({ open: 'Abrir Alma', quit: 'Salir', tooltip: 'Alma', remoteOff: 'Apagar el acceso remoto' })
+    expect(trayMenu('en')).toEqual({ open: 'Open Alma', quit: 'Quit', tooltip: 'Alma', remoteOff: 'Turn off remote access' })
   })
 
   it('AC-3.1 the security confirmation names the programs and speaks the language', () => {

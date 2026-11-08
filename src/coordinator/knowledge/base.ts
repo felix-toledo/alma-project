@@ -325,6 +325,15 @@ export class KnowledgeBase {
     return { content: await readFile(absolute, 'utf8'), mtime: Math.floor(info.mtimeMs) }
   }
 
+  /** Raw bytes of a vault file (images for the phone), read-only, confined by `resolve` and refused over `maxBytes` from its stat, before any read. */
+  async readBytes(path: string, maxBytes: number): Promise<{ bytes: Uint8Array; mtime: number }> {
+    const absolute = this.resolve(path)
+    const info = await stat(absolute).catch(() => null)
+    if (!info?.isFile()) throw new ToolError('tool.kb.noNote', { path })
+    if (info.size > maxBytes) throw new ToolError('tool.kb.tooBig', { path, bytes: info.size })
+    return { bytes: await readFile(absolute), mtime: Math.floor(info.mtimeMs) }
+  }
+
   async write(path: string, content: string): Promise<{ mtime: number }> {
     const absolute = this.resolve(path)
     await mkdir(dirname(absolute), { recursive: true })

@@ -94,6 +94,47 @@ export interface AuditCheck {
   brokenAt?: { file: string; line: number }
 }
 
+/** One parsed trail line (the chain format is untouched; corrupt lines never parse). */
+export interface AuditEntry {
+  ts: string
+  src: AuditSource
+  action: string
+  actor: AuditEvent['actor']
+  target?: string
+  outcome: AuditEvent['outcome']
+  detail?: Record<string, string | number | boolean | null>
+}
+
+/**
+ * Reads matching trail lines, oldest first (spec 026 T27). A missing trail reads as
+ * empty, and a corrupt line or a filter that throws on one is skipped, never fatal.
+ */
+export function readAuditEntries(dataDir: string, filter: (entry: AuditEntry) => boolean): AuditEntry[] {
+  const folder = join(dataDir, 'audit')
+  const found: AuditEntry[] = []
+  try {
+    for (const who of ['main', 'coordinator'] as const) {
+      for (const file of filesOf(folder, who)) {
+        const lines = readFileSync(join(folder, file), 'utf8').split('\n').filter(Boolean)
+        for (const line of lines) {
+          let parsed: AuditEntry
+          try {
+            parsed = JSON.parse(line) as AuditEntry
+            if (typeof parsed.action !== 'string' || typeof parsed.actor !== 'string' || typeof parsed.outcome !== 'string') continue
+            if (!filter(parsed)) continue
+          } catch {
+            continue
+          }
+          found.push(parsed)
+        }
+      }
+    }
+  } catch {
+    // No trail yet (or unreadable): no activity, never an error.
+  }
+  return found
+}
+
 /** Walks every trail on disk and checks the chains. */
 export function verifyAudit(dataDir: string): AuditCheck {
   const folder = join(dataDir, 'audit')

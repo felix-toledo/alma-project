@@ -1,6 +1,6 @@
 # Settings (Configuraciones)
 
-> The single settings document of the machine (`settings.json`), how its secrets are sealed, how a change reaches the running agents, and the 14-tab «Configuración» (Settings) dialog. Spec: [006 · Settings](../../.specify/specs/006-settings/spec.md). Test status: 6 criteria with a test, 62 without (29 of those are manual checks in the interface, 33 have no check at all).
+> The single settings document of the machine (`settings.json`), how its secrets are sealed, how a change reaches the running agents, and the 15-tab «Configuración» (Settings) dialog. Spec: [006 · Settings](../../.specify/specs/006-settings/spec.md). Test status: 6 criteria with a test, 62 without (29 of those are manual checks in the interface, 33 have no check at all).
 
 ## What it does
 
@@ -26,6 +26,7 @@ Open the dialog from the sidebar («Configuración»), from the empty state, fro
 | Telegram, WhatsApp, Mail (`email`), Voz (`voice`), Instagram | One tab per channel. | [telegram](telegram.md), [whatsapp](whatsapp.md), [web-and-mail](web-and-mail.md), [voice](voice.md), [instagram](instagram.md) |
 | MCP (`mcp`) | Servers, **Agregar Chrome**, **+ Agregar servidor**, **Importar mcp.json**, **Reconectar**. | [mcp](mcp.md) |
 | Casa (`home`) | Engine mode, vision provider, accounts. | [home](home.md) |
+| Acceso remoto (`remote`) | Off-by-default switch, Tailscale wizard, pairing QR, paired phones, the six scopes (chat, approvals, house, cameras, Notes, Conversations) with the sub-switches for locks and alarms and for continuing conversations, the folders excluded from the phone, recent activity. | [remote-access](remote-access.md) |
 | General (`general`) | Default working folder, run in tray, launch with Windows, conversation retention, **Exportar mis datos…**, **Borrar mi historial**. | [security](security.md) for privacy |
 | Sonido y ambiente (`ambience`) | Interface sounds, background music, volume, moving background. | [app-shell](app-shell.md) |
 

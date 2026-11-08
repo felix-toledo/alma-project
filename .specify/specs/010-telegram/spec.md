@@ -108,6 +108,7 @@ settings.
 - **AC-6.5** (US-5) Given an approval for a different conversation than the Telegram one (desktop chat, routine, company), when it is requested, then nothing is sent to Telegram. [gap]
 - **AC-6.6** (US-5) Given no chat is bound or the bot is stopped, when an approval is requested, then nothing is sent (it stays available on the desktop). [gap]
 
+
 ### Outbound (US-6, US-7)
 - **AC-7.1** (US-6) Given the bot is online and a chat is bound, when a reminder fires, then "⏰ <text>" is sent to that chat, split if over 4096 characters; the desktop notification is sent regardless. [gap]
 - **AC-7.2** (US-6) Given the bot is not connected or no chat is bound, when `notify` is called, then it sends nothing and returns false without raising; a rejection from Telegram is logged on the console only. [gap]
@@ -132,6 +133,7 @@ settings.
 - **BR-9** `send_telegram` has risk `memory`, is `standalone` (needs no working folder), is offered to every agent (also company agents), has text 1–20 000 characters and an optional `image_path`, and writes only to the bound chat, never to other people. (src/coordinator/tools/telegram.ts)
 - **BR-10** The bot token is stored encrypted in `settings.json` (`providers.telegram.apiKey`) or read from `TELEGRAM_BOT_TOKEN`; the environment variable is removed from the environment of commands agents run. (src/main/settings.ts, src/coordinator/tools/shell.ts)
 - **BR-11** Authorization is checked on every handler (commands, text, voice, photo and button presses) before anything is downloaded or run. (src/coordinator/channels/telegram.ts `check`)
+
 
 ## 7. Constraints and risks
 - **Layers:** `coordinator` (channel, tool, wiring), `shared` (`TelegramSettings`, `TelegramStatus`, events `telegram.status`, request `telegram.status`), `main` (settings persistence and the encrypted token), `renderer` (settings tab, sidebar icon, status in app state).
