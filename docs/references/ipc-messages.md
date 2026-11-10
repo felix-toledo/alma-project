@@ -22,7 +22,7 @@ Types: `src/shared/types.ts` (envelopes, requests, events, parent messages), `sr
 | Preload API / `ipcMain.handle` channels | No (TypeScript types only, erased at run time) | `isTrusted(event)` (top frame of Alma's own window, same page); hand-written checks in `settings:setApiKey`, `settings:setCompanySecret`, `shell:openPath`; native confirmation in `settings:update` |
 | `RequestEnvelope` (renderer → coordinator) | No: `handle()` casts `event.data`; only `kind === 'request'` is checked | Paths are confined inside each method (`resolveInWorkspace`, vault confinement); `home.connectExternal` checks the URL starts with `http(s)://` |
 | `AudioEnvelope` | No (`kind === 'audio'` check only) | none; fire-and-forget |
-| `ParentToCoordinator`, `CoordinatorToParent`, `HostRequest` | No | Same-process-family trust. `trash` is re-checked in main to be inside the active vault; `image.render` trusts the coordinator's path |
+| `ParentToCoordinator`, `CoordinatorToParent`, `HostRequest` | No, except the `presence` message (spec 034), validated with `PresenceEventSchema` in `PresenceService.receive` | Same-process-family trust. `trash` is re-checked in main to be inside the active vault; `image.render` trusts the coordinator's path |
 | Settings read from disk, patches from the window | No | Shallow merge with defaults |
 | Tool inputs (agent → tool) | **Yes**, Zod (`builtin.schema.safeParse`, `DelegateInput.safeParse` in `src/coordinator/agent.ts`) | Not an IPC message; listed for contrast |
 | Responses and events (coordinator → renderer) | No | Typed by TypeScript only |
@@ -51,6 +51,10 @@ Defined in `src/shared/desktop-api.ts`, built in `src/preload/index.ts`, exposed
 | `pickFolder()` | `Promise<string \| null>` | `invoke('dialog:pickFolder')` | No arguments |
 | `openPath(path)` | `Promise<string>` (empty = ok, otherwise an error text) | `invoke('shell:openPath', path)` | Hand-written, see below |
 | `defaultVaultPath()` | `Promise<string>` | `invoke('vault:defaultPath')` | No arguments |
+| `attach.pathOf(file)` | `string` (empty when the `File` has no place on disk, such as a pasted screenshot) | `webUtils.getPathForFile`, then `send('attach:grant', path)` | Main grants the path for one read |
+| `attach.pick()` | `Promise<string[]>` | `invoke('attach:pick')` | Native dialog, several files, no filter; grants the returned paths |
+| `attach.inspect(path)` | `Promise<PathInfo>` | `invoke('attach:inspect', path)` | Granted paths only, see below |
+| `attach.read(path)` | `Promise<PathRead>` | `invoke('attach:read', path)` | Granted paths only, see below |
 
 The preload connects on load: `ipcRenderer.send('coordinator:connect')`, and again when main sends `coordinator:restarted`. Requests sent before the port exists are queued (`queue`); microphone audio is not.
 
@@ -72,13 +76,17 @@ All `ipcMain.handle` channels go through `handle()` in `src/main/index.ts`, whic
 | `instagram:connect` | none | `{ connected }` | Opens Instagram's login in an app window; resolves when it closes; audits `instagram.connect` | |
 | `instagram:disconnect` | none | `{ connected }` | Clears the partition storage; audits `instagram.disconnect` | |
 | `dialog:pickFolder` | none | `string \| null` | Native folder picker | |
-| `shell:openPath` | `path: string` | `''` or error text | Opens a folder or document with the OS. Refuses non-string, relative or missing paths («La ruta no existe.») and files with executable or script extensions ("Alma no abre programas ni scripts.", audit `shell.openPath` denied) | |
+| `shell:openPath` | `path: string` | `''` or error text | Opens a folder or document with the OS. Refuses non-string, relative or missing paths («La ruta no existe.») and files with executable or script extensions ("Alma no abre programas ni scripts.", audit `shell.openPath` denied). Since spec 030 it also refuses any path inside `inbox/attachments/` (a stored attachment opens only through `attachments.open`) | |
 | `vault:defaultPath` | none | `string` | `Documents\Alma\Vault` | |
+| `attach:pick` | none | `string[]` | Native file dialog (several files, no type filter, title in the app language); the returned paths are granted; cancelling returns `[]` and grants nothing (spec 030) | `src/main/attach.ts` `pickPaths` |
+| `attach:inspect` | `path: string` | `PathInfo` | For a granted path: `{kind:'file', name, size}`, or `{kind:'folder', name, files, skipped}` (direct regular files only; links, junctions and subfolders count as skipped, and the listed files become granted), or `{kind:'failed', reason}`. An ungranted path answers `denied` | Grants are in memory, 5 minutes, at most 1000 |
+| `attach:read` | `path: string` | `PathRead` | For a granted path, once: `{ok:true, name, size, base64}` or `{ok:false, reason}` (`missing`, `is-folder`, `denied`, `busy`, `unreadable`, `too-big`). The size comes from `lstat` before reading, a link is never followed, at most 2 MiB + 1 byte is read | The grant is used up even when the read fails |
 
 ### Fire-and-forget channel (renderer to main)
 
 | Channel | Payload | What it does |
 |---|---|---|
+| `attach:grant` | `path: string` | If the sender is trusted: grants that path for one `attach:inspect`/`attach:read` (sent by the preload for a real dropped or pasted `File`) |
 | `coordinator:connect` | none | If the sender is trusted: starts the coordinator if needed, creates a `MessageChannelMain`, sends one port to the coordinator (`{ type: 'client' }`) and the other to the window (`coordinator:port`). An untrusted sender is ignored silently, with no audit line |
 
 ### Events (main to renderer)
@@ -88,7 +96,7 @@ All `ipcMain.handle` channels go through `handle()` in `src/main/index.ts`, whic
 | `coordinator:port` | `null` + a `MessagePort` | After `coordinator:connect` | `coordinator.*` (internal) |
 | `coordinator:restarted` | none | The coordinator exited with a non-zero code and main restarted it | internal (preload reconnects) |
 | `settings:changed` | none | Settings changed outside the window (`settings.patch` from the coordinator, `alwaysAllow`) | `settings.onChanged` |
-| `app:openThread` | `threadId: string` | A notification was clicked | `onOpenThread` |
+| `app:openThread` | `threadId: string` | A notification was clicked, or the window opened with a pending greeting landing (spec 033) | `onOpenThread` |
 | `app:reminder` | `{ title, body }` | A `notify` with `always` (reminders, home notices): also shown in-app because OS toasts can be dropped | `onReminder` |
 
 ### Not an IPC channel but part of the surface
@@ -111,20 +119,25 @@ The field `kind` is reserved by the envelope: `vault.create` therefore names its
 | `threads.create` | `agentId, workspace` | `Thread` | New conversation; broadcasts `thread.updated` |
 | `threads.update` | `threadId, title?, agentId?, workspace?` | `ThreadSummary` | Rename, change agent or folder |
 | `threads.delete` | `threadId` | `null` | Aborts the run if any, deletes the file |
-| `chat.send` | `threadId, text` | `null` (answers at once) | Starts an agent run (`startRun`); throws if one is already running; progress arrives as events |
+| `chat.send` | `threadId, text, attachments?` (stored attachment ids) | `null` (answers at once) | Starts an agent run (`startRun`); throws if one is already running or if an id is not a present file of this conversation (nothing is changed then); progress arrives as events |
+| `threads.open` | `threadId` | `null` | The conversation was selected in the window: sets `lastOpenedAt` (the 30-day attachment clock) without changing `updatedAt` |
+| `attachments.store` | `threadId, name, size, base64` | `StoreResult` (`{ok:true, attachment}` or `{ok:false, reason}`) | Validates with Zod and re-checks type and size on the bytes, strips picture metadata, stores under `inbox/attachments/<id>/`; refused in a company agent's conversation. Never sends anything to a provider |
+| `attachments.remove` | `id` | `null` | The chip's X: deletes the stored file and its record at once |
+| `attachments.preview` | `id` | `PreviewResult` | `{state:'unknown'\|'removed'}` or `{state:'present'}`; the base64 bytes and media type only for PNG, JPEG, WebP and GIF (thumbnails) |
+| `attachments.open` | `id` | `{ok, message}` | Checks the id, the file and the open list, then asks main to open it (`attachment.open`); errors for unknown, removed or not-openable |
+| `attachments.readers` | `threadId, images` | `ProviderId[]` | The providers that will read the attachments (the thread's provider, plus, when `images`, the provider the looks would use after the acknowledgement gate: the see provider chosen in «Imágenes», or the agent chain's provider; decided from settings alone, with no listing call), for the notice |
 | `chat.stop` | `threadId` | `null` | Aborts the run |
 | `runs.active` | none | `string[]` | Thread ids with a run in progress |
 | `approval.respond` | `approvalId, decision: 'allow' \| 'deny' \| 'always'` | `null` | Answers a pending approval (`ApprovalBroker.respond`); `always` also adds to `alwaysAllowTools` through main |
 | `approval.pending` | none | `PendingApproval[]` | Approvals still waiting (to rebuild the UI after a reconnect) |
 | `files.image` | `threadId, path` | data URL | A workspace image for previews, confined to the thread's workspace |
-| `files.saveImage` | `name, base64` | path string | Saves a pasted or dropped picture to `inbox/` |
 
 ### Models, MCP, images
 
 | Method | Payload | Result | What it does |
 |---|---|---|---|
 | `models.list` | `provider: ProviderId` | `string[]` sorted | Lists the provider's models with its key (`getProvider(...).listModels()`) |
-| `images.models` | `provider?: ImageProviderId` | models list | `listImageModels` in `src/coordinator/images.ts` |
+| `images.models` | `provider?: ImageProviderId` | models list | `listImageModels` in `src/coordinator/images.ts`; returns only the ids that can create (`createCandidates`: classified, `video` and `edit` ids left out, alphabetical), and a listing error is raised, not swallowed. The see group in «Imágenes» uses `models.list` filtered in the renderer by `seeCandidates`, so no message was added for it |
 | `mcp.status` | none | `McpServerStatus[]` | State of each MCP server |
 | `mcp.reconnect` | none | `McpServerStatus[]` | Forces a re-sync of every server |
 | `email.test` | none | result of `testEmail` | Logs in to IMAP and SMTP without reading or sending |
@@ -170,8 +183,9 @@ Paths are vault-relative; `activeVault()` throws «No hay un vault abierto.» wh
 | `voice.testSpeaker` | `sample: ArrayBuffer` | similarity 0 to 1 | Tunes the threshold |
 | `voice.say` | `text` | `null` | Speaks a text |
 | `voice.elevenVoices` | none | `{ id, name, preview, labels }[]` | ElevenLabs voices (needs the key) |
-| `privacy.export` | `targetDir` | path of the new folder | Copies personal data; audits `privacy.export` |
-| `privacy.erase` | none | `null` | Deletes conversations, `inbox/` and the voice print; audits `privacy.erase` |
+| `privacy.export` | `targetDir` | path of the new folder | Copies personal data, plus the dream journal folder and the memory file of the active vault under `vault/` (spec 033); audits `privacy.export` |
+| `privacy.erase` | none | `null` | Deletes conversations, `inbox/`, the voice print, `presence.json` and `dream-state.json` (spec 033); audits `privacy.erase` |
+| `dream.status` | none | `DreamStatusView \| null` (`null` before `init`) | The dream card's state (spec 033): `enabled`, `choice` (`{ provider, model }` the dream would use now, `null` without a key), `last` (`at`, `costUsd`, `outcome`: `ok`, `capped`, `skipped`), `failure` (`at`, `reason`: `no-key`, `no-vault`, `read-only`, `offline`, `provider`, `interrupted`), `running`. Ids, dates and amounts, no text |
 
 ### Companies
 
@@ -251,6 +265,7 @@ Handler: `src/coordinator/home/index.ts`.
 | `home.plan` | `plan` | `home/index.ts` | Floor plan changed |
 | `home.rules` | `rules: HomeRulesView` | `home/index.ts` | |
 | `home.flow` | `step: FlowStep` | `home/index.ts` | A step of adding a device needs the window (QR, external page) |
+| `dream.status` | `status: DreamStatusView` | `dream/service.ts` (through `index.ts`) | The dream's state changed: a dream started or ended, a failure, the switch, a saved state (spec 033) |
 
 ## 5. Main and coordinator
 
@@ -260,11 +275,13 @@ Over the utility process `parentPort`. Types in `src/shared/types.ts`. Unvalidat
 
 | `type` | Payload | Sent when | Coordinator does |
 |---|---|---|---|
-| `init` | `dataDir, settings` | Right after fork | Stores settings; opens audit, thread store, routines, vault, Telegram, voice, WhatsApp, companies, home; applies retention |
+| `init` | `dataDir, settings, packaged, defaultVaultPath` | Right after fork | Stores settings; opens audit, thread store, routines, vault, Telegram, voice, WhatsApp, companies, home; applies retention |
 | `settings` | `settings` (full, decrypted) | After every save | Replaces settings; re-syncs retention, MCP, vault, Telegram, voice, WhatsApp, company channels, home |
 | `client` | a `MessagePort` | When a window connects | `attachClient(port)`: starts listening for requests and audio |
 | `host.result` | `reqId, ok, message` | Answer to a host request | Resolves the waiting promise |
 | `voice.trigger` | none | The global hotkey was pressed | `voice.trigger()` |
+| `presence` | `event`: `{ kind: 'unlock' \| 'resume' \| 'idle-return', absenceMs: number \| null }`, `{ kind: 'start' }` or `{ kind: 'active' }` (spec 034) | Windows reported `unlock-screen` or `resume`; the once-a-minute idle poll saw a return after a period without input (`idle-return`) or input in the last minute (`active`); `start` once per app process, right after the first `init` | `presence?.receive(event)`: validated with Zod (a malformed one is dropped and logged without its payload), then the once-a-day rule. Dropped when there is no coordinator or it has not had `init` yet; main never queues or replays it |
+| `landing.used` | `threadId` | The window opened on the greeting conversation it was told to land in (spec 033 BR-29) | `dream.landingUsed(threadId)`: the desktop landing is consumed; later openings behave as today |
 
 ### Coordinator to main (`CoordinatorToParent`)
 
@@ -274,6 +291,11 @@ Over the utility process `parentPort`. Types in `src/shared/types.ts`. Unvalidat
 | `settings.patch` | `patch: Partial<Omit<Settings, 'providers'>>` | `settings.update(patch)` with no confirmation dialog, pushes back, sends `settings:changed`. Used for routines, bound Telegram chat, channel thread ids |
 | `notify` | `title, body, threadId?, always?` | System notification when the window is not focused (always with `always`; then also `app:reminder` and a taskbar flash). Click shows the window and sends `app:openThread` |
 | `host.request` | `reqId, request: HostRequest` | See below; answers with `host.result` |
+| `landing` | `threadId` | Keeps it as the pending landing (spec 033 BR-29). At the window's next opening (shown from hidden, minimized or not yet created, the first show at start included; `show` and `restore` events) or a click on the greeting's notification, sends `app:openThread` and posts `landing.used`. A window already visible keeps it for its next opening. Posted when the greeting is delivered and again after `init` while the state still holds a desktop landing |
+
+### Phone API: the greeting landing (spec 033)
+
+The phone's `GET /api/status` answer (`StatusView`, `src/shared/remote/wire.ts`) has an optional `landing: string`: the id of the morning greeting's conversation, sent once per paired device after delivery (`DreamService.phoneLanding`, injected into the remote channel as `landing(deviceId)`). The first status call after delivery consumes it whatever the scopes; it is included only when the History scope is on, so with History off that opening is the landing and the app opens as today. The phone app opens that conversation's screen once. The greeting push carries no text: an `aes128gcm` body whose plaintext is the fixed code `g`, which the service worker maps to `remote.pwa.push.greeting`.
 
 ### Host requests (`HostRequest`, coordinator to main)
 
@@ -286,6 +308,7 @@ The coordinator wraps these in `host.request(...)` (`Host` in `src/coordinator/t
 | `trash` | `path` | Vault delete (`src/coordinator/index.ts`, for the active vault and company vaults) | Moves to the recycle bin; audits `vault.trash` | Refuses a path outside the active vault or the vault root ("Ruta fuera del vault.") |
 | `secret.seal` | `text` | Home engine (`home/index.ts`) | `encrypt(text)` with `safeStorage` (empty string without a secure store, unless plaintext is allowed) | none |
 | `secret.open` | `text` | Home engine | `decrypt(text)` | none |
+| `attachment.open` | `path` | `attachments.open` (`attachments/service.ts`) | Opens a stored chat attachment with the system app; audits `attachment.open` | Re-checks that the real path (links resolved) is `inbox/attachments/<id>/<name>` and that the extension is on the open list; the coordinator checked the same |
 
 Reply: `{ ok: boolean, message: string }`; for `secret.*` the result text is in `message`, so an error text and a secret travel in the same field.
 

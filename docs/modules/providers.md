@@ -64,7 +64,7 @@ agent.ts / approval.ts / vision.ts / company meetings
 - **Stop reasons**: Anthropic `end_turn`/`stop_sequence` → `end_turn`; `tool_use`, `max_tokens`, `refusal` keep their name; the rest `other` (a refusal carries the API's explanation or category). OpenAI finish reasons: `tool_calls` (or `stop` with tool calls) → `tool_use`; `stop` → `end_turn`; `length` → `max_tokens`; `content_filter` → `refusal` with detail «<proveedor> filtró la respuesta.»
 - **Usage**: Anthropic `inputTokens` = input + cache-creation + cache-read, `cacheReadTokens` = cache-read. OpenAI-compatible: prompt/completion tokens and `cached_tokens` (or DeepSeek's `prompt_cache_hit_tokens`, else 0). No usage in the stream means no usage.
 - **Review calls** (`review`): Anthropic asks for a structured `{verdict, reason}` (low effort on adaptive models, `max_tokens` 4096). xAI uses a strict JSON schema response format; DeepSeek uses plain JSON mode with the shape spelled out; Vercel and Meta only the spelled-out shape. The JSON between the first `{` and last `}` is parsed; anything invalid is `flag` («El revisor no devolvió un veredicto válido.»; Anthropic refusal: «El revisor no pudo evaluar esta acción.»). Call errors propagate to the approval policy.
-- **Vision** (`vision.ts`): one low-effort turn, no tools, fixed Spanish system prompt. Model: the one chosen in the house settings; else the house agent's, else the default agent's, else any agent whose provider has a key, else the first agent. "Has a key" means a stored key or the main environment variable.
+- **Vision** (`vision.ts`): one low-effort turn, no tools, fixed Spanish system prompt. Model: the one chosen in «Configuración → Imágenes» (spec 038; a provider with a typed model, or a provider only once the person confirmed it, which makes Alma use the newest model of that provider its capability rule accepts); else the house agent's, else the default agent's, else any agent whose provider has a key, else the first agent. "Has a key" means a stored key or the main environment variable. Details and the capability table: [images](images.md).
 - **Prices**: `PRICES` in `shared/company.ts` (USD per million tokens, one price per provider) turn usage into estimated money for company budgets only. A code comment says per-model prices are an upgrade if budgets must be exact; Vercel's price is a "Sonnet-class guess".
 
 ## Tools for agents
@@ -105,7 +105,7 @@ Only `setApiKey` changes keys (`settings.update` never does); each set/clear is 
 ## How it is tested
 
 - With a test (`tests/providers.test.ts`): OpenAI message mapping with tool calls and errors; DeepSeek reasoning replay; newest-Grok choice; dropping foreign thinking and keeping tool blocks; replaying Claude content with signatures; xAI error reasons and the error-shape extractor. `tests/agent.test.ts` drives the loop with a scripted fake `Provider` (also the auto-review verdict flow), which is why the provider choice itself is untested.
-- Not covered: key resolution and client caching, Anthropic request parameters and retry, stop-reason and usage mapping, DeepSeek/Vercel/Meta default models, review request shapes and parsing, vision model choice, `models.list`.
+- Not covered: key resolution and client caching, Anthropic request parameters and retry, stop-reason and usage mapping, DeepSeek/Vercel/Meta default models, review request shapes and parsing, `models.list`. The vision model choice has tests since spec 038 (`tests/images-vision-*.test.ts`, see [images](images.md)).
 - By hand: the provider cards (save, delete, test connection with a good and a wrong key, xAI URL, Vercel hint) and the model field suggestions.
 
 ## Known limits
@@ -116,7 +116,7 @@ Only `setApiKey` changes keys (`settings.update` never does); each set/clear is 
 4. `fromEnv` and vision's key check look only at the main variable, so someone using `ANTHROPIC_AUTH_TOKEN` or an `ant auth login` profile works but sees «Sin configurar» and may be skipped by vision.
 5. Invalid tool JSON becomes `{__invalid_json}`, which MCP tools (not schema-validated) would receive as input.
 6. Cache-creation tokens are priced as normal input and Vercel's price is a guess, so company budgets are approximate.
-7. Card labels say DeepSeek and Vercel are "solo texto", yet the code comment says `deepseek-flash` takes images and images are sent for every flavor. Which is true for vision?
+7. Card labels say DeepSeek and Vercel are "solo texto", yet the code comment says `deepseek-flash` takes images and images are sent for every flavor. Which is true for vision? Answered for the automatic pick by spec 038 BR-13: DeepSeek and Vercel have no known seeing model, so Alma never picks one for them (the person types a model, and a typed model is sent as is); the claim that a given DeepSeek model takes images stays unverified against the real service.
 8. No provider timeout beyond the abort signal.
 
 

@@ -53,7 +53,7 @@ Details that matter and are easy to miss, all in `approval.ts`:
 | Group | How it is offered | Tools |
 |---|---|---|
 | Profile tools ("builtin") | Only the names listed in the agent's `profile.tools` (see `builtinTools`, `src/coordinator/tools/index.ts`) | 12: `read_file`, `list_dir`, `search_files`, `write_file`, `edit_file`, `run_command`, `generate_image`, `compose_image`, `instagram_publish`, `office_read`, `office_create`, `office_edit` |
-| App tools | Offered to every agent regardless of its profile (`appTools()`, `agent.ts:62`), each gated by a condition (table below) | 46 |
+| App tools | Offered to every agent regardless of its profile (`appTools()`, `agent.ts:62`), each gated by a condition (table below) | 47 |
 | Delegation | `delegate_task`, only if `profile.canDelegate`, depth 0, there is at least one other non-company agent, and the agent is not in a company (`agent.ts:260`) | 1 |
 | MCP | All tools of connected MCP servers, only if `profile.allowMcp` | variable, named `mcp__<server>__<tool>` |
 
@@ -68,7 +68,7 @@ Conditions for the app tools (`agent.ts:62-74`):
 | App tool group | Offered when |
 |---|---|
 | Vault and knowledge (7) | There is an active vault (`ctx.knowledge`). In a company run, it is the company's vault |
-| Routines (4), web (2), `send_telegram`, `look_at_image` | Always |
+| Routines (4), web (2), `send_telegram`, `look_at_image`, `read_attachment` | Always. Spec 031 adds no tool and no `ToolRisk`: files sent from the paired phone are read with the same `read_attachment` in phone-started runs, and it still never asks |
 | Home (19) | The house service exists, the setting `home.enabled` is on, and the agent is not a company agent |
 | Mail (3) | Mail is configured: address, IMAP host, SMTP host and the app password are all set (`emailConfigured`, `tools/email.ts:12`) |
 | WhatsApp (2) | The linked WhatsApp is on (a company only gets it when `company.whatsapp` is set) |
@@ -197,6 +197,7 @@ it is offered to every agent, with or without the house.
 | name | module | risk | approval | purpose | source file |
 |---|---|---|---|---|---|
 | `look_at_image` | images / home | `read` | never asks | Look at an image (a picture the user sent, a capture, a vault image) and answer a question about it | `tools/home.ts:443` |
+| `read_attachment` | chat attachments (spec 030) | `read` (`standalone`) | never asks, also in read-only mode | Read a file the user attached to a message, by its id (never a path): numbered lines for text and source files, `office_read` extraction for Word, Excel, PowerPoint and PDF; secret-looking values masked; result cut at 60,000 characters; pictures are read with `look_at_image` | `attachments/read-tool.ts` |
 
 ### Company tools (company agents only, standalone)
 
@@ -221,12 +222,12 @@ it is offered to every agent, with or without the house.
 | Group | Tools |
 |---|---|
 | Profile tools (files 5, shell 1, images 3, office 3) | 12 |
-| App tools: vault and knowledge 7, routines 4, web 2, `send_telegram` 1, `look_at_image` 1, home 19, mail 3, WhatsApp 2, company 7 | 46 |
+| App tools: vault and knowledge 7, routines 4, web 2, `send_telegram` 1, `look_at_image` 1, `read_attachment` 1, home 19, mail 3, WhatsApp 2, company 7 | 47 |
 | `delegate_task` | 1 |
-| **Total fixed tools registered in code** | **59** |
+| **Total fixed tools registered in code** | **60** |
 | MCP tools | variable (one per tool of each connected server) |
 
-By risk, over the 59 fixed tools: `read` 19, `memory` 13, `home` 5, `write` 16, `exec` 1, `publish` 4 (`instagram_publish`, `email_send`,
-`send_whatsapp`, `home_secure_control`); `delegate_task` has no risk (19 + 13 + 5 + 16 + 1 + 4 = 58, plus `delegate_task` = 59).
+By risk, over the 60 fixed tools: `read` 20, `memory` 13, `home` 5, `write` 16, `exec` 1, `publish` 4 (`instagram_publish`, `email_send`,
+`send_whatsapp`, `home_secure_control`); `delegate_task` has no risk (20 + 13 + 5 + 16 + 1 + 4 = 59, plus `delegate_task` = 60). These counts do not include `create_company` and `edit_company` (spec 029, both `publish`), which this reference does not list yet.
 
 Written by hand from the code; when you add a row, verify the name in the code.

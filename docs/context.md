@@ -67,11 +67,15 @@ A thread created by something other than the chat box: `telegram`, `whatsapp`, `
 _Avoid_: external chat, remote thread
 
 **Attachment**:
-A vault file the person drags onto the composer; it is appended to the message as a numbered "Adjuntos del vault" block and treated as data, not instructions. A pasted picture is not an attachment, it goes to the inbox. Spec 030 (draft) widens this: the person can also attach pictures and files of an allowed type (2 MiB each, 5 and 10 MiB per message) from the composer, stored under `inbox/attachments/`, read by the agent through `read_attachment` (pictures through `look_at_image`) and deleted after 30 days without the conversation being opened.
+Two kinds, both treated as data and never as instructions. (1) A vault file the person drags onto the composer: it is appended to the message as a numbered "Adjuntos del vault" block. (2) Since spec 030, a picture or a file of an allowed type (PNG, JPEG, WebP, GIF, PDF, Word, Excel, PowerPoint, text and source files; 2 MiB each, at most 5 files and 10 MiB per message) that the person pastes, drops, drops as a folder or picks with the file dialog in the desktop composer, or, since spec 031, attaches from the paired phone's chat when the **Send files** sub-switch is on (700 000 bytes each from the phone). It is stored in the **Attachment store**, listed in the message as a heading plus one reference line per file (id, name, size), and the agent reads a document with `read_attachment` and looks at a picture with `look_at_image`. Pictures lose their location and camera metadata, text read from a file has secret-looking values masked, and a file is deleted 30 days after its conversation was last opened (the message keeps a «removed» chip). Not available in company agents' conversations, Telegram, WhatsApp or voice; the paired phone shows a message's attachments by name, kind and size only, never their content.
 _Avoid_: upload, context file
 
+**Attachment store**:
+Spec 030. The folder `<userData>/inbox/attachments/` with one folder per attachment (`<id>/<sanitised name>`) and one record `<id>.json` (conversation, original name, size, kind, creation and removal time). The id is a random UUID and the only way to name a file: tools and the page never receive a path to build on, and nothing can list the store. The 30-day sweep and the deletion with the conversation act only on files this index knows.
+_Avoid_: library, uploads, gallery
+
 **Inbox**:
-The `<userData>/inbox/` folder that holds pictures pasted in chat, received over Telegram, or taken from cameras; its `attachments/` subfolder (spec 030) holds files attached in chat. `look_at_image` may read from it.
+The `<userData>/inbox/` folder that holds pictures received over Telegram or taken from cameras and, in older versions, pictures pasted in chat; its `attachments/` subfolder is the **Attachment store** (files and pictures attached in chat since spec 030). `look_at_image` may read from it. «Borrar mi historial» empties the whole folder.
 _Avoid_: downloads, uploads folder
 
 **Effort**:
@@ -315,7 +319,7 @@ One camera picture saved to the inbox (`camera_look`, `camera_photo`); a still i
 _Avoid_: snapshot (the code uses that word for the live state of the house too), screenshot, frame
 
 **Vision model**:
-The model that looks at pictures for `look_at_image`, camera stills and plan photos; chosen in «Configuración → Casa», otherwise the first agent with a key. Pictures never enter an agent's conversation, only the text answer does.
+The model that looks at pictures for `look_at_image`, camera stills and plan photos; chosen in «Configuración → Imágenes» (the group that sees; before spec 038 it was in «Configuración → Casa»), as a provider and a model or as a provider only. With a provider only, Alma uses the newest model of that provider that can see, but only after the person confirmed that provider by name; otherwise, and when nothing is chosen («Automático»), the model of the house agent, else the default agent, else the first agent with a key. Pictures never enter an agent's conversation, only the text answer does.
 _Avoid_: image model (that generates pictures), multimodal model
 
 ## Language: remote access
@@ -327,7 +331,7 @@ The single shared security layer, in `coordinator/channels`, through which a pai
 _Avoid_: remote control, remote API (that is only the set of operations the phone may call)
 
 **Transport**:
-The swappable piece of the remote channel that only moves bytes between the phone and the PC (Tailscale through `tailscale serve`; a local one that exists only in tests; an Alma-run relay in a later spec). It carries no authority: being reachable over a transport never grants access.
+The swappable piece of the remote channel that only moves bytes between the phone and the PC (Tailscale through `tailscale serve`; a local one that exists only in tests; an Alma-run **relay**, spec [027](../.specify/specs/027-alma-e2e-relay/spec.md), draft). It carries no authority: being reachable over a transport never grants access.
 _Avoid_: connection, tunnel, network, provider (providers are model providers)
 
 **Device** (remote):
@@ -345,6 +349,14 @@ _Avoid_: permission, role, access level
 **Step-up**:
 A WebAuthn passkey assertion, made on the phone and verified by the PC, required on every action that opens or disarms a sensitive device (locks, alarms, sirens, gate, garage and door covers), with no time window and no fallback; the passkey is registered during pairing. Closing, locking and arming need none, nor do a siren's trigger or silence or a cover's stop or set-position. It is added to the approval card, not a replacement.
 _Avoid_: 2FA, PIN, re-login
+
+**Send files** (remote, spec [031](../.specify/specs/031-remote-chat-attachments/spec.md), built; not yet run on a real phone):
+A sub-switch under the Chat scope that lets a paired phone put photos and files (up to 700 000 bytes each, at most 5 per message) on the PC and send them with a message, in the Chat tab and in conversations it may continue. Off at every turn-on, confirmed natively, never changed by the coordinator. The PC re-checks every file with the same rules as the desktop (spec 030); the phone never acknowledges the provider notice and cannot override the secret-name refusal.
+_Avoid_: upload permission, attach scope
+
+**Pending upload** (remote, spec [031](../.specify/specs/031-remote-chat-attachments/spec.md), built; not yet run on a real phone):
+A file a phone put in the attachment store that no message has yet bound. It belongs to that device and conversation, at most 5 per device, and is deleted at once when removed, when the device is cut off or the switch is turned off, or after 15 minutes. Once a send binds it, it is an ordinary attachment (30-day rule of spec 030).
+_Avoid_: draft attachment, temp file
 
 **Dormant device**:
 A paired device while remote access is off: it stays in the list, cannot connect, and returns when remote access is turned on again (the native confirmation names it). Its 15-day idle clock keeps running, so a long-dormant device is removed automatically. Not the same as a revoked device, which is deleted at once.
@@ -369,6 +381,42 @@ _Avoid_: session, lock, owner
 **Exclusion list** (remote):
 The folders of the vault that the person chose on the PC to hide from the phone. Excluding a folder needs no confirmation (it narrows access) and removing an exclusion asks a native confirmation (it widens access); there is no allow-list. Matched by vault-relative path, case-insensitive, covering every folder under it. Kept across turn-ons of remote access. A folder renamed or moved in Alma's own vault view takes its exclusion along; one renamed outside Alma shows as stale in the «Acceso remoto» tab and its new location is not excluded until the person excludes it.
 _Avoid_: blocklist, hidden folders (those are dot-folders the vault already hides from everyone)
+
+**Relay** (remote):
+Spec [027](../.specify/specs/027-alma-e2e-relay/spec.md), status `ready` (built, not deployed). A server run by Alma that is a third **Transport** for the remote channel, chosen instead of Tailscale (one at a time, never both, no fallback): the PC connects outward to it over a WebSocket, the phone reaches it over HTTPS, and it forwards sealed frames between them. It has no accounts, holds no key that opens a frame, keeps nothing, buffers nothing, and is opt-in and off by default with its own native confirmation. It sees only metadata (that two endpoints talk, when, how much, and the sizes and timing of frames). It is operated by the project maintainer personally, on voluntary donations. Not the same as Tailscale's relays (DERP), which belong to Tailscale.
+_Avoid_: cloud, proxy, tunnel, server (too generic: the PC also serves the PWA over Tailscale)
+
+**End-to-end session** (remote):
+Spec [027](../.specify/specs/027-alma-e2e-relay/spec.md), status `ready`. The sealed channel between one phone and the PC, with session keys only those two hold, that carries every request and answer over the **Relay**. It is part of the relay transport, not of the remote channel, and is separate from the bearer session of the channel (1 hour, renewed by signing); the Tailscale path does not use it. Built from ephemeral keys on both sides (so past traffic stays sealed if long-term keys leak), with the transcript signed by the PC's identity key and, after pairing, the phone's device key; at pairing the phone checks the PC's signed transcript against the fingerprint in the QR, and the 6-digit code stays the 026 one. Counters reject replay and reordering; keys are renewed at every reconnect and hourly; a tampered frame ends the session. WebCrypto only.
+_Avoid_: tunnel, VPN, TLS (TLS is hop-by-hop; this one survives the relay)
+
+**Routing id** (remote):
+Spec [027](../.specify/specs/027-alma-e2e-relay/spec.md), status `ready` (built, not deployed). 128 random bits that name one PC at the **Relay** and form the host of its per-PC address, `<routing id>.<relay domain>`; the PC registers it by signing a challenge with its identity key. It is an address, not an identity of a person, and knowing it grants nothing: every request still needs a device credential. The device key and the passkey are bound to the origin it forms. The relay keeps no binding for it across a restart (provisional answer, to be confirmed): the first valid claimant wins until the real PC registers again, a known residual denial of service.
+_Avoid_: account, room, user id
+
+**Shell pin** (remote):
+Spec [027](../.specify/specs/027-alma-e2e-relay/spec.md), status `ready` (built, not deployed). The gate by which the phone app refuses a PWA shell version the PC did not announce: the PC sends the official shell hash of its own build inside the end-to-end session, signed by its identity key. The hash of each release is published and shown in the app's Settings screen so it can be compared. It is best-effort: it catches a wrong, stale or partly tampered deployment, but the web platform lets the origin replace the service worker itself, so it does not stop an operator who deliberately serves a hostile app (at the first install, at a service-worker update or at a fresh load).
+_Avoid_: pin (it is not a wall), update check, code signing (the signer is the person's own PC, not Alma)
+
+## Language: dream and presence
+
+Specs [033](../.specify/specs/033-nightly-dream-and-morning-greeting/spec.md) and [034](../.specify/specs/034-presence-signals/spec.md), both `ready` and built (the owner sets `implemented`; 033's economy-model table awaits confirmed prices, so no dream runs yet). Terms below are the ones the owner decided on 2026-11-08 and 2026-11-09; neither spec has an open question.
+
+**Dream** («Sueño»):
+An opt-in nightly pass, off by default. Between 02:00 and 06:00 local, or at the first start or resume after a missed window, Alma rereads the user and assistant text of the conversations it has not dreamt yet (never company-agent threads; anything not typed by the person and not written by Alma goes in as data, never as instructions) with the cheapest economy model among the providers with a key, and without asking adds, replaces and removes lines of `Alma/Recuerdos.md` (keeping it at or under 4000 characters: replacements and removals first, then additions in order while they fit, the rest skipped and listed). It never reads a message more than 7 days old. It is a fixed pipeline with no tools, governed as risk `memory`, never runs in the read-only mode, is capped per night (USD 0.25 by default, 0.01 to 5), and is all or nothing: an interrupted dream applies nothing and is retried once the same day (at a start, a resume or a check inside the night window, whichever comes first); one aborted by turning the switch off is not retried. A night with nothing new from the person is skipped and counts as dreamt. Several missed nights make one dream.
+_Avoid_: consolidation, reflection, batch job, sleep mode
+
+**Dream journal**:
+The note a dream writes in the active vault, `Alma/Sueños/YYYY-MM-DD.md` (`Alma/Dreams/` in English; an existing folder name wins), dated the day the dream ran: every memory added, replaced or removed (old lines verbatim) and every change skipped, each citing its sources as thread id plus message `ts`, a speculative section of hunches that never enters `Recuerdos.md`, and a footer with provider, model and estimated cost; frontmatter `origen: ia` and `tipo: sueño` (`origin: ai`, `type: dream` in English). A completed dream writes one even when it changed nothing, and a file already at that path gets one more section appended. Alma never deletes it, deleting its sources leaves it, automatic recall never injects it (search and `read_note` still reach it), and «Exportar mis datos» copies it.
+_Avoid_: dream log, diary, report
+
+**Morning greeting**:
+A few lines the dream writes at night and Alma delivers as is, with no model call, once a day, at the first wake signal: to the Telegram bound chat, as a desktop notification, and as a content-free push with a fixed text to a paired phone while the History scope is on. It lives in its own new conversation, answered by the main agent; the first opening of Alma after delivery lands there (on the phone, only with the History scope on). A channel that fails is not retried. When the first message of the day came over Telegram, the greeting follows the answer in the Telegram thread. No dream result, no greeting; a dream stopped at the cap has one only if it was written before the cap stopped it, and then it says so; one not delivered by the next night window is dropped. It has no switch of its own.
+_Avoid_: morning brief, digest, daily summary
+
+**Wake signal**:
+The once-a-day decision that the person's day has started, the day running from 02:00 to 02:00 local. Spec 034 gives it when the screen is unlocked, the PC resumes, the person touches a PC left unlocked, or Alma starts (however it was started), each after an absence of 4 hours or more (a constant); a start with no known last activity, or an unlock whose lock was never seen, gives none. For the morning greeting, the person's first message of the day also counts. A signal is given only when a consumer can use it at that moment (for the greeting: written, or a catch-up dream running); one no consumer can use does not use up the day. Consumers get only "the person is back now". Only the date of the last signal and the last known activity time are stored, only while a consumer is on, never exported and cleared by «Borrar mi historial»; nothing about it leaves the PC.
+_Avoid_: presence, activity, heartbeat, wake-up
 
 ## Language: images and interface
 

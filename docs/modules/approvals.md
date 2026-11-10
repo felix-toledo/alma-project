@@ -78,7 +78,7 @@ Approval is not a tool; it is applied to every tool. Risk by tool (verified in `
 | `exec` | `run_command` (and every MCP tool, by default) |
 | `memory` | `save_knowledge`, `remember`, `forget`, `excalidraw_draw`, `create_reminder`, `delete_routine`, `send_telegram`, `assign_task`, `update_task`, `review_task`, `ask_colleague`, `escalate`, `schedule_meeting` |
 | `home` | `home_control`, `home_plan_edit`, `home_plan_from_drawing`, `home_plan_from_image`, `home_scene` |
-| `publish` | `instagram_publish`, `email_send`, `send_whatsapp`, `home_secure_control` |
+| `publish` | `instagram_publish`, `email_send`, `send_whatsapp`, `home_secure_control`, `create_company`, `edit_company` (spec 029; `edit_company` is a placeholder that always fails for now) |
 
 `home_control` refuses locks, alarms and gate/garage covers and points to `home_secure_control`, so the approval cannot be skipped through the everyday tool. Full table: [references/tools.md](../references/tools.md).
 
@@ -103,7 +103,7 @@ All live in `settings.json` (main). Pending approvals are in memory only: after 
 | Reviewer prompt: tool input as JSON | cut to 8000 chars |
 | Boss prompt: boss instructions | cut to 3000 chars |
 | Reviewer `max_tokens` (Anthropic) | 4096 |
-| Telegram approval text: input | cut to 1500 chars |
+| Telegram approval text: input | cut to 1500 chars (`APPROVAL_INPUT_LIMIT`); for `create_company` / `edit_company` it is not cut: if the input does not fit, Permitir is withheld instead (spec 029 BR-23) |
 | Voice attempts to understand yes/no | 2 |
 | Reviewer failure to judge | verdict `flag` (fail safe); an error asks the person, never auto-allows |
 
@@ -114,10 +114,11 @@ All live in `settings.json` (main). Pending approvals are in memory only: after 
 - Non-`read` calls are audited: `tool.authorize` / `denied`, `tool.run` / `ok` or `error`, with risk, thread, agent, decision note, argument names and the command line for `run_command`. Reads are not audited. Argument values are not stored.
 - Telegram buttons are accepted only from the bound private chat of an allowed user; callback data must match `ap:<id>:(allow|always|deny)`.
 - A paired phone answers through the same broker (first answer wins, later ones get `already-answered`); it needs the approve scope and sees the request cut at 1500 characters ([remote-access](remote-access.md)). Since spec 028 the phone also sees and answers the approvals of a run it started in a conversation by id, and only that device does; the policy is not stricter for it, so in «Permitir todo» mode `exec` and `write` do not ask in a phone-started run either, while `publish` always asks. With the approve scope off the phone shows that the run waits for an approval on the PC and the approval stays pending for the other surfaces. A phone-started run in a Telegram, WhatsApp or voice conversation does not send or speak its approval prompt on that channel.
+- **Company tools (spec 029).** `create_company` is `publish`, so every rule above applies: it asks in every mode but «Solo lectura» (denied), nothing skips it, «Siempre» is never offered and «always» counts as one allow. Alma is not a company agent, so there is no boss step. It is offered only to attended, top-level runs of agents outside any company, on the desktop, Telegram or the paired phone. The desktop card is `CompanyProposalCard` (rows from the pure `proposalOfCreation`): read-only, Permitir / Rechazar, with a flag on any position that auto-approves an `exec` tool. **Whole-input rule (BR-23):** `canAnswerFrom(via, approval, limit)` is false for these two tools on Telegram and the phone when `JSON.stringify(input, null, 1)` is longer than the 1500-character limit; then Telegram sends «see it on the desktop» instead of the cut input and leaves out Permitir, the phone's approval view has `whole: false` and its flow answers `already-answered` to an allow, and `ApprovalBroker.respond(approvalId, decision, via)` ignores an allow from that channel, so the approval stays pending for the desktop. Rechazar is never withheld. **Answering channel:** `respond` takes the channel (`desktop`, `telegram`, `phone`), the broker returns it in `Authorization.via` and `executeTool` puts it in the audit entry `company.create` / `company.edit` (company id, number of positions, channel; never names or text). Other answer paths (voice, WhatsApp) pass no channel and are not gated, which is safe only because the tools are not offered there. Not done: no audit entry for a call that fails validation before the card; `edit_company` is a placeholder. See [companies](companies.md) and `../security/CONTROLS.md`.
 
 ## How it is tested
 
-- With a test (`tests/agent.test.ts`): ask-then-run, deny, read-only mode (reads run, writes and publish denied), no ask without a workspace, invalid input, auto-review allow and flag, "always allow" is remembered, per-agent auto-approve, publish always asks, cancel denies pending approvals, dangling calls. `tests/telegram.test.ts`: only the bound private chat works. `tests/voice.test.ts`: spoken yes/no parsing.
+- With a test (`tests/agent.test.ts`): ask-then-run, deny, read-only mode (reads run, writes and publish denied), no ask without a workspace, invalid input, auto-review allow and flag, "always allow" is remembered, per-agent auto-approve, publish always asks, cancel denies pending approvals, dangling calls. `tests/telegram.test.ts`: only the bound private chat works. `tests/voice.test.ts`: spoken yes/no parsing. Spec 029: `tests/company-approval.test.ts` (publish tools ask in every mode and cannot be remembered, read-only denies, a denial changes nothing, stopping denies with «Cancelado», no boss step, the broker refuses an allow from Telegram or the phone when the input does not fit, deny is never refused, the answer carries its channel), plus the Telegram and phone cases in `tests/telegram.test.ts` and `tests/remote-approvals.test.ts` and the card logic of `tests/remote-client-conversations.test.ts`.
 - Not covered: "«Permitir todo»" itself, notes per mode, reviewer failure and cancel paths, review prompt contents, boss review (all five criteria), audit entries, always-allow persistence in main, broker edge cases (unknown id, concurrent approvals), Telegram message text and buttons, the voice flow and its retry.
 - By hand: the approval card in each mode, the flagged style (make the reviewer flag `rm -rf`), the notification with the window in the background, reloading the window during a pending approval, the Aprobaciones tab.
 
@@ -130,6 +131,7 @@ All live in `settings.json` (main). Pending approvals are in memory only: after 
 5. For a sub-agent, auto-review judges against the sub-agent's task text, not the person's original request.
 6. When a run is cancelled, Telegram edits the message to "(respondido)" though nobody answered.
 7. `home_secure_control` is tagged `publish`, so a company boss would review it, but house tools are not offered in companies, so this likely never happens. Confirm.
+8. The flag «can run commands without asking» on a company proposal covers only the position's own auto-approved list. In «Permitir todo», with a «Siempre permitir» rule or when the reviewer lets it pass, a company agent's `run_command` also runs unasked (risk [R‑15](../security/RISKS.md)).
 
 Most of the policy has no test; boss review in particular is untested.
 

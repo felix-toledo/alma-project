@@ -10,7 +10,7 @@ The key point: agents are **not alive all day**. They sleep and wake only for so
 
 What the person can do:
 
-- Create a company from a template («Agencia de marketing», «Ecommerce / tienda», «Administración / estudio») or blank.
+- Create a company from a template («Agencia de marketing», «Ecommerce / tienda», «Administración / estudio») or blank, or ask Alma in a chat to create one (a second path, spec 029; see "Alma creates a company" below).
 - Edit the org chart (add, remove and move positions, dotted lines) and the agent of each position.
 - Give a task to any member, review what they deliver (approve or ask for changes) and comment.
 - Call meetings: members prepare, speak in turns and leave minutes and tasks.
@@ -46,6 +46,8 @@ One board detail: dragging a card to another column changes its status with no v
 
 **Ask Alma in chat.** You run the company from the view; in chat you can talk to the head ("Hablar con…") and ask for work in natural language, for example «armá el plan de contenidos de noviembre y repartilo con el equipo» ("build the November content plan and split it among the team"). The company tools are visible only to agents that belong to a company, not to your personal agents.
 
+**Alma creates a company** (spec 029, a second path next to Equipos). In an ordinary chat on the desktop, Telegram or the paired phone, ask Alma to set up a company: she designs the positions (any titles and reporting lines, with their tools) and calls `create_company`. A card shows everything that would be created and nothing exists until you press Permitir. Then the vault folder is initialised, the company and one agent per position are saved and it appears in Empresas and Equipos without restarting, like one made by hand. To change anything before answering, say so in the chat and Alma proposes again. Alma cannot delete a company or anything in it. Status: **creation is implemented and covered by tests; the manual end-to-end run has not been done; editing (`edit_company`) is not implemented yet**, and the fixed brief header in front of each position's instructions (AC-6.5) is not applied yet, so the instructions are saved exactly as written.
+
 ## How it works
 
 Pieces, all under `src/`:
@@ -56,6 +58,11 @@ Pieces, all under `src/`:
 | Engine | `coordinator/company/engine.ts` | tasks, meetings, budgets, notifications, the clock |
 | Persistence | `coordinator/company/store.ts` | reads and writes `companies/<id>.json` |
 | Tools | `coordinator/tools/company.ts` | the seven agent tools |
+| Creation shared by the form and Alma | `shared/company.ts` (`buildCompany`, `defaultCompanyVault`, `COMPANY_COLORS`), used by `TeamsSettings.tsx` and by the tool | one pure builder, so the two paths cannot drift (spec 029 BR-2) |
+| Rules for Alma's companies | `shared/companyAuthoring.ts` | `COMPANY_LIMITS`, `companyIssues`, `vaultIssues`, `proposalOfCreation`, `canAnswerFrom` |
+| Alma's tools | `coordinator/tools/company-authoring.ts` | `create_company`, the `edit_company` placeholder, `offersCompanyAuthoring` |
+| Alma's host | `coordinator/index.ts` (`companyAuthoring()`) | `initVault`, `folderHasFiles`, `save` (a settings patch of companies, agents and vaults) |
+| Card | `renderer/src/components/CompanyProposalCard.tsx` | the read-only approval card |
 | Wiring | `coordinator/index.ts`, `agent.ts`, `approval.ts` | engine start, company-agent context, boss review |
 | Secrets | `main/settings.ts`, handler `settings:setCompanySecret` in `main/index.ts` | encrypted mailbox password |
 | UI | `renderer/src/companies/` (`CompaniesView`, `OrgChart`, `TeamsSettings`) | Empresas view and Equipos tab |
@@ -84,7 +91,7 @@ Pieces, all under `src/`:
 
 - Company agents are ordinary profiles with a `companyId`. They are hidden from the agent lists and the general chat; their conversations live only under Empresas → Chats.
 - Their working folder and knowledge **are the company vault** (with its own `Alma/Recuerdos.md`), never your active vault. They never get the house tools or `delegate_task`, and your personal agents never delegate to them.
-- `memberAgent` creates every new agent with provider `anthropic`, the default Claude model, effort `medium`, MCP off.
+- `memberAgent` creates every new agent with provider `meta` (default Meta model), effort `medium`, MCP off (Alma may turn MCP on for a position she designs; the Equipos default stays off).
 - Templates build a "Director/a general" at the top, who can delegate and whose instructions say to assign work, review, and ask the Directorio with `escalate` before big plans or spending. Agent names come from a fixed list of 16 first names.
 
 ## Tools for agents
@@ -102,6 +109,15 @@ Offered only to agents that belong to a company; elsewhere they fail with «Esta
 | `schedule_meeting` | `memory` | no | Call a meeting (1 to 8 agenda items, local time `AAAA-MM-DDTHH:MM`, `prep_hours` default 2, range 0 to 48). |
 
 Because `memory` and `read` never ask in any approval mode, a company agent can create work, meetings and escalations without asking you.
+
+**Alma's two tools (spec 029)** are the inverse: offered only to an attended, top-level run of an agent that is not in a company (never to company agents, sub-agents, unattended runs, voice or WhatsApp), and not among the seven above. Source: `coordinator/tools/company-authoring.ts`. Both work without a working folder.
+
+| Name | Risk | Asks approval | Purpose |
+|---|---|---|---|
+| `create_company` | `publish` | always, in every mode but «Solo lectura» (denied); never «Siempre» | Create a company: name, optional mission, goals, colour, budget and vault folder, and 1 to 8 positions (key, title, boss, description, instructions, tools, auto-approved tools, delegation, MCP, optional budget). One creation per run: a proposal refused by validation does not count, one that reached the card (approved or denied) does. |
+| `edit_company` | `publish` | would be; **not built** | Placeholder with an empty schema that always fails; its patch, rules and card wait for the human's answer to spec gap G-1. |
+
+Created agents use the `memberAgent` defaults whatever Alma writes (provider `meta`, effort `medium`); agent names come from the fixed list through `pickName`. Alma never sets a provider, a model, a mailbox, a WhatsApp number or a secret, and has no way to delete anything.
 
 ## Settings and data
 
@@ -133,6 +149,9 @@ Full data map: [data reference](../references/data.md). Settings: [settings refe
 | Budget warnings | at 80 % and 100 %, once per month per cap |
 | Agents working | one per member at a time |
 | Tools that do not ask inside a company | `write_file`, `edit_file`, `office_create`, `office_edit`, `generate_image`, `compose_image` (plus the position's `autoApproveTools`) |
+| What Alma may set (`COMPANY_LIMITS`, checked before any card) | budget above 0 and at most USD 100 for the company and for each position (omitted: company 20, position 0); 1 to 8 positions; exactly one head; at most 4 levels; no loops; 10 companies; one creation per run (only a proposal that reached the card counts); description plus instructions at most 2000 characters; name 1 to 60 and not already used (ignoring case); mission 500; goals 1000; colour one of the 8 swatches; tool names from the built-in catalogue |
+| Vault folder for Alma's companies | one new, empty folder directly under `<parent of the default vault>\Empresas\`, no `.` or `..`, no `: * ? " < > \|` in the name, not the main or active vault or another company's. Checked on the text of the path only |
+| Not capped (gap) | a position's key and title, and the number of entries in its `tools` and `autoApproveTools` |
 
 Prices used (USD per million tokens, input / output / cache read; `shared/company.ts`): anthropic 5 / 25 / 0.5 · xai 3 / 15 / 0.75 · deepseek 0.3 / 1.2 / 0.03 · vercel 3 / 15 / 0.3 · meta 1.25 / 4.25 / 0.15. Spend is an **estimate**, not the bill. The month rolls over by local time (`YYYY-MM`) and the new month starts at zero. (More in [limits reference](../references/limits.md).)
 
@@ -146,12 +165,15 @@ Alerts you receive (desktop and Telegram): delivery to review, task that will no
 - **Writing in the company vault does not ask** (it is the normal work). Commands and other tools follow the approval mode; read-only mode still blocks everything.
 - **Separate accounts**: the company mailbox and WhatsApp are apart from yours. With an empty mail address, agents use yours. The password is encrypted and does not return to the window.
 - **What leaves your machine**: what any agent sends to its model provider (tasks, company context, vault fragments) and what gets published after your approval. No new third party.
+- **A company made by Alma is a model's design.** Alma may give a position `run_command`, MCP, delegation and an auto-approved list, and its instructions become the standing prompt of an agent that works alone later. The only guard inside the ceilings is the person reading the card, which flags an auto-approved `exec` tool but does not prevent it ([R‑15](../security/RISKS.md), `../security/CONTROLS.md`). The card does not list the mission, goals, colour or per-position budgets (they are in the tool card's input when expanded).
 - Security notes: [security module](security.md) and `docs/security/`.
 
 ## How it is tested
 
 - `tests/company.test.ts` covers five behaviors: org chart and loops, a boss that assigns and reviews, board tasks that wait for your review, the budget cap that stops waking agents, and a full meeting (preparation, turns, minutes and tasks).
+- Spec 029 (Alma creates companies), every title carrying `(029)`: `tests/company-authoring.test.ts` (the shared builder gives the same company as the Equipos form for each template and a blank one; free-form positions; the ceilings, shape, name, vault, tool-name and brief rules; the proposal rows; `canAnswerFrom`), `tests/company-tools.test.ts` (who is offered the tools, the validate and preview hooks, validation before any card, nothing exists until the answer, the write after Permitir, a vault that cannot be initialised saves nothing, what changed while the card waited, one creation per run, the audit carrying ids and counts only), `tests/company-approval.test.ts`, `tests/company-cards.test.ts`, and the channel cases in `tests/telegram.test.ts`, `tests/remote-approvals.test.ts` and `tests/remote-client-conversations.test.ts`.
 - **No test**: the seven tools and their error messages, meeting limits, budget warnings, persistence and restart, and most task logic (comments that reopen, blocked, escalation).
+- **By hand for 029, not yet done**: ask Alma in the chat for a company, answer Permitir, and see it in the Empresas sidebar and in Equipos without restarting (its agents are not in the Chat tab); the proposal card with a position that auto-approves `run_command` (the red flag), in both languages; the Telegram and phone texts; the card is a React view with no test of its own.
 - **By hand**: everything on screen. Create each template and read the org chart; drag positions and cards; set a low cap and watch the badge; call a scheduled and a live meeting; link a spare WhatsApp and a test mailbox.
 
 ## Known limits
@@ -169,6 +191,7 @@ Ordered by how likely they are to bite. Spec: [007](../../.specify/specs/007-com
 9. **The 80 % warning can arrive after the 100 % one** when a single usage jumps both thresholds.
 10. **Every keystroke in the editor saves**, a change of boss or budget applies without confirmation, and deleting a running task leaves no trace (the agent then fails with «No existe la tarea»).
 11. Budget and meeting alerts also go to Telegram even if you did not ask for them.
+12. **Alma's companies (spec 029), not done yet:** `edit_company` is only a placeholder (gap G-1); the fixed brief header is not applied (G-2, AC-6.5 unmet); a denial or an error after the card was shown uses up the single `create_company` of the run (G-5, amended), while a call rejected by validation before any card does not (Alma fixes it and calls again in the same run) and is audited as an error; a position's key, title and tool lists have no size cap; the vault check does not resolve junctions or reject Windows reserved names (those fail at creation, nothing saved); no deletion exists for Alma by design, so removing a company stays manual (Borrar empresa).
 
 Rationale not documented: why a subordinate's `done` still goes through review unless that subordinate created the task (the code treats it as a review rule).
 

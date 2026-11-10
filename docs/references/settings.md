@@ -13,9 +13,9 @@ Every field of the `Settings` model, grouped by section (the order of `Settings`
 | What | Value | Source |
 |---|---|---|
 | File | `settings.json` in the user-data folder (`%APPDATA%\Alma`, or `ALMA_USER_DATA`) | `src/main/settings.ts` `settingsPath()` |
-| Load | `JSON.parse` then a shallow merge over `defaultSettings()`, key by key inside `telegram`, `voice`, `email`, `whatsapp`, `home`, `autoReview`, `images`, `instagram`, `background`, `privacy`. No schema validation. A file that cannot be read gives full defaults. | `SettingsStore.load()` |
+| Load | `JSON.parse` then a shallow merge over `defaultSettings()`, key by key inside `telegram`, `voice`, `email`, `whatsapp`, `home`, `autoReview`, `images`, `instagram`, `background`, `privacy`. No schema validation, except `images` (`sanitizeImagesSettings`: a missing or malformed `vision`, an unknown provider id, a non-string model or a model with no provider loads as not set), `attachments` and `dream`. A file that cannot be read gives full defaults. | `SettingsStore.load()` |
 | Save | Written to `settings.json.tmp` (mode `0o600`), then renamed over `settings.json` | `SettingsStore.save()` |
-| Update from the window | `settings:update` with a partial patch: top-level keys are replaced whole (a patch with `privacy` replaces the whole `privacy` object). `providers` in a patch only honors `providers.xai.baseUrl` | `SettingsStore.update()` |
+| Update from the window | `settings:update` with a partial patch: top-level keys are replaced whole (a patch with `privacy` replaces the whole `privacy` object), with two exceptions: an `images` patch goes through `acceptImagesPatch` (a missing or invalid `vision` keeps the current one) and a `home` patch loses `visionProvider`/`visionModel`. `providers` in a patch only honors `providers.xai.baseUrl` | `SettingsStore.update()` |
 | Reaches the coordinator | After every save, main posts the full decrypted `Settings` (`{ type: 'settings' }`) | `pushSettings()` in `src/main/index.ts` |
 
 Load-time migrations (run on every load, mark themselves done):
@@ -26,7 +26,8 @@ Load-time migrations (run on every load, mark themselves done):
 | Multimedia agent | If the file predates it and has no `multimedia` agent, the default one is appended once (stays deleted if the person deletes it later) | `multimediaAdded` |
 | `compose_image` | An agent with `generate_image` but not `compose_image` gets it (and the auto-approval if `generate_image` had it) | none (runs every load, idempotent) |
 | Wake word | Any `voice.wakeWord` other than `'off'` is rewritten to `'hola_alma'` | none |
-| Pasted key | If `images.model` looks like an API key (`xai-…` or `sk-…`), it is blanked and the file rewritten | none |
+| Pasted key | If `images.model` or `images.vision.model` looks like an API key (`xai-…` or `sk-…`), it is blanked and the file rewritten | none |
+| Vision model move | `home.visionProvider` / `home.visionModel` are copied into `images.vision` once (when it is still empty) and removed from `home`; the file is rewritten if it existed and a secure store allows it | `visionMigrated` |
 | Unsealed secret | A secret found in clear on disk is rewritten sealed, if a secure store exists | none |
 | Empty agent list | `agents` empty or absent is replaced by the default agents | none |
 
@@ -68,11 +69,14 @@ Rules (`src/main/settings.ts`):
 | `alwaysAllowTools` | string[] | `[]` | Aprobaciones (card "Siempre permitir", remove only) | Tool names that skip approval. Added when the person picks "Siempre permitir" in an approval (`alwaysAllow` message) |
 | `mcpServers` | `Record<string, McpServerConfig>` | `{}` | Conectores MCP | External tool servers. Adding, changing or re-enabling a stdio command needs a native confirmation |
 | `defaultWorkspace` | string | `''` | General («Carpeta de trabajo por defecto») | Working folder given to new chats, routines, channels |
-| `images` | `{ provider: 'xai' \| 'openai' \| 'meta'; model }` | `{ provider: 'meta', model: '' }` | «Imágenes» | Image generation service; empty model = newest one the account lists |
+| `images` | `{ provider: 'xai' \| 'openai' \| 'meta'; model; vision: { provider: ProviderId \| ''; model } }` | `{ provider: 'meta', model: '', vision: { provider: '', model: '' } }` | «Imágenes» (two cards: creating and seeing) | The create group (`provider`, `model`): image generation service; empty model = newest one the account lists. The see group (`vision`, [spec 038](../../.specify/specs/038-image-models-create-and-see/spec.md)): provider and model that look at pictures (`look_at_image`, `camera_look`, camera watches, plan-from-photo and the pictures attached in the chat). Provider `''` is «Automático» (the agent chain: house agent, default agent, any agent with a key, first agent, no capability check). Provider with a typed model: used as is. Provider with an empty model: used only if it is in `attachments.noticeAcknowledged` (otherwise the agent chain runs, which the card says in one line with a confirm button), and then the newest model its capability rule accepts is looked up once per process. The tab always sends the whole `images` object; on update `acceptImagesPatch` keeps the current `vision` when a patch leaves it out or malforms it. Picking a see provider in the tab that is not yet acknowledged opens a confirmation dialog, and Confirm saves provider, model (empty, except for a provider with no capability rule, DeepSeek or Vercel, whose dialog requires one) and the acknowledgement in one update; an acknowledged provider with a rule saves at once; Cancel changes nothing. See [images](../modules/images.md) |
 | `instagram` | `{ testMode }` | `{ testMode: true }` | Instagram | Test mode fills the post but never clicks "Compartir" |
 | `routines` | `Routine[]` | `[]` | no Settings tab: the "Rutinas" dialog (and agents through the routine tools) | Scheduled tasks and reminders |
 | `background` | `{ runInTray, launchAtLogin }` | `{ true, false }` | General | Keep running in the tray when the window closes; open at Windows login (with `--hidden`) |
 | `privacy` | `{ threadRetentionDays }` | `{ 0 }` | General ("Borrar conversaciones sin actividad") | Days without activity before a conversation is deleted. UI offers 0 (never), 30, 90, 180, 365 |
+| `dream` | `{ enabled: boolean; capUsd: number }` | `{ enabled: false, capUsd: 0.25 }` | General (card «Sueño», between «Segundo plano» and «Privacidad»: switch «Soñar de noche», «Tope de gasto por noche (USD)») | The nightly dream and morning greeting ([spec 033](../../.specify/specs/033-nightly-dream-and-morning-greeting/spec.md)). `enabled`: off by default; turning it off aborts a running dream, which is then not retried that day. `capUsd`: the nightly cost cap in USD, 0.01 to 5 inclusive. On load `sanitizeDreamSettings` replaces each invalid field with its default (an older file loads with the dream off); on update `acceptDreamPatch` keeps the previous value of an invalid field (not a number, out of bounds, a string), and the card shows `dream.capInvalid`. The card also shows the provider and model the dream would use now (from the `dream.status` request, refreshed when keys change) and a status line (last dream's date, estimated cost, outcome, last failure reason). The window, the night hours (02:00 to 06:00) and the model are not settings |
+| `attachments` | `{ noticeAcknowledged: ProviderId[] }` | `{ [] }` | The attachment notice in the chat composer (no Settings tab) | Providers whose «attached content goes to this provider» notice the person accepted (spec 030); sanitized on load, unknown provider ids dropped. Since spec 031 the native confirmation that turns on `remote.sendFiles` also records the providers it names here (on Allow only) |
+| `remote.sendFiles` | boolean | `false` | Acceso remoto → Chat → «Enviar archivos desde el celular» | Whether paired phones may put pictures and files on the PC (spec 031). Off at every turn-on of remote access; turning it on needs a native confirmation that names the providers; reads as `false` while `remote.scopes.chat` is off; a missing or non-boolean value reads `false`. The coordinator's `settings.patch` cannot change it (the whole `remote` section is stripped). The rest of `remote.*` is in [remote-access](../modules/remote-access.md) |
 | `vaults` | string[] (absolute paths) | `[]` | sin interfaz in the dialog: the Vault view (sidebar) and Equipos add to it | Vault folders the person opened |
 | `activeVault` | string | `''` | Vault view | The vault all conversations draw knowledge from; empty = none |
 | `companies` | `Company[]` | `[]` | Equipos | Agent companies (below) |
@@ -123,6 +127,7 @@ Owner: [docs/modules/voice.md](../modules/voice.md). All edited in the **Voz** t
 | `voice.agentId` | string | `'general'` | agent select | Agent that answers voice requests |
 | `voice.sendDelayMs` | number | `1000` | select "Pausa antes de enviar" | Pause between the transcript and the request, during which the ✕ button or Esc cancels it; `0` = none |
 | `metaDefaultApplied` | boolean | unset | none | One-time marker: default agents, review and images moved to Meta |
+| `visionMigrated` | boolean | unset | none | One-time marker (spec 038): `home.visionProvider` and `home.visionModel` were moved into `images.vision`. Read and set only by `migrateLegacyVision` (`src/shared/images/vision.ts`) |
 | `voice.threadId` | string \| null | `null` | sin interfaz | Current voice conversation; a new one starts after an hour of silence. Written by the coordinator |
 
 ## `email`
@@ -158,12 +163,12 @@ Owner: [docs/modules/home.md](../modules/home.md). Edited in **Casa** (`HomeSett
 | `home.externalUrl` | string | `''` | URL field (external mode) | Base URL of the external Home Assistant (token sealed in `home/auth.json`, never here) |
 | `home.mirrored` | boolean | `false` | none | **Dead setting**, see below |
 | `home.agentId` | string | `''` | agent select | Agent that handles judgment rules; empty = the default agent (`launchHomeRule`, `src/coordinator/index.ts`) |
-| `home.visionProvider` | string | `''` | provider select | Provider of the model that looks at pictures (plans, cameras); empty = the agent's model. Read by `src/coordinator/vision.ts` |
-| `home.visionModel` | string | `''` | model field (shown when a provider is chosen) | Vision model |
+
+`home.visionProvider` and `home.visionModel` no longer exist (spec 038): the vision model is `images.vision`, chosen in «Imágenes». Casa shows a read-only line («Mira con…») and a button that opens «Imágenes». On the first load after the update `migrateLegacyVision` copies the pair into `images.vision` when that is still empty (an unknown provider or a model with no provider is dropped, a model that looks like a key is blanked), sets `visionMigrated`, and removes the two keys from `home`. Every later load and every `home` patch through `settings:update` also strips them (`omitLegacyVision`), so an older renderer or a stale file cannot bring them back.
 
 ## `images`, `instagram`, `background`, `privacy`, `autoReview`
 
-Covered in the top-level table. Fields: `images.provider` (`meta` default), `images.model` (`''`), `instagram.testMode` (`true`), `background.runInTray` (`true`), `background.launchAtLogin` (`false`), `privacy.threadRetentionDays` (`0`), `autoReview.provider`, `autoReview.model`, `autoReview.instructions`. The coordinator applies retention at startup, every 12 hours and whenever settings change (`applyRetention`, `src/coordinator/index.ts`).
+Covered in the top-level table. Fields: `images.provider` (`meta` default), `images.model` (`''`), `images.vision` (`{ provider: '', model: '' }`), `instagram.testMode` (`true`), `background.runInTray` (`true`), `background.launchAtLogin` (`false`), `privacy.threadRetentionDays` (`0`), `autoReview.provider`, `autoReview.model`, `autoReview.instructions`. The coordinator applies retention at startup, every 12 hours and whenever settings change (`applyRetention`, `src/coordinator/index.ts`).
 
 ## `AgentProfile` (items of `agents`)
 
@@ -255,6 +260,7 @@ Owner: [docs/modules/companies.md](../modules/companies.md).
 |---|---|---|
 | «Sonidos de interfaz», «Música de fondo», «Volumen», «Fondo en movimiento» (tab «Sonido y ambiente») | Browser `localStorage`, key `umbra.prefs` | Per window; the coordinator never sees them. Another key `ambience` belongs to unused code |
 | View state: `alma.mode`, `alma.company`, `alma.vault.chat`, `alma.vault.tabs:<vault>`, `alma.vault.expanded:<vault>`, `alma.vault.reading`, `alma.home.tab` | Browser `localStorage` | Last selected mode/company/tabs; safe to lose |
+| Dream state (spec 033): schedule, read cursors, last outcome and failure, the greeting's conversation id, pending landings | `<userData>/dream-state.json` | Not a setting: written by the coordinator only; see [data](data.md) |
 | `ALMA_USER_DATA`, `ALMA_ALLOW_PLAINTEXT_SECRETS`, `ALMA_HOME_DISTRO` (default `alma-home`), `ALMA_HOME_DEMO`, `ALMA_INSTAGRAM_URL` | Environment | Read in `src/main/index.ts`, `src/main/settings.ts`, `src/coordinator/home/engine.ts`, `src/main/instagram.ts`. The last three are for tests and development |
 
 ## Dead settings

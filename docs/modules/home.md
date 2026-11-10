@@ -126,7 +126,7 @@ Pieces:
 | `src/shared/home.ts` | Geometry (centroid, point-in-polygon), `planFromDrawing`, `planFromVision`, `extractJson`, rule types, `ruleMatches`, `inWindow`. |
 | `src/shared/excalidraw.ts` | Reads `.excalidraw` content. |
 | `src/coordinator/home/triggers.ts` | Judgment rules and camera watches, `rules.json`. |
-| `src/coordinator/vision.ts` | `look()`, `loadPicture`, model choice. |
+| `src/coordinator/vision.ts` | `look()`, `loadPicture`, model choice (`visionModel`, from `images.vision`, see [images](images.md)). |
 | `src/coordinator/index.ts` | `launchHomeRule` (wakes the agent), `notifyHome`, `saveInboxImage`. |
 | `src/renderer/src/home/FloorPlan.tsx`, `RulesPanel.tsx` | Plan SVG and rules tab. |
 
@@ -184,7 +184,7 @@ Setting `home` (defaults in `src/shared/defaults.ts`; merged in `src/main/settin
 | `externalUrl` | `''` | URL of the external HA. |
 | `mirrored` | `false` | WSL mirrored networking. Defined but nothing reads it (see below). |
 | `agentId` | `''` | Agent that answers judgment rules (default agent if empty or removed). |
-| `visionProvider`, `visionModel` | `''` | Model that looks at pictures; empty falls back as described above. |
+| ~~`visionProvider`, `visionModel`~~ | removed | Gone since spec 038: the model that looks at pictures is `images.vision`, chosen in «Configuración → Imágenes» ([images](images.md)). On first load the old pair moves there and both keys are removed from `home`. Casa shows a read-only line («Mira con…», or the newest-that-can-see wording when only a provider is chosen) and a button to open «Imágenes», plus the cost note about camera watches. |
 
 Data (reference: [data.md](../references/data.md)):
 
@@ -230,7 +230,7 @@ Plumbing integrations not listed as connected accounts: sun, radio_browser, goog
 - **Asks first:** locks, alarms, sirens and garage/gate/door covers, on every call (`home_secure_control` is `publish`). Camera, add/edit/remove, modes and rules tools follow the approval mode. The Casa window asks with a native `confirm` before operating a lock or alarm; a paired phone asks for a passkey step-up (60 s, single use, bound to the exact action).
 - **Blocks:** `home_control` refuses sensitive things and calls nothing, not even for the other matches; `home_call_service` refuses the `lock`, `alarm_control_panel` and `siren` domains. Company agents get no `home_*` tools.
 - **Stores:** the HA token and owner password are sealed with the OS keychain (`auth.json`). Pictures from cameras stay in `<data>/inbox/`; `erasePersonalFiles` empties it ([security.md](security.md)).
-- **Leaves the machine:** camera stills and plan photos go to the configured vision provider (a third party) and, when asked or when a watch matches, to Telegram. The engine downloads crane and SonoffLAN from GitHub and the HA image from `ghcr.io`. Brand accounts (Tuya code, eWeLink password) travel from the person to HA; when an agent drives `home_add_device`, the tool says the person types them in chat, so they pass through the model provider.
+- **Leaves the machine:** camera stills and plan photos go to the configured vision provider (a third party; chosen in «Configuración → Imágenes», and a provider chosen without a model receives nothing until the person confirmed it, camera watches included) and, when asked or when a watch matches, to Telegram. The engine downloads crane and SonoffLAN from GitHub and the HA image from `ghcr.io`. Brand accounts (Tuya code, eWeLink password) travel from the person to HA; when an agent drives `home_add_device`, the tool says the person types them in chat, so they pass through the model provider.
 - **Network:** HA listens on all interfaces inside WSL, reachable from the Windows host; LAN exposure depends on WSL networking.
 - **Unattended runs:** a judgment-rule run has nobody watching. Only `home`, `read`, `memory` tools and `camera_look` run unasked; other `write` tools wait for an approval.
 - The spec flags the HA engine, the downloads, and the stored owner credentials as items for `docs/security/` ([RISKS.md](../security/RISKS.md), [CONTROLS.md](../security/CONTROLS.md), [PRIVACY.md](../security/PRIVACY.md)).
@@ -260,7 +260,7 @@ Plumbing integrations not listed as connected accounts: sun, radio_browser, goog
 
 ### What `docs/HOME-AUTOMATION-PLAN.md` promised and is not built
 
-The plan's own status block already records some deviations (no mirrored network, no HA floors, vision model chosen in Settings → Casa). Comparing the rest against the specs and code:
+The plan's own status block already records some deviations (no mirrored network, no HA floors, vision model chosen in Settings → Casa; since spec 038 it is chosen in Settings → Images, and Casa only shows which model is used). Comparing the rest against the specs and code:
 
 | Promised in the plan | State today |
 |---|---|

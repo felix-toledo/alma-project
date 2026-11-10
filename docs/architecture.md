@@ -23,13 +23,16 @@ What the pieces are, what can talk to what, and where each new thing goes. The r
    shared (src/shared): types, schemas and pure functions used by 2+ layers
 ```
 
+Two more zones are not part of the desktop app's processes: `src/remote-client` is the phone PWA (served by the PC, or by the relay), and `src/relay` is the relay server of spec 027, a program that runs on Cloudflare and never inside the installer.
+
 | Layer | Owns | Never |
 |---|---|---|
 | `shared` | types, defaults, shared pure logic | import another layer |
 | `renderer` | pantallas y estado de UI | importar `main`/`coordinator`, `electron`, `node:*`, `shared/audit` |
 | `main` | windows, settings on disk, native dialogs, secrets (`safeStorage`) | import `coordinator`/`renderer` |
 | `coordinator` | everything that thinks or does I/O for an agent | import `main`/`renderer`; touch `electron` outside `index.ts` |
-| `remote-client` | the phone PWA, served by the PC over the tailnet | import `node:*`/`electron`/`main`/`coordinator`/`renderer`, hard-code hosts, be imported by anyone |
+| `remote-client` | the phone PWA, served by the PC over the tailnet or by the relay | import `node:*`/`electron`/`main`/`coordinator`/`renderer`, hard-code hosts, be imported by anyone |
+| `relay` | the relay server (spec 027): forwards sealed frames between a PC and a phone and keeps nothing. Platform-free logic in `src/relay/*.ts`; a thin Cloudflare adapter in `src/relay/cloudflare/` | import anything of `src/` but itself and `shared/remote/relay-frame`, `relay-limits` and `crypto`; import `node:*` or `electron`; be imported by anyone; ship in the installer (its build, `pnpm run build:relay`, only typechecks) |
 
 Only typed messages travel between layers. If two layers need the same thing, it goes to `shared` (if it is pure) or a message is sent (if not).
 
@@ -60,6 +63,7 @@ To add a rule: a new entry in `RULES` + a fixture in the test that breaks it. To
 | A model provider | `src/coordinator/providers/` implementing `Provider` | a test with a fake provider, like `tests/providers.test.ts` |
 | A setting | type and default in `shared/types` and `shared/defaults`; read/write in `main/settings.ts`; screen in `SettingsDialog` | if it runs new code, a native confirmation (`main/guard.ts`) |
 | A screen | `src/renderer/src/<area>/`, with the `console-ui` and `umbra-ui` skills | logic with rules goes to `shared/` + a test |
+| Something the relay server does | `src/relay/` (logic, tested in Vitest against `tests/support/relay-fake.ts`); only wiring to the platform goes in `src/relay/cloudflare/` | the frame contract it shares with the PC and the phone is in `shared/remote/relay-frame.ts`; the relay must not keep, log or open anything of a frame; `docs/security/` changes in the same PR |
 | A phone (PWA) screen | `src/remote-client/screens/` | contract in `shared/remote/api.ts`, text in `remote-client/i18n/` (own dictionaries, Spanish and English); the bundle is checked for no Node imports and no hard-coded host |
 | A business rule | pure function in `shared/` (or next to the tool) | spec first (Constitution I) |
 

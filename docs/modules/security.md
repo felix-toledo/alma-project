@@ -38,6 +38,9 @@ For an agent, these are limits, not tools: it cannot reach the local network wit
 | Command environment | `src/coordinator/tools/shell.ts` (`commandEnv`) |
 | Export, erase, retention | `src/coordinator/privacy.ts`, `applyRetention` in `src/coordinator/index.ts` |
 | Owner-only channels | `src/coordinator/channels/telegram.ts`, `whatsapp.ts` |
+| Chat attachments: allow-list, names, secret-name warning, masking, metadata strip, sweep rule | `src/shared/attach/{rules,classify,request,names,secrets,exif,sweep}.ts` (pure, tested without a window) |
+| Chat attachments: store, id-only access, `read_attachment`, history expansion, sweep timer | `src/coordinator/attachments/{store,service,expand,read-tool}.ts` |
+| Chat attachments: path grants for disk reads, native dialog, open guard | `src/main/attach.ts`, `attach:*` and `shell:openPath` in `src/main/index.ts`, `webUtils` in `src/preload/index.ts` |
 
 The audit trail:
 
@@ -64,6 +67,7 @@ Actions recorded (verified with `grep audit(` in `src/`): `tool.authorize` (deni
 | Settings and secrets | `<userData>/settings.json`, sealed `enc:` values, mode 0600 | |
 | Audit trail | `<userData>/audit/<source>-YYYY-MM.jsonl` | 13 months |
 | Conversations, received files, voice profile | `<userData>/threads/`, `inbox/`, `voice-profile.json` | |
+| Chat attachments (spec 030) | `<userData>/inbox/attachments/<id>/<name>` and `<id>.json`; `attachments.noticeAcknowledged` in settings | Deleted 30 days after the conversation was last opened; the notice list starts empty |
 | Routines state, companies | `routines-state.json`, `companies/` | |
 
 File mode 0600 has little effect on Windows, where access is by ACL. The practical protection is the per-user profile folder and DPAPI.
@@ -76,7 +80,8 @@ File mode 0600 has little effect on Windows, where access is by ACL. The practic
 - Audit: 13 months, 60 s throttle, 300 characters per detail string.
 - `redact()` masks: `xai`/`sk`/`LLM` followed by `-` or `|` and 16+ word characters; `Bearer <token>`; `password|passwd|pass|token|secret|api_key|api-key` followed by `=` or `:` and a value.
 - Retention check runs at startup, every 12 hours and when settings change; it spares running conversations.
-- Export copies `threads`, `companies`, `audit`, `routines-state.json`, `voice-profile.json`. Not exported: keys, sessions, the vault, received images. Erase removes all conversations, empties and recreates the received-files folder, and forgets the voice profile.
+- Export copies `threads`, `companies`, `audit`, `routines-state.json`, `voice-profile.json`. Not exported: keys, sessions, the vault, received images, chat attachments. Erase removes all conversations, empties and recreates the received-files folder (the attachment store is inside it), and forgets the voice profile.
+- Chat attachments (spec 030): 2 MiB per file, 5 files and 10 MiB per message, types by extension and leading bytes; stored names are one sanitised segment and ids are lower-case UUIDs; `maskSecrets` (a new pure function, `redact()` unchanged) replaces `xai`/`sk`/`LLM` keys, `Bearer` tokens, `password|passwd|pass|token|secret|api_key|api-key` followed by `=` or `:` and a value, private-key blocks, AWS key ids, GitHub tokens, Google API keys and Slack tokens; pictures lose EXIF and similar metadata (JPEG, PNG, WebP); `attach:*` path grants last 5 minutes, are used once, at most 1000; "open with the system app" only for pictures, PDF, .docx, .xlsx, .pptx, .txt, .md, .csv, .json, .log; the sweep deletes after 30 days and runs at start and every 12 hours.
 - Telegram: private chats only; the first allowed user writing binds the chat id (case-insensitive, `@` ignored). WhatsApp: only the person's own chat.
 
 ## Security and privacy
@@ -89,7 +94,8 @@ What leaves the machine (BR-9 of the spec, outbound hosts checked against the co
 |---|---|---|
 | Anthropic, `api.x.ai`, `api.deepseek.com`, `api.meta.ai`, `ai-gateway.vercel.sh` | Every message, tool result and image of an agent using that provider | Agent runs |
 | The auto-review provider (may differ from the agent's) | Tool name and input (cut at 8000 characters), your latest message (cut at 4000), the review instructions, the working folder | Each review in «Auto-review» mode. Confirmed in `src/coordinator/approval.ts` (lines 83–84; the boss review at 124–126 also sends the boss's instructions) |
-| The vision provider | The pictures | House cameras, `look_at_image` (`src/coordinator/vision.ts`) |
+| The vision provider (chosen in «Configuración → Imágenes» since spec 038, else the provider of the agent chain) | The pictures; with a provider chosen and no model, also a request for its model list with the person's key | House cameras and watches, plan photos, `look_at_image` (`src/coordinator/vision.ts`), including pictures attached in chat. A provider chosen without a model is used only after the person confirmed it by name (the acknowledgement gate, `resolveVision`); a typed provider and model, including one carried over from Casa, is used without it |
+| The provider answering a chat with attachments (spec 030) | The reference line of each attachment (id, name, size) with the message; the masked text of a file only when the agent calls `read_attachment` | After the person accepted the provider notice (once per provider); a sub-agent's provider is not in the notice |
 | `api.openai.com`, Meta, `api.elevenlabs.io` | Audio for transcription; text to read aloud; image prompts | Only if STT/TTS/images are set to those. Defaults are local (`stt: local`, `tts: kokoro`) |
 | `html.duckduckgo.com` and any public site | Every `web_search` query, your IP, and any URL the model chose | `web_search`, `fetch_url` |
 | `api.telegram.org`, WhatsApp, Instagram, your IMAP/SMTP server | Messages, photos, bot token in file-download URLs, posts (after approval), credentials and mail | Channels enabled |
@@ -125,7 +131,7 @@ Each row takes a control claimed in [CONTROLS](../security/CONTROLS.md), [RISKS]
 | `pnpm audit` in CI and Dependabot (CONTROLS §4) | `ci.yml` runs `pnpm audit --audit-level=high`; `.github/dependabot.yml` exists. | Match |
 | Home Assistant listens on loopback only, 7 days of history (RISKS R-02, CONTROLS §6) | `engine.ts`: `server_host: 127.0.0.1`, `purge_keep_days: 7`; `tests/home.test.ts` › "R-02". | Match (R-02 fixed) |
 | Export, erase, retention (CONTROLS §6, PRIVACY §3) | `privacy.ts` and `applyRetention`, every 12 h. | Match |
-| Model providers receive data "when an agent uses that provider" (PRIVACY §2) | Also true for the auto-review model (tool input, your latest message) and for the vision model (pictures). PRIVACY §1 mentions the camera-vision flow in the cameras row only; the provider table in §2 lists neither auto-review nor `look_at_image`, and no part of the document says that auto-review sends tool input and your latest message. | Mismatch (omission) |
+| Model providers receive data "when an agent uses that provider" (PRIVACY §2) | Also true for the auto-review model (tool input, your latest message) and for the vision model (pictures). PRIVACY §1 mentions the camera-vision flow in the cameras row only; the provider table in §2 lists no row for auto-review sending tool input, and no part of the document says that auto-review sends tool input and your latest message. Since spec 038 the table has a row for the vision provider (`look_at_image`, cameras, plan photos, chat pictures) and says how a provider is chosen and gated. | Mismatch (omission) for auto-review; closed for the vision provider |
 
 ## How it is tested
 
@@ -136,6 +142,7 @@ Each row takes a control claimed in [CONTROLS](../security/CONTROLS.md), [RISKS]
 | `commandEnv`, private hosts, DNS-to-private, redirects | `tests/web.test.ts` |
 | Workspace path confinement | `tests/tools.test.ts` |
 | Telegram owner-only binding | `tests/telegram.test.ts` |
+| Chat attachments: rules, masking, metadata strip, store, sweep, `read_attachment`, history expansion, path grants and the open guard | `tests/attach-*.test.ts` |
 
 Not covered: the native dialog, the IPC gate, permissions, the CSP, `shell:openPath`, `alma-vault://`, the trash request, secret sealing, export, erase, retention, `loadPicture`, WhatsApp self-chat, the audit calls made by the agent loop. By hand: switch the mode in Aprobaciones and check that the dialog is a system one; ask an agent to answer with `![x](https://example.com/a.png)` and see «[imagen remota bloqueada…]»; click a link in chat; read the outbound-host table against `grep` when an integration is added.
 
@@ -152,10 +159,11 @@ Ordered by priority:
 7. PRIVACY omits the auto-review and `look_at_image` data flows.
 8. `coordinator:connect` rejections are not audited.
 9. `send_telegram` is `memory` risk and can send any allowed image to your Telegram without asking.
-10. `saveInboxImage` sanitizes names with `/[^w.-]+/g` (a literal `w`), turning most letters of received file names into `_` (`src/coordinator/index.ts:352`). Probably a typo for `\w`; confinement is not weakened.
+10. ~~`saveInboxImage` sanitizes names with a literal `w`.~~ Fixed with spec 030: the sanitiser moved to `shared/attach/names.ts` (`\w`) and `inboxFileName` delegates to it.
 11. Home Assistant on `0.0.0.0` was open (R-02); fixed, it now binds `127.0.0.1`.
 12. «Borrar mi historial» leaves the audit trail, company task data, routines state and the vault. Confirm it is intended.
 13. 33 of 56 criteria have no test, including all secret-sealing and privacy-rights behavior. Dependency vulnerabilities and signing are tracked in [spec 001](../../.specify/specs/001-release-packaging/spec.md).
+14. Chat attachments (spec 030) residual risks are R‑16 in [RISKS](../security/RISKS.md): masking is pattern matching and misses quoted JSON keys, the notice informs but does not stop and skips sub-agent providers, any attachment id is readable by any conversation, the picture metadata strip is byte-level and was not decoded in tests, attachments of a conversation seen only on the paired phone can expire after 30 days (T32 skipped), attachments of a deleted conversation that failed to delete are never swept, and the UI and Electron glue were never run in a real window.
 
 ## See also
 

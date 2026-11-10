@@ -22,10 +22,10 @@ Open the dialog from the sidebar («Configuración»), from the empty state, fro
 | Agentes (`agents`) | List, create, edit, delete agents; **Usar por defecto** (use as default). | [agents](agents.md) |
 | Equipos (`teams`) | Embeds the teams editor. | [companies](companies.md) |
 | Aprobaciones (`approvals`) | Four modes: «Pedir aprobación» (`needs-approval`), «Auto-review», «Permitir todo» (`always-allow`), «Solo lectura» (`blocked`); reviewer model and instructions; the «Siempre permitir» list with «Quitar» (remove). | [approvals](approvals.md) |
-| «Imágenes» (`images`) | Service (xAI / OpenAI / Meta), model, refresh list. | [images](images.md) |
+| «Imágenes» (`images`) | Two cards. Creating: service (Meta / xAI / OpenAI), model, refresh list. Seeing (spec 038): provider («Automático» or one of the five chat providers), model, refresh list, the held / confirm line and button. | [images](images.md) |
 | Telegram, WhatsApp, Mail (`email`), Voz (`voice`), Instagram | One tab per channel. | [telegram](telegram.md), [whatsapp](whatsapp.md), [web-and-mail](web-and-mail.md), [voice](voice.md), [instagram](instagram.md) |
 | MCP (`mcp`) | Servers, **Agregar Chrome**, **+ Agregar servidor**, **Importar mcp.json**, **Reconectar**. | [mcp](mcp.md) |
-| Casa (`home`) | Engine mode, vision provider, accounts. | [home](home.md) |
+| Casa (`home`) | Engine mode, judgment agent, a read-only line with the model that looks at pictures and a button to «Imágenes» (the vision provider and model are no longer chosen here), accounts. | [home](home.md) |
 | Acceso remoto (`remote`) | Off-by-default switch, Tailscale wizard, pairing QR, paired phones, the six scopes (chat, approvals, house, cameras, Notes, Conversations) with the sub-switches for locks and alarms and for continuing conversations, the folders excluded from the phone, recent activity. | [remote-access](remote-access.md) |
 | General (`general`) | Default working folder, run in tray, launch with Windows, conversation retention, **Exportar mis datos…**, **Borrar mi historial**. | [security](security.md) for privacy |
 | Sonido y ambiente (`ambience`) | Interface sounds, background music, volume, moving background. | [app-shell](app-shell.md) |
@@ -68,8 +68,8 @@ Flow of a change:
 
 Load order in `SettingsStore.load()`: start from `defaultSettings()`, shallow-merge the stored file, open each secret, then apply migrations. Not obvious points:
 
-- The merge is **per section, key by key** (`telegram`, `voice`, `email`, `whatsapp`, `home`, `autoReview`, `images`, `instagram`, `background`, `privacy`), but every other top-level key is replaced whole. `update()` also replaces top-level keys whole.
-- Migrations run once, marked by `officeToolsAdded` and `multimediaAdded`. A third one (adding `compose_image` to agents that can `generate_image`) has no flag and runs on every load. A saved wake word other than `off` is forced to `hola_alma`.
+- The merge is **per section, key by key** (`telegram`, `voice`, `email`, `whatsapp`, `home`, `autoReview`, `images`, `instagram`, `background`, `privacy`), but every other top-level key is replaced whole. `update()` also replaces top-level keys whole, except `images` (the nested `images.vision` of spec 038 is kept when a patch leaves it out or malforms it, `acceptImagesPatch`) and `home` (a patch loses `visionProvider`/`visionModel`). `images` is not merged but sanitized on load (`sanitizeImagesSettings`): a missing or malformed `vision` loads empty, and a key-looking model in either model field is blanked and the file rewritten.
+- Migrations run once, marked by `officeToolsAdded`, `multimediaAdded` and (spec 038, the vision model moved from «Casa» to «Imágenes») `visionMigrated`. A third one (adding `compose_image` to agents that can `generate_image`) has no flag and runs on every load. A saved wake word other than `off` is forced to `hola_alma`.
 - A file that cannot be parsed makes the store fall back to full defaults silently; the broken file is overwritten on the next save.
 - A secret found unsealed on disk is rewritten sealed, but only when a secure store exists (rewriting without one would blank the keys).
 - `getPublic()` strips `providers` and `companySecrets` and replaces them with `hasKey` / `fromEnv` per provider and `companyPasswords` (a map of company id to boolean).
@@ -99,7 +99,7 @@ Stored in `settings.json` inside Electron's `userData` folder (`%APPDATA%\Alma`)
 | `voice` | off; wake word `hola_alma`, threshold 0.5, hotkey `Control+Alt+Space`, verify speaker on (0.86), STT `local` / `whisper-base`, TTS `kokoro` / `ef_dora`, ElevenLabs model `eleven_multilingual_v2` |
 | `email` ports | IMAP 993, SMTP 465 |
 | `whatsapp`, `home` | off; house mode `managed` |
-| `images` | xAI, empty model |
+| `images` | Meta, empty model; `images.vision` empty («Automático», spec 038) |
 | `instagram.testMode` | on |
 | xAI base URL | `https://api.x.ai/v1` |
 

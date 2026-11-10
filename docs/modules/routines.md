@@ -56,7 +56,7 @@ Messages: requests `routines.state`, `routines.runNow`; event `routines.state`; 
 
 **Due times** (`shared/schedule.ts`):
 
-- **Daily** (fixed time): due when today is an allowed day, now is at or past the slot, and the last run (or creation) was before the slot. A missed slot of today is caught up if you open Alma later the same day; a missed slot of an earlier day is not.
+- **Daily** (fixed time): due when today is an allowed day, now is at or past the slot, and the last run (or creation) was before the slot. A missed slot of today is caught up if you open Alma later the same day; a missed slot of an earlier day is not (018 BR-4). The nightly dream (spec 033) has its own, different catch-up: a missed night is dreamt at the next start or resume of the PC, at any hour of a day not yet dreamt, once (see [vault and knowledge](vault-and-knowledge.md#the-nightly-dream-spec-033)). The two rules are deliberately different; do not copy one into the other.
 - **Interval**: due when the full interval has passed since the last run, or since creation if it never ran. The first run is one interval after creation.
 - **Once**: due when now is at or past `at` and it never ran or last ran before `at`. A missed one fires late on the first tick after start. Moving its date later re-arms it.
 - A disabled routine is never due and shows no next run, but can still be run by hand.

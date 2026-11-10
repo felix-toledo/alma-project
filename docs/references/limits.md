@@ -64,7 +64,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 4,096 tokens | `max_tokens` of an Anthropic review call (auto-review and boss review) | providers | `coordinator/providers/anthropic.ts:164` |
 | 3 attempts | A failed Anthropic stream that is not an API error and not an abort is re-issued, up to the third attempt. API errors are never retried | providers | `coordinator/providers/anthropic.ts:123`, `coordinator/providers/anthropic.ts:155` |
 | per-provider prices | USD per million tokens (input / output / cache read), used for company budgets: Anthropic 5 / 25 / 0.5, xAI 3 / 15 / 0.75, DeepSeek 0.3 / 1.2 / 0.03, Vercel 3 / 15 / 0.3, Meta 1.25 / 4.25 / 0.15 | providers / [companies](../modules/companies.md) | `shared/company.ts:70` |
-| 8 MB | Largest picture the vision helper reads | [images](../modules/images.md) | `coordinator/vision.ts:44`, `coordinator/vision.ts:72` |
+| 8 MB | Largest picture the vision helper reads | [images](../modules/images.md) | `coordinator/vision.ts:49`, `coordinator/vision.ts:105` |
 
 ## MCP
 
@@ -85,6 +85,14 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 0 days (keep forever) | `privacy.threadRetentionDays` default; the menu offers 30, 90, 180 and 365 days | [security](../modules/security.md) | `shared/defaults.ts:208`, `renderer/src/components/SettingsDialog.tsx:767-770` |
 | 12 h | How often the retention cleanup runs (also at start and on every settings change) | security | `coordinator/index.ts:746` |
 | 15,000 characters | Each vault attachment in the chat is clipped | chat | `renderer/src/lib/attachments.ts:16` |
+| 2 MiB (2,097,152 bytes) | Largest file attached to a chat message, pictures included (no downscaling) | chat | `shared/attach/rules.ts` |
+| 5 files and 10 MiB | Most files and bytes in one message with attachments | chat | `shared/attach/rules.ts`; checked in the window and in `composeUserMessage` |
+| 8000 bytes | A text attachment with a NUL byte in its first 8000 bytes is refused as binary | chat | `shared/attach/rules.ts` (`sniffBytes`) |
+| 30 days; 12 h | A stored attachment is deleted 30 days after its conversation was last opened; the sweep runs at start and every 12 h | chat / [security](../modules/security.md) | `shared/attach/rules.ts`, `coordinator/attachments/service.ts` |
+| 60,000 characters | Most a `read_attachment` result keeps (middle cut, the omitted-notice included, so the run never cuts it again); the general tool-result cut is 24,000 in the code | [files and commands](../modules/files-and-commands.md) | `coordinator/attachments/read-tool.ts`, `coordinator/tools/types.ts` |
+| 700,000 bytes | Largest file the paired phone can put (spec 031): one file is one request, and its base64 (933,336 characters) fits the 1 MB request cap. A picture over it is shrunk on the phone, up to five steps, or refused; a GIF or any other file over it is refused on the phone and, if it still arrives, by the PC. `REMOTE_LIMITS` did not change | chat / [remote access](../modules/remote-access.md) | `shared/attach/phone.ts` (`PHONE_ATTACH.maxFileBytes`), `shared/remote/api.ts` |
+| 5; 15 min | Pending uploads a phone may hold (put and not yet sent), and how long each lasts before it is deleted; five files per message as on the desktop | chat / [remote access](../modules/remote-access.md) | `shared/attach/phone.ts` (`PHONE_ATTACH.maxPending`, `pendingTtlMs`), `coordinator/channels/remote/uploads.ts` |
+| 5 min; 1000 | Life of a path grant for the attach file reads, and the most held at once | chat | `main/attach.ts` (`Grants`) |
 | 80 px | The chat follows new output only while you are within 80 px of the end | chat | `renderer/src/components/ChatView.tsx:154` |
 | 12 MB | Largest workspace image previewed in the chat or in an Instagram approval (PNG, JPEG, WebP) | chat / [Instagram](../modules/instagram.md) | `coordinator/tools/media.ts:10` |
 
@@ -93,7 +101,7 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | value | what it limits | module | file:line |
 |---|---|---|---|
 | 5 MiB | `MAX_NOTE_BYTES`: bigger notes are not opened or indexed | [vault and knowledge](../modules/vault-and-knowledge.md) | `coordinator/knowledge/base.ts:16`, `coordinator/knowledge/base.ts:162`, `coordinator/knowledge/base.ts:296` |
-| 4,000 characters | `MAX_MEMORY_CHARS`: all memories together when adding with `remember` | vault and knowledge | `coordinator/knowledge/base.ts:22`, `coordinator/knowledge/base.ts:358` |
+| 4,000 characters | `MAX_MEMORY_CHARS`: all memory lines together (the sum of their lengths) when adding with `remember`, and what the dream leaves (spec 033) | vault and knowledge | `shared/dream/apply.ts:5`, `coordinator/knowledge/base.ts:418` |
 | 3 to 300 characters | One `remember` input | vault and knowledge | `coordinator/knowledge/tools.ts:61` |
 | 1,600 / 200 characters | Largest chunk / chunks below 200 are merged with the next | vault and knowledge | `coordinator/knowledge/markdown.ts:12`, `coordinator/knowledge/markdown.ts:13` |
 | 8 chunks | `EMBED_BATCH`: chunks embedded per batch | vault and knowledge | `coordinator/knowledge/base.ts:17`, `coordinator/knowledge/base.ts:184` |
@@ -169,6 +177,23 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 6 base-36 characters | Random part of the id `rutina-xxxxxx` | routines | `coordinator/tools/routines.ts:47` |
 | 60 characters (57 + "…") | Reminder name derived from its message | routines | `coordinator/tools/routines.ts:64` |
 | 1 minute | Minimum interval the scheduler itself accepts for an interval schedule | routines | `shared/schedule.ts:28`, `shared/schedule.ts:41` |
+
+## Nightly dream and morning greeting (spec 033)
+
+| value | what it limits | module | file:line |
+|---|---|---|---|
+| USD 0.01 to 5, default 0.25 | `DREAM_CAP`: the nightly cost cap (`dream.capUsd`); an invalid value keeps the previous one | [vault and knowledge](../modules/vault-and-knowledge.md) | `shared/dream/settings.ts:3` |
+| 02:00 to 06:00 local (06:00 excluded) | `NIGHT_WINDOW`: when a scheduler tick may start a dream; fixed, not a setting. A start or a resume catches up a missed night at any hour of a day not yet dreamt | vault and knowledge | `shared/dream/schedule.ts:5` |
+| 1 dream and 1 retry a day | A failed dream is retried once at the next start, resume or tick inside the window; a second failure waits for the next day; a dream aborted by the switch is not retried | vault and knowledge | `shared/dream/schedule.ts` (`isDreamDue`) |
+| 7 days | `READ_WINDOW_MS`: no dream reads a message older than this before its start (the first dream, after a pause, or for conversations the cap left unread) | vault and knowledge | `shared/dream/input.ts:9` |
+| 600 characters of each end | `KEEP_CHARS`: a tool result longer than 1,400 characters is cut to its two ends, in the dream as in the history compaction | vault and knowledge / [chat](../modules/chat.md) | `shared/trim.ts:4` |
+| 60,000 characters | `BATCH_CHARS`: transcript per model call; oldest conversations first, a larger one split at message boundaries | vault and knowledge | `shared/dream/input.ts:66` |
+| 4,000 tokens; 600 tokens | `BATCH_OUTPUT_TOKENS`, `GREETING_OUTPUT_TOKENS`: the output assumed per batch call and per greeting call when estimating the cost (the estimate counts input tokens as characters / 4) | vault and knowledge | `coordinator/dream/runner.ts:21`, `coordinator/dream/runner.ts:23`, `shared/dream/model.ts:30` |
+| 12,000 characters | `GREETING_INPUT_CHARS`: the greeting call's input reserved under the cap while reading, so a capped dream can still greet | vault and knowledge | `coordinator/dream/runner.ts:25` |
+| 3 to 300 characters; 1 to 1,200 characters | A memory line the dream adds or writes as a replacement; the greeting | vault and knowledge | `shared/dream/output.ts:11-12`, `shared/dream/output.ts:25` |
+| 4,000 characters | The memory total the dream leaves: removals, then replacements, then additions in order while they fit; a file that starts over it may only shrink | vault and knowledge | `shared/dream/apply.ts` (`applyChanges`) |
+| 30 s; 5 s | `TICK_MS`: how often the dream's scheduler checks; `START_DELAY_MS`: the start check after the coordinator comes up | vault and knowledge | `coordinator/dream/service.ts:37`, `coordinator/dream/service.ts:39` |
+| 3600 s | TTL of the greeting push, as the approval push | [remote access](../modules/remote-access.md) | `coordinator/channels/remote/push.ts:94` |
 
 ## Companies
 
@@ -249,5 +274,8 @@ Columns: **value** · **what it limits** · **module** · **file:line**.
 | 0.7 | Default UI sound volume | app shell | `renderer/src/umbra/useUISound.ts:14` |
 | 380 ms, then 120 ms | Gamepad repeat delay | app shell | `renderer/src/umbra/FocusManager.tsx:80-81` |
 | 0.6 | Gamepad stick threshold | app shell | `renderer/src/umbra/FocusManager.tsx:88` |
+| 4 hours | `WAKE_ABSENCE_MS`: the shortest absence that gives a wake signal (spec 034); a constant. An unpackaged run reads `ALMA_PRESENCE_THRESHOLD_MS` (a positive integer of ms) instead, for manual tests; a packaged build ignores it | app shell | `shared/presence.ts:17`, `shared/presence.ts:22` |
+| 1 minute | `IDLE_POLL_MS`: how often main reads the system idle time; also the shortest period without input reported as an idle return | app shell | `shared/presence.ts:19`, `main/presence.ts` |
+| 02:00 local | `DAY_START_HOUR`: the wake-signal day starts here (at most one signal a day) | app shell | `shared/presence.ts:5` |
 
 Written by hand from the code; when you add a row, verify the name in the code.

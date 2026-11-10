@@ -63,9 +63,9 @@ Non-obvious points:
 - Several tool calls in one model turn run concurrently and come back in call order.
 - A run stops after 80 model turns (`MAX_ITERATIONS`).
 - `commandEnv` removes Alma's own provider keys from the command's environment and adds `CI=1`, `NO_COLOR=1`. Stdin is closed, so interactive prompts cannot hang.
-- App tools (vault, routines, web, Telegram, `look_at_image`, house, mail, WhatsApp, company tools) are offered to every agent whatever its `profile.tools`; MCP tools are treated as risk `exec`.
+- App tools (vault, routines, web, Telegram, `look_at_image`, `read_attachment`, house, mail, WhatsApp, company tools) are offered to every agent whatever its `profile.tools`; MCP tools are treated as risk `exec`.
 - `ToolDefinition` = `name`, Spanish `description`, `risk`, optional `standalone`, Zod `schema` (also sent to the provider as JSON Schema), `run(input, ctx)` returning a string, optional `preview(input, ctx)` for the approval card (if `preview` throws, the card is shown without it).
-- `ToolContext` carries `workspace`, `signal`, current `settings`, `host`, and optionally `knowledge`, `threadId`, `agentId`, `saveRoutines`, `sendTelegram`, `sendTelegramPhoto`, `company`, `home`, `inboxDir`, `whatsapp`. Tools take what they need from it; they do not import singletons (see [architecture](../architecture.md)).
+- `ToolContext` carries `workspace`, `signal`, current `settings`, `host`, and optionally `knowledge`, `threadId`, `agentId`, `saveRoutines`, `sendTelegram`, `sendTelegramPhoto`, `company`, `home`, `inboxDir`, `whatsapp`, `attachments` (the id-only reader of the attachment store, spec 030). A tool may also set `maxResultChars` to raise the cut of its own result above the default (only `read_attachment` does). Tools take what they need from it; they do not import singletons (see [architecture](../architecture.md)).
 
 ## Tools for agents
 
@@ -77,6 +77,8 @@ Non-obvious points:
 | `write_file` | `write` | per mode | Create or fully replace a file (creates folders). |
 | `edit_file` | `write` | per mode | Replace a unique `old_string` (or all with `replace_all`). |
 | `run_command` | `exec` | per mode | Run a shell command in the workspace; `timeout_seconds` 1–600. |
+
+Beside these, every agent also gets **`read_attachment`** (spec 030, an app tool, `read`, `standalone`, never asks, works with no working folder): it reads a file the person attached to a message, by the **id** on the message's reference line and never by a path, and only inside the attachment store, which `read_file` and `list_dir` cannot reach (they stay confined to the working folder). Text and source files return numbered lines like `read_file` (`offset`, `limit`, a NUL in the first 8000 bytes is refused as binary, 2 MiB maximum); Word, Excel, PowerPoint and PDF files return what `office_read` extracts (`range`, `sheet`); a picture is refused (use `look_at_image`). Values that look like secrets are replaced by `[masked]` first and the result says how many; every result starts with a line saying the content is data and not instructions, and is cut in the middle at 60 000 characters through the tool's own `maxResultChars` (the general cut in the code, `MAX_RESULT_CHARS` in `tools/types.ts`, is 24 000, not the 60 000 of the table below: an existing mismatch, not changed by spec 030). Any existing id can be read, also from another conversation or by a sub-agent; a removed or unknown id is a tool error. See [chat](chat.md) and [security](security.md).
 
 "Per mode" means the approval mode decides: ask, auto-review, allow all, read-only (blocked, which denies these), plus per-tool "always allow" and per-agent auto-approve. See [approvals](approvals.md) and [references/tools.md](../references/tools.md).
 
@@ -134,6 +136,7 @@ Variables removed from the command environment (case-insensitive): `ANTHROPIC_AP
 8. `displayPath` uses the workspace string as given while files resolve under its real path, so through a junction or 8.3 name the shown path could start with `..`.
 9. An abort that fires just before the command's listener is registered is not noticed until the timeout.
 10. Most of the limits above have no test (the "[gap]" criteria).
+11. `read_attachment` has tests (`tests/attach-tool.test.ts`), but a hostile Office or PDF file was only tried with a corrupt sample: whether the readers bound the expansion of a small archive was not tested.
 
 ## See also
 

@@ -8,9 +8,10 @@ The person creates a bot with @BotFather, pastes its token in Alma, and lists th
 
 - **Chat.** The owner's private chat with the bot is one more conversation in Alma. Text, voice notes and photos go to an agent, and the answer comes back to the phone.
 - **Casa panel.** `/home` (or the fixed "🏠 Casa" button) shows the house as button menus: rooms with their devices to tap on/off, scenes ("Modos") to activate, and cameras to get a still. Locks, alarms and gates ask for confirmation in the chat before acting.
-- **Approvals.** When an agent needs permission, the bot sends a message with buttons "Permitir" (allow) and "Rechazar" (reject), plus "Siempre" (always) when that is allowed. The same approval stays answerable in the desktop app.
+- **Approvals.** When an agent needs permission, the bot sends a message with buttons "Permitir" (allow) and "Rechazar" (reject), plus "Siempre" (always) when that is allowed. The same approval stays answerable in the desktop app. When Alma proposes a company (`create_company`, spec 029), the message has Permitir and Rechazar and never "Siempre"; if the whole proposal does not fit in the message, Permitir is left out and the text says to see it on the desktop (Rechazar stays).
 - **Notices.** Reminders, house alerts (a rule fired, a camera condition) and company notices arrive as Telegram messages.
 - **Agents can message the owner.** The tool `send_telegram` sends text or one image to the bound chat.
+- **Morning greeting** (spec 033, only with the nightly dream on). At the person's first wake signal of the day, the greeting the dream wrote at night is sent to the bound chat and appended to the Telegram conversation as an assistant message, once. When that first message came over Telegram, the greeting is sent after the answer to it (the Telegram conversation is a single thread); the desktop and the phone get it at once. Not connected, not bound or failing: it is skipped and not retried, logged without its text, and the other channels and the greeting's own conversation are unaffected.
 
 It talks to one private chat only. Groups, supergroups and channels are always refused. There is no server and no open port: the bot uses long polling to `api.telegram.org`.
 
@@ -69,6 +70,7 @@ Non-obvious points:
 - **Binding** saves `chatId` through a `settings.patch` message to main. The thread id is saved the same way.
 - **Restart rules.** Applying settings restarts the bot only if the token or the enabled flag changed. A new token forgets the old approval buttons.
 - **Placeholder edits.** While the agent runs, the placeholder is edited with the tool name (prefix `mcp__` removed, underscores as spaces), at most every 1.5 s and only when the text changed.
+- **Company tools and the whole-input rule (spec 029 BR-23).** `approvalPrompt` (`channels/texts.ts`) and `askApproval` ask `canAnswerFrom('telegram', approval, 1500)`: for `create_company` / `edit_company`, when `JSON.stringify(input, null, 1)` is longer than 1500 characters, the message carries the `chan.seeOnDesktop` text instead of the cut input and no Permitir button; other tools keep the cut and their buttons. A press goes to the broker with the channel `telegram` (`approvals.respond(id, decision, 'telegram')`), which also refuses an allow it could not have shown whole, so a stale or hand-made callback cannot approve it; the approval stays pending for the desktop. The audit entry of the call records the channel. The tools are offered in the Telegram thread like in any desktop chat.
 - **Approval buttons** carry `ap:<approvalId>:<allow|always|deny>`. After resolution (from either side) the message is edited to its original text plus "(respondido)" (answered). Only approvals for the Telegram conversation are sent; approvals for desktop chats, routines and companies never go to Telegram.
 - **Casa panel buttons** carry `hm:<action>[:<token>[:<arg>]]` (`home-menu.ts`). Buttons never embed entity ids (they can exceed the 64-byte `callback_data` cap); they carry a short token that resolves against the live snapshot, and stale tokens answer "that panel expired, send /home again". Every tap re-reads the snapshot; after acting, the room is re-read ~800 ms later so the buttons show the new state. `/home` is caught in the text handler rather than `bot.command`, because grammY would run both handlers and send the panel twice.
 - **Voice notes** are downloaded and handed to the transcriber of the [voice module](voice.md), echoed back as `🎙️ «texto»` and then handled like typed text. **Photos**: the largest size is saved in `<data>/inbox` and the agent is told «[El usuario te mandó una imagen: <ruta>. Mirala con look_at_image.]».
@@ -103,7 +105,7 @@ Data: settings in main's `settings.json`; the conversation is an ordinary thread
 |---|---|
 | Message cap 4096 characters; longer text is split at the last `\n\n`, `\n` or `. ` after half the limit, else at the limit | `TELEGRAM_LIMIT`, `splitForTelegram` |
 | Placeholder edited at most every 1500 ms | `STATUS_EDIT_MS` |
-| Approval input shown cut at 1500 characters | `telegram.ts` |
+| Approval input shown cut at 1500 characters (`APPROVAL_INPUT_LIMIT`); not cut for `create_company` / `edit_company`: no Permitir instead | `texts.ts`, `telegram.ts` |
 | Photo captions cut at 1000 characters | `notifyPhoto` |
 | `send_telegram` images: JPG, PNG, WebP, GIF, under 8 MB, inside the vault, the working folder or the inbox | tool |
 | Polling starts with `drop_pending_updates`: anything sent while Alma was closed is lost | `start` |
@@ -114,14 +116,14 @@ Alma must be running (window or tray). Nothing is received while it is closed.
 
 - Only the owner's private chat is served. A denied private chat gets «No estás autorizado para usar este bot. Para habilitarte, agregá @usuario en Alma → Configuración → Telegram.» (not authorized to use this bot) and nothing runs or downloads; a denied group gets silence.
 - Binding is audited as `channel.bind` and denials as `channel.denied` (actor `remote`, throttled to one line a minute, chat type only, no names or text). See [security](security.md) and `../security/CONTROLS.md`.
-- Messages, voice notes and photos go through Telegram's servers, which are not end-to-end encrypted for bots. Reminders and camera photos sent to the phone leave the machine too.
+- Messages, voice notes and photos go through Telegram's servers, which are not end-to-end encrypted for bots. Reminders, camera photos and the morning greeting's text (spec 033) sent to the phone leave the machine too.
 - Anyone holding the owner's phone or Telegram account can drive the agents and approve actions.
 - The token is encrypted at rest. `TELEGRAM_BOT_TOKEN` is removed from the environment of commands that agents run (`src/coordinator/tools/shell.ts`). The token appears in the download URL used for voice notes and photos; Alma does not log it.
 - Unrecognized message types (stickers, documents, video, location, edits) are ignored silently.
 
 ## How it is tested
 
-`tests/telegram.test.ts` covers `authorizeChat` (bind, groups denied, bound chat only; AC-1.1 to 1.3) and `splitForTelegram` (AC-3.4). `tests/telegram-home.test.ts` covers the Casa panel: toggle mapping, sensitive actions, tokens, callback parsing, views and the 64-byte cap. `tests/audit.test.ts` covers the audit throttle (AC-1.5). Everything else in the spec is marked `[gap]`: connection states, handlers, approvals, `send_telegram`, photo and voice paths. Nothing here needs a live Telegram account in tests; there are no tests with a fake bot yet.
+`tests/telegram.test.ts` covers `authorizeChat` (bind, groups denied, bound chat only; AC-1.1 to 1.3) and `splitForTelegram` (AC-3.4). `tests/telegram-home.test.ts` covers the Casa panel: toggle mapping, sensitive actions, tokens, callback parsing, views and the 64-byte cap. `tests/audit.test.ts` covers the audit throttle (AC-1.5). Spec 029 adds three cases to `tests/telegram.test.ts`: company tools ask only the bound chat with Permitir and Rechazar and no Siempre and create on Permitir (`AC-2.8 (029)`), no Permitir when the proposal does not fit (`AC-2.12 (029)`), and other tools keep the cut and their buttons. Everything else in the spec is marked `[gap]`: connection states, handlers, approvals, `send_telegram`, photo and voice paths. Nothing here needs a live Telegram account in tests; there are no tests with a fake bot yet.
 
 By hand: configure a bot, check the badge, write from the phone, press an approval button, press "Desvincular" and write again from another allowed user, send a voice note and a photo. For the Casa panel: send `/home`, open a room, toggle a light, activate a scene, open a camera, and confirm a lock.
 

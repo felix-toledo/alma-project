@@ -8,7 +8,7 @@
 - "Tested for real": install from scratch, start, account creation, clean shutdown, a second start with the same account and uninstall (`tests/home-live.test.ts`, with `ALMA_HOME_INSTALL=1`). Control of lights, scenes, automations, cameras with vision, a judgment rule triggered by a state change, a plan from a photo, from Excalidraw and by hand.
 - **Mirrored network**: not implemented. Automatic network discovery through mDNS does not work on WSL's NAT network: each brand is added on its own (Tuya, eWeLink) or by IP (Tapo), which is what is needed to get started.
 - **Home Assistant floors**: not synchronized; only the rooms (areas).
-- "Vision model": chosen in «Configuración → Casa»; by default it uses the agent's (or the first agent with a key). Tested with DeepSeek Flash.
+- "Vision model": chosen in «Configuración → Casa»; by default it uses the agent's (or the first agent with a key). Tested with DeepSeek Flash. *(Note 2026-11-09, spec 038: the vision model is now chosen in «Configuración → Imágenes»; Casa only shows which model is used. The sentence above is kept as history.)*
 - **Judgment rules**: the camera they ask for (`camera_look`) is already approved because the user approved the rule when creating it.
 - **Custom brands** (SonoffLAN) appear in the brand list thanks to `integration/descriptions`.
 
@@ -168,7 +168,7 @@ Alma's **triggers with judgment** go in `home/triggers.json`:
 
 ### 4.3 Vision (a cross-cutting requirement)
 
-**`vision.ts`** exposes `look(images, question) → text`. A "vision model" is configured in «Configuración → Proveedores»: by default the agent's if it accepts images, and if not, a chosen one (Claude, Grok or the Vercel Gateway).
+**`vision.ts`** exposes `look(images, question) → text`. A "vision model" is configured in «Configuración → Proveedores»: by default the agent's if it accepts images, and if not, a chosen one (Claude, Grok or the Vercel Gateway). *(Note 2026-11-09, spec 038: the vision model is now chosen in «Configuración → Imágenes», as a provider and model or as a provider only, once confirmed; the text above is kept as history.)*
 
 It was chosen this way so as not to change the message format of every provider. The tools that need to "see" call `look()` and hand the agent back the text and the image to show you in the chat.
 
