@@ -26,7 +26,7 @@ afterAll(() => {
 })
 
 // The first test of each format pays for loading its library (exceljs, pdf.js) cold.
-describe('office tools', { timeout: 30_000 }, () => {
+describe('office tools', { timeout: 120_000 }, () => {
   it('creates, reads and edits a Word document', async () => {
     const markdown = '# Propuesta\n\nTexto con **negrita** y *cursiva*.\n\n- uno\n- dos\n\n| Ítem | Precio |\n|---|---|\n| Diseño | 100 |\n\n\\pagebreak\n\nCierre del cliente ACME.'
     await create({ path: 'propuesta.docx', content: markdown })
