@@ -48,7 +48,7 @@
     "imapflow": "2.1.2",
     "jszip": "3.10.2",
     "lucide-react": "^1.57.0",
-    "mailparser": "3.9.32",
+    "mailparser": "3.14.2",
     "nodemailer": "10.4.0",
     "ogg-opus-decoder": "1.7.5",
     "onnxruntime-node": "1.30.0",
