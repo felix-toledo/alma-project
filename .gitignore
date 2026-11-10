@@ -7,3 +7,4 @@ src/renderer/public/excalidraw/
 .vitest/
 coverage/
 .claude/.gate-cache.json
+.sandbox-tmp/
