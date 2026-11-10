@@ -52,7 +52,7 @@
     "nodemailer": "10.4.0",
     "ogg-opus-decoder": "1.7.5",
     "onnxruntime-node": "1.30.0",
-    "openai": "^7.34.0",
+    "openai": "^7.47.0",
     "papaparse": "5.7.0",
     "pptxgenjs": "4.0.1",
     "qrcode": "1.5.4",
