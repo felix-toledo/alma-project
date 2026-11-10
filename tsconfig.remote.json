@@ -11,5 +11,5 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src/remote-client/**/*", "src/shared/remote/**/*", "tests/remote-client-render.test.ts", "tests/spec028-verify-render.test.ts"]
+  "include": ["src/remote-client/**/*", "src/shared/remote/**/*", "tests/remote-client-render.test.ts", "tests/spec028-verify-render.test.ts", "tests/verify-031-pwa-render.test.ts"]
 }

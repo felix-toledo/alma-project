@@ -1,0 +1,39 @@
+# The Alma relay on Cloudflare (spec 027 PD-6). Nothing here is deployed by the repository's scripts: a person deploys it,
+# after `pnpm run relay:publish-check` passes, with a pinned wrangler run through `pnpm dlx` (docs/modules/remote-access.md).
+# Build the phone app first (`pnpm run build:remote`): its folder, with shell-manifest.json inside, is what the assets serve.
+
+name = "alma-relay"
+main = "../src/relay/cloudflare/worker.ts"
+compatibility_date = "2025-09-01"
+# Only the relay domain answers: no *.workers.dev address, no preview address.
+workers_dev = false
+preview_urls = false
+
+# Every per-PC name is a first-level subdomain of the relay domain, so the zone's wildcard certificate covers it.
+# The domain is RELAY_DOMAIN in src/shared/remote/relay-config.ts; a test keeps the two equal. The zone must be on this
+# Cloudflare account, and a proxied wildcard DNS record must exist for the names to reach the Worker (see
+# docs/modules/remote-access.md, «Deploying»): routes do not create DNS records.
+routes = [{ pattern = "*.almaproject.app/*", zone_name = "almaproject.app" }]
+
+[assets]
+directory = "../out/remote"
+binding = "ASSETS"
+# The Worker routes first so a host that is not a routing id is answered not found, and then hands the shell to the assets.
+run_worker_first = true
+
+[vars]
+# The emergency stop: "1" makes every phone request answer full and every PC socket be turned away.
+RELAY_PAUSED = "0"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "RoomObject"
+
+[[durable_objects.bindings]]
+name = "GATE"
+class_name = "AddressGate"
+
+# The free plan requires the SQLite-backed kind; it is declared and the code never uses what it offers (a source scan enforces it).
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomObject", "AddressGate"]

@@ -9,14 +9,16 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build && pnpm run build:remote",
-    "build:remote": "vite build --config vite.remote.config.ts",
+    "build:remote": "vite build --config vite.remote.config.ts && node scripts/shell-manifest.mts out/remote",
     "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.remote.json",
+    "build:relay": "tsc --noEmit -p tsconfig.relay.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.remote.json && pnpm run build:relay",
     "lint": "biome lint --diagnostic-level=error .",
     "lint:debt": "biome lint --diagnostic-level=warn --max-diagnostics=50 .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "check:tests": "node scripts/require-tests.mts",
+    "relay:publish-check": "node scripts/relay-publish-check.mts",
     "check:fast": "pnpm run lint && pnpm run typecheck && pnpm run test",
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test:coverage && pnpm run check:tests",
     "prepare": "git config core.hooksPath .githooks"

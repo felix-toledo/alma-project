@@ -14,5 +14,5 @@
     "noEmit": true
   },
   "include": ["electron.vite.config.ts", "vitest.config.mts", "scripts/**/*", "tests/**/*", "src/main/**/*", "src/preload/**/*", "src/coordinator/**/*", "src/shared/**/*"],
-  "exclude": ["tests/remote-client-render.test.ts", "tests/spec028-verify-render.test.ts"]
+  "exclude": ["tests/remote-client-render.test.ts", "tests/spec028-verify-render.test.ts", "tests/verify-031-pwa-render.test.ts"]
 }
