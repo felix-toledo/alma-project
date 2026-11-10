@@ -1,5 +1,5 @@
 ---
-status: draft
+status: ready
 ---
 
 # 029 — Alma creates and edits companies
@@ -106,7 +106,8 @@ Tags: `[gap]` = testable, no test yet; `[manual]` = checked by hand.
 - **AC-5.6** (US-7) Given positions that do not have exactly one head (a member with no boss, reporting to the board), or a chain of more than 4 levels, or a reporting loop, then the call fails validation. [gap]
 - **AC-5.7** (US-7) Given a company name that is empty, longer than 60 characters, or equal to an existing company's name (ignoring case and surrounding spaces), a colour outside the 8 swatches, a mission above 500 characters or goals above 1000, then the call fails validation. [gap]
 - **AC-5.8** (US-7) Given a position whose description plus instructions exceed 2000 characters, then the call fails validation. [gap]
-- **AC-5.9** (US-7) Given a second `create_company` call in the same run, or a creation when 10 companies already exist in settings, then the call fails with a tool error and no card is shown; edits have no such limit. [gap]
+- **AC-5.9** (US-7) Given a `create_company` call that has already reached the approval card in the same run (approved or denied by the person), when a second `create_company` call is made in that run, or a creation when 10 companies already exist in settings, then the call fails with a tool error and no card is shown; edits have no such limit. Given a call refused by validation before any card (nothing shown, nothing created), then it does not spend the run's allowance: the model may fix its input and call `create_company` again in the same run, and that call is validated like any other. Given two parallel valid calls in one run, then exactly one card is shown and the other is refused as already used. The audit is unchanged: a validation refusal is audited as `error` (AC-6.4). [gap]
+  *Amended 2026-11-09 on the owner's decision (real use: Alma's first `create_company` call failed validation and she could not retry in the same message): the single call per run counts only calls that reach the card.*
 
 ### What the person approved is what is saved (US-2)
 - **AC-6.1** (US-2) Given the card shows a position's tools, auto-approved tools, delegation and MCP, then what is saved is exactly what was shown: the tool input is not altered between the card and the write. [gap]
@@ -141,7 +142,7 @@ Rules the code must obey. Everything here is decided: (human) = said by the huma
 - **BR-16** (accepted) Shape: exactly one head reporting to the board, every other position reporting to a member, at most 4 levels, no loops (007 BR-2). An edit may not leave the company without a head or with several.
 - **BR-17** (accepted) Names and language: agent names come from the fixed list (`pickName`); titles, descriptions and instructions are written in the app `language`.
 - **BR-18** (accepted) Company name: not empty, at most 60 characters, not equal (ignoring case and surrounding spaces) to an existing company's name; colour from the 8 swatches; mission at most 500 and goals at most 1000 characters.
-- **BR-19** (accepted) Rate and volume: one creation per run, at most 10 companies in settings; edits are not rate-limited beyond the confirmation. Audit: dedicated actions `company.create` and `company.edit` with company id, number of positions and the answering channel, never names, instructions or mission.
+- **BR-19** (accepted) Rate and volume: one creation per run, counted only for calls that reach the approval card (a call refused by validation before any card does not spend the run; a call that reaches the card, approved or denied, does; two parallel valid calls produce exactly one card), at most 10 companies in settings; edits are not rate-limited beyond the confirmation. Audit: dedicated actions `company.create` and `company.edit` with company id, number of positions and the answering channel, never names, instructions or mission; validation refusals are audited as `error`, unchanged. *Amended 2026-11-09 on the owner's decision (real use): the allowance of one creation per run is spent only by a call that reaches the card, so the model can correct a refused input and retry in the same run.*
 - **BR-20** (accepted) Created agents use the `memberAgent` defaults (provider `meta`, `DEFAULT_META_MODEL`, effort `medium`); Alma does not choose providers or models.
 - **BR-21** (human, "never") Alma never creates, configures or links a company mailbox or WhatsApp number and never handles company secrets; a new company starts with both off and the edit tools have no field for them.
 - **BR-22** (accepted) The approval card is read-only (Permitir / Rechazar) and flags any position that auto-approves an `exec` tool with "can run commands without asking".

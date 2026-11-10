@@ -16,7 +16,7 @@ The alternatives were a cloud relay (a server to operate and to trust with the h
 
 ## Considered options
 
-- Cloud relay operated by Alma: not chosen; it contradicts the local-first architecture and adds a trusted third party with access to the house.
+- Cloud relay operated by Alma: not chosen; it contradicts the local-first architecture and adds a trusted third party with access to the house. *Revisited by [ADR 0022](0022-alma-e2e-relay.md) (spec 027): an opt-in relay that carries only ciphertext is planned as a third transport. It is not trusted with content, with the honest limit that the operator who serves the app shell could in principle serve a hostile one; Tailscale remains the default and this ADR's decision for it stands.*
 - Telegram/WhatsApp as the only remote surface: not chosen; kept as complementary channels, but chat cannot carry house control, camera stills or full approval text.
 - WebSocket instead of long-polling (PD-6): not chosen; long-poll (25 s) is enough for approvals and chat state and keeps the server a plain request handler.
 - Off-the-shelf WebAuthn library instead of in-house (PD-5): not chosen; the ceremony is small (register once at pairing, assert for step-up) and a dependency here is a supply-chain risk on the authentication path.

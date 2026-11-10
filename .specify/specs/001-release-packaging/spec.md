@@ -31,6 +31,6 @@ installer whose contents were built from a commit that passed every gate.
 None decided yet: the packager, code signing, the update channel and the versioning policy are business decisions, not defaults, and must be decided before this spec is `ready`.
 
 ## 7. Constraints and risks
-- Layers touched: none in `src/`; build config, `.github/workflows/`, `package.json`.
+- Layers touched: none in `src/`; build config, `.github/workflows/`, `package.json`. *Pointer, no rule changed ([027](../027-alma-e2e-relay/spec.md), 2026-11-08): the relay server (`src/relay/`) is not shipped inside the installer, and its build (`pnpm run build:relay`) only typechecks; the relay option stays off by default and unavailable in a packaged app while its domain is a placeholder.*
 - Security: the installer and any update channel are supply-chain surface; signing and update verification need an entry in `docs/security/CONTROLS.md` (§4 desarrollo seguro y cambios).
 - Platform: native/ML modules (`onnxruntime-node`, `sqlite-vec`, `baileys`) and the bundled workers (`embedWorker`, `voiceWorker`) must be unpacked from any archive; `libsignal` is a git dependency (R-01).

@@ -4,7 +4,7 @@ status: accepted
 
 # Remote access: one security layer, the transport is a strategy
 
-Alma is reachable from a person's phone through a remote channel ([spec 026](../../.specify/specs/026-remote-access/spec.md)). All the security lives in one layer in `src/coordinator/channels` (device identity, scopes, step-up, limits, audit); the way the bytes travel is a strategy with one implementation per transport. 026 builds two: Tailscale (through `tailscale serve`) and a local transport that exists only in tests. The Alma-run end-to-end encrypted relay will be a third transport in a later spec (027+) and must not change the layer. Status is `proposed`: the human took these decisions in the spec 026 interview; nothing is in the code yet.
+Alma is reachable from a person's phone through a remote channel ([spec 026](../../.specify/specs/026-remote-access/spec.md)). All the security lives in one layer in `src/coordinator/channels` (device identity, scopes, step-up, limits, audit); the way the bytes travel is a strategy with one implementation per transport. 026 builds two: Tailscale (through `tailscale serve`) and a local transport that exists only in tests. The Alma-run end-to-end encrypted relay is a third transport (spec 027, [ADR 0022](0022-alma-e2e-relay.md)) and must not change the layer. Status is `accepted`: the human took these decisions in the spec 026 interview and they are built and tested (the channel, pairing, sessions, step-up, the Tailscale transport and the PWA); the relay transport of spec 027 is decided and planned, not built.
 
 ## Decision
 
@@ -14,7 +14,7 @@ Alma is reachable from a person's phone through a remote channel ([spec 026](../
 - **Passkey for step-up only.** A WebAuthn passkey assertion, verified by the PC, is required on every opening or disarming of a sensitive thing, in addition to the approval card. The passkey is not used to log in.
 - **Dormant devices.** Turning remote access off keeps paired devices dormant, not forgotten; the native confirmation that turns it on again lists them. The 15-day idle clock keeps running while dormant and an expired device is removed automatically. Every turn-on starts with all scopes off.
 - **Alma owns only its own Serve entry.** It picks a free local port and saves it, removes only the Serve entry it created when remote access is turned off or Alma quits, and refuses to overwrite one the person made.
-- **End-to-end encryption deferred.** 026 relies on WireGuard and Serve's TLS for confidentiality and on per-request device authentication. A session-key end-to-end layer is designed with the relay (027+).
+- **End-to-end encryption deferred.** 026 relies on WireGuard and Serve's TLS for confidentiality and on per-request device authentication. The session-key end-to-end layer is designed with the relay in spec 027 and [ADR 0022](0022-alma-e2e-relay.md); it lives inside the relay transport pair and the Tailscale path does not use it.
 - **No Alma accounts and no Alma server in 026.** The third parties in the path are Tailscale and, for a content-free push, the browser vendors' push services.
 
 ## Why
@@ -41,4 +41,4 @@ Offered in the interview and not chosen (the cost named is the one the interview
 - A new unauthenticated surface exists (pairing), reachable by every member of the tailnet; its limits are in spec 026 BR-21.
 - A client outside `renderer` (the PWA) needs its own place in the layer rules and its own small dictionary; the plan decides and updates `docs/architecture.md` and `tests/architecture.test.ts`.
 - Dormant devices persist across off and on, so the turn-on confirmation is the only moment the person sees which phones return.
-- Revisit by: spec 027 (relay and the end-to-end layer), and Tailscale's terms and Serve behavior changing.
+- Revisit by: spec 027 (relay and the end-to-end layer, [ADR 0022](0022-alma-e2e-relay.md)), and Tailscale's terms and Serve behavior changing.

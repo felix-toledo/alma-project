@@ -15,7 +15,7 @@ Rejected: installing HA Core with `pip` in a plain Ubuntu distro (slower, more f
 The plan, cameras, scenes and rules (`plan.ts`, `triggers.ts`, `FloorPlan.tsx`, `RulesPanel.tsx`) belong to [014](../014-house-plan-cameras-and-rules/spec.md); they share the hub but are not planned here.
 
 ## 3. Contracts
-- `HomeSettings = { enabled; mode: 'managed' | 'external'; externalUrl; mirrored; agentId; visionProvider; visionModel }`.
+- `HomeSettings = { enabled; mode: 'managed' | 'external'; externalUrl; mirrored; agentId; visionProvider; visionModel }`. *Amended by [038](../038-image-models-create-and-see/spec.md) (2026-11-09): `HomeSettings` no longer has `visionProvider` and `visionModel`; the choice is `settings.images.vision`, and an old pair is carried over once on load.*
 - `HomeEngineState = 'off' | 'missing' | 'installing' | 'starting' | 'ready' | 'error' | 'unsupported'`; `HomeEngineStatus = { state; mode; step?; progress?; error?; version?; url? }`.
 - `HomeThing = { id; name; kind; areaId; entityId; state; on; available; attrs; sensors; integration?; manufacturer?; model?; deviceClass? }`; `HomeSnapshot = { things; areas; scenes; automations }`.
 - `buildThings(states, areas, devices, entities): HomeThing[]`, `findThings(things, areas, query)`, `isSensitive(kind, deviceClass?)`.

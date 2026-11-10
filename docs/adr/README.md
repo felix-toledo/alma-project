@@ -4,7 +4,7 @@ Decisions the code already embodies and that would be costly to reverse. Format:
 
 Rules for reading them:
 
-- Status `accepted` means the decision is in the code today.
+- Status `accepted` means the decision is in the code today; `proposed` means it is decided and planned but not built (it becomes `accepted` when the code lands).
 - Where no document explains why, the ADR says `Rationale not documented` and, if useful, an inference labeled as such.
 - "Alternatives: not documented" means no source names a rejected option; none were invented.
 - Sources are the design notes (the maintainer's recorded rationale), [HOME-AUTOMATION-PLAN.md](../HOME-AUTOMATION-PLAN.md), the constitution, `docs/security/*` and the specs.
@@ -32,5 +32,7 @@ Rules for reading them:
 | [0019](0019-names-follow-language-existing-wins.md) | Names Alma writes follow the language; an existing name always wins (spec 025) | accepted |
 | [0020](0020-remote-access-one-security-layer-transport-strategy.md) | Remote access: one security layer, the transport is a strategy (spec 026) | accepted |
 | [0021](0021-remote-access-tailscale-pwa.md) | Remote access: Tailscale transport, installed PWA, paired phones (specs 026, 028) | accepted |
+| [0022](0022-alma-e2e-relay.md) | Remote access: an Alma-run relay as a third transport with an end-to-end layer (spec 027) | proposed (built and tested in the repository, not deployed) |
+| [0023](0023-nightly-dream-unreviewed-memory-consolidation.md) | The nightly dream rewrites the always-injected memory without review, as a fixed pipeline with no tools, caught up instead of woken (spec 033) | accepted (built; the economy-model table awaits confirmed prices, 033 T5) |
 
 Candidates not written because no evidence supports them as separate decisions: the choice of Electron itself, and the choice of React/CodeMirror (the design note covers CodeMirror only as part of the vault editor, in [0006](0006-vault-as-plain-markdown.md)).

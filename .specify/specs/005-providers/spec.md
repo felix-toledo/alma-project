@@ -115,7 +115,7 @@ to fix it; and a person who leaves the model empty still gets a sensible, curren
 - **AC-8.2** (US-3) Given an OpenAI-compatible stream, when its final chunk carries usage, then `inputTokens` is prompt tokens, `outputTokens` completion tokens, and `cacheReadTokens` the cached tokens (`prompt_tokens_details.cached_tokens`, or DeepSeek's `prompt_cache_hit_tokens`, else 0); a stream without usage yields no usage. [gap]
 
 ### Vision (US-3)
-- **AC-9.1** (US-3) Given vision is set to a provider and model in the house settings, when an image is looked at, then that model is used; otherwise the model of the house agent, else the default agent, else any agent whose provider has a key (settings or its environment variable), else the first agent. [gap]
+- **AC-9.1** (US-3) Given vision is set to a provider and model in the house settings, when an image is looked at, then that model is used; otherwise the model of the house agent, else the default agent, else any agent whose provider has a key (settings or its environment variable), else the first agent. [gap] *Amended by [038](../038-image-models-create-and-see/spec.md) (2026-11-09): the vision choice is no longer set in the house settings but in Configuración → Imágenes (`settings.images.vision`), with the same rule as [020](../020-images/spec.md) AC-5.5: a typed model is used as is; a provider with no model is used only once the person confirmed it by name, and then its newest model that can see is picked (a per-provider id table: Anthropic `claude-*`, xAI chat `grok-*`, Meta `muse-spark*`, DeepSeek and Vercel AI Gateway none, so those two need a typed model); otherwise the chain of this criterion applies (038 BR-1 to BR-7, BR-13, BR-14). Not checked against real providers yet (038 T34).*
 - **AC-9.2** (US-3) Given a picture question, when asked, then it is a single low-effort turn with no tools and a fixed English system prompt, and the answer text (or the streamed text if the final has none) and usage are returned. [gap]
 
 ## 6. Business rules
@@ -135,7 +135,7 @@ to fix it; and a person who leaves the model empty still gets a sensible, curren
 - **BR-14** API keys are trimmed on save; `settings.update` never changes keys; only `setApiKey` does, and each set/clear is written to the audit trail without the value. (src/main/settings.ts, src/main/index.ts)
 - **BR-15** What the renderer learns about a key is only `hasKey` and `fromEnv` (the latter true only for the main key variable: `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY`, `AI_GATEWAY_API_KEY`, `META_API_KEY`). (src/main/settings.ts)
 - **BR-16** Token usage is attached to each assistant message and sent to the run's usage callback; company runs convert it to money with a per-provider price table (USD per million tokens) for budgets. No token or cost figure is shown outside companies. (src/coordinator/agent.ts, src/shared/company.ts)
-- **BR-17** Vision never keeps images in an agent's conversation: a one-shot question to the model chosen as in AC-9.1. (src/coordinator/vision.ts)
+- **BR-17** Vision never keeps images in an agent's conversation: a one-shot question to the model chosen as in AC-9.1. (src/coordinator/vision.ts) *Amended by [038](../038-image-models-create-and-see/spec.md) (2026-11-09): "as in AC-9.1" now means the AC-9.1 note above; the images still never enter the conversation (038 BR-8).*
 - **BR-18** Company meeting turns and summaries use the same clients through a tool-less low-effort turn. (src/coordinator/index.ts)
 
 ## 7. Constraints and risks

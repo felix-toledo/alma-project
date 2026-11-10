@@ -21,7 +21,7 @@ Smart devices from different brands (Tuya/Smart Life, eWeLink/Sonoff, Tapo/ONVIF
 
 **Out (and why):** everything below belongs to [`../014-house-plan-cameras-and-rules/spec.md`](../014-house-plan-cameras-and-rules/spec.md):
 - the floor plan (`plan.ts`, `FloorPlan.tsx`, plan editing, import from Excalidraw or an image, `home_plan`, `home_plan_edit`, `home_plan_from_drawing`, `home_plan_from_image`, auto-placing devices, savePlan's area sync);
-- cameras and vision (`camera_look`, `camera_photo`, `camera_watch`, `look_at_image`, camera stills and live stream, vision model setting);
+- cameras and vision (`camera_look`, `camera_photo`, `camera_watch`, `look_at_image`, camera stills and live stream, vision model setting) *(amended by [038](../038-image-models-create-and-see/spec.md), 2026-11-09: the vision model setting now lives in Configuración → Imágenes, not in Casa, which only shows the one in use)*;
 - scenes/modes (`home_scene`, `home_modes`, the mode buttons) and rules (`home_rules`, HA automations, judgment rules, `triggers.ts`, `RulesPanel`, the agent that answers rules).
 Where a 013 mechanism is shared (the hub's scene/automation/camera methods, `home.snapshot` carrying scenes and automations), this spec only says that it exists. Other neighbors: tool approvals in [`../004-approvals/spec.md`](../004-approvals/spec.md); Settings dialog in [`../006-settings/spec.md`](../006-settings/spec.md); channels in [`../010-telegram/spec.md`](../010-telegram/spec.md), [`../011-whatsapp/spec.md`](../011-whatsapp/spec.md) and voice [`../019-voice/spec.md`](../019-voice/spec.md); secrets/privacy [`../022-security-and-privacy/spec.md`](../022-security-and-privacy/spec.md).
 
