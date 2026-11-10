@@ -80,10 +80,14 @@ export const PRICES: Record<ProviderId, { input: number; output: number; cacheRe
   meta: { input: 1.25, output: 4.25, cacheRead: 0.15 }
 }
 
-export function costOf(provider: ProviderId, usage: Usage): number {
-  const price = PRICES[provider]
+/** USD for a usage at a price per million tokens; the dream prices its economy models with it too (spec 033). */
+export function costAt(price: { input: number; output: number; cacheRead: number }, usage: Usage): number {
   const cached = usage.cacheReadTokens ?? 0
   return ((usage.inputTokens - cached) * price.input + cached * price.cacheRead + usage.outputTokens * price.output) / 1_000_000
+}
+
+export function costOf(provider: ProviderId, usage: Usage): number {
+  return costAt(PRICES[provider], usage)
 }
 
 export const monthKey = (at = new Date()): string => `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}`
@@ -186,7 +190,7 @@ export function companyTemplates(language: Language = 'es'): CompanyTemplate[] {
 export const COMPANY_TEMPLATES: CompanyTemplate[] = companyTemplates('es')
 
 /** Agent profile for a position: the template's instructions on top of the company's model choice. */
-export function memberAgent(company: Company, member: CompanyMember, template: Pick<MemberTemplate, 'description' | 'instructions' | 'tools' | 'canDelegate' | 'autoApprove'>, name: string): AgentProfile {
+export function memberAgent(company: Company, member: CompanyMember, template: Pick<MemberTemplate, 'description' | 'instructions' | 'tools' | 'canDelegate' | 'autoApprove'> & { allowMcp?: boolean }, name: string): AgentProfile {
   return {
     id: member.id,
     name,
@@ -196,7 +200,7 @@ export function memberAgent(company: Company, member: CompanyMember, template: P
     model: DEFAULT_META_MODEL,
     effort: 'medium',
     tools: template.tools,
-    allowMcp: false,
+    allowMcp: template.allowMcp ?? false,
     canDelegate: template.canDelegate,
     autoApproveTools: template.autoApprove,
     companyId: company.id
@@ -211,3 +215,71 @@ export function pickName(taken: string[], offset = 0): string {
 }
 
 export const newId = (prefix: string): string => `${prefix}-${Math.random().toString(36).slice(2, 9)}`
+
+// ---------------------------------------------------------------------------
+// Building a company (the Equipos form and, later, the tools)
+
+export const COMPANY_COLORS = ['#8b5cf6', '#10b981', '#0ea5e9', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1']
+export const EMPTY_EMAIL: Company['email'] = { address: '', imapHost: '', imapPort: 993, smtpHost: '', smtpPort: 465 }
+export const DEFAULT_COMPANY_BUDGET_USD = 20
+
+/** One position to create; `key` only names it so `reportsTo` can point at another one before ids exist. */
+export interface PositionSpec extends MemberTemplate {
+  /** Equipos leaves it off; the tools may turn it on. */
+  allowMcp?: boolean
+  /** Monthly cap for the member; 0 or absent = only the company cap. */
+  budgetUsd?: number
+}
+
+export interface NewCompanyInput {
+  name: string
+  mission: string
+  goals: string
+  vault: string
+  color?: string
+  budgetUsd?: number
+  positions: PositionSpec[]
+}
+
+/** 007 AC-1.2: `<parent of the default vault>\Empresas\<name>`, forbidden characters of the name replaced by `-`. Reading the base folder is the caller's job. */
+export function defaultCompanyVault(defaultVaultPath: string, name: string): string {
+  const root = defaultVaultPath.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, '')
+  // Control characters are forbidden in a folder name like the rest. Windows drops a trailing dot or space, so the folder would not be the one that was checked.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: replacing control characters is the point
+  return `${root}\\Empresas\\${name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '-').trim().replace(/[. ]+$/, '') || 'Empresa'}`
+}
+
+/** The company and one agent per position, not yet saved or on disk (the caller's shell does `vault.init` and persists). */
+export function buildCompany(input: NewCompanyInput, existing: Company[]): { company: Company; agents: AgentProfile[] } {
+  const company: Company = {
+    id: newId('empresa'),
+    name: input.name,
+    mission: input.mission,
+    goals: input.goals,
+    vault: input.vault,
+    color: input.color ?? COMPANY_COLORS[existing.length % COMPANY_COLORS.length],
+    budgetUsd: input.budgetUsd ?? DEFAULT_COMPANY_BUDGET_USD,
+    members: [],
+    email: { ...EMPTY_EMAIL },
+    whatsapp: false,
+    createdAt: Date.now()
+  }
+  const ids = new Map<string, string>()
+  const agents: AgentProfile[] = []
+  const start = existing.length * 5
+  for (const position of input.positions) {
+    const id = newId('puesto')
+    ids.set(position.key, id)
+    const seat: CompanyMember = { id, title: position.title, reportsTo: null, collaborates: [], budgetUsd: position.budgetUsd ?? 0 }
+    company.members.push(seat)
+    agents.push(memberAgent(company, seat, position, pickName(agents.map((a) => a.name), start)))
+  }
+  // Bosses are known once every position has an id.
+  for (const [i, position] of input.positions.entries()) {
+    // Only a missing boss means the board: an unknown key is a caller bug, never a second head.
+    const boss = position.reportsTo == null ? null : ids.get(position.reportsTo)
+    if (boss === undefined) throw new Error(`Unknown boss key: ${position.reportsTo}`)
+    company.members[i].reportsTo = boss
+  }
+  return { company, agents }
+}

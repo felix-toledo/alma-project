@@ -1,7 +1,12 @@
 // "Mirá esta imagen": a one-shot question to a model that can see. Used for floor plan photos, camera stills and
 // pictures the user sends. Agents never carry images in their conversation; they get the answer as text.
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { extname, isAbsolute, resolve } from 'node:path'
+import { ENV_KEYS, hasKey } from '../shared/attach/readers'
+import { DEEPSEEK_BASE_URL, META_BASE_URL, PROVIDER_NAMES, VERCEL_BASE_URL } from '../shared/defaults'
+import { hasSeeRule, pickSeeModel } from '../shared/images/models'
+import { resolveVision } from '../shared/images/vision'
 import type { ProviderId, Settings, Usage } from '../shared/types'
 import { VISION_SYSTEM } from './prompts/vision'
 import { getProvider } from './providers'
@@ -44,22 +49,67 @@ export function imageSize(bytes: Buffer): { width: number; height: number } | nu
 const TYPES: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }
 const MAX_BYTES = 8 * 1024 * 1024
 
-const ENV_KEYS: Record<ProviderId, string> = { anthropic: 'ANTHROPIC_API_KEY', xai: 'XAI_API_KEY', deepseek: 'DEEPSEEK_API_KEY', vercel: 'AI_GATEWAY_API_KEY', meta: 'META_API_KEY' }
-
-function hasKey(settings: Settings, provider: ProviderId): boolean {
-  return !!settings.providers[provider].apiKey || !!process.env[ENV_KEYS[provider]]
+/**
+ * The model that looks. Who it is comes from `resolveVision` (the gate of spec 038 BR-14, read at every look, so camera watches
+ * obey it too); a chosen provider with no model is completed here. Keys are read from the process environment.
+ */
+export async function visionModel(settings: Settings): Promise<{ provider: ProviderId; model: string }> {
+  const { provider, model, via } = resolveVision(settings, (p) => hasKey(settings, p, process.env))
+  if (model || via === 'fallback') return { provider, model }
+  if (!hasSeeRule(provider)) throw new ToolError('tool.vision.noModel', { provider: PROVIDER_NAMES[provider] })
+  return { provider, model: await pickedSeeModel(settings, provider) }
 }
 
-/**
- * The model that looks: the one chosen for vision; else the model of the agent that runs the house, or the default
- * agent, or any agent whose provider has a key (a person who only set up one provider still gets to look).
- */
-export function visionModel(settings: Settings): { provider: ProviderId; model: string } {
-  const { visionProvider, visionModel: model, agentId } = settings.home
-  if (visionProvider && model) return { provider: visionProvider as ProviderId, model }
-  const preferred = [settings.agents.find((a) => a.id === agentId), settings.agents.find((a) => a.id === settings.defaultAgentId), ...settings.agents]
-  const agent = preferred.find((a) => a && hasKey(settings, a.provider)) ?? settings.agents[0]
-  return { provider: agent.provider, model: agent.model }
+const BASE_URLS: Record<ProviderId, (settings: Settings) => string> = {
+  anthropic: () => '',
+  xai: (settings) => settings.providers.xai.baseUrl,
+  deepseek: () => DEEPSEEK_BASE_URL,
+  vercel: () => VERCEL_BASE_URL,
+  meta: () => META_BASE_URL
+}
+
+export const MAX_PICKS = 32
+export const LIST_TIMEOUT_MS = 15_000
+/** Joins the `error` slot of tool.vision.listFailed, where a provider's own (English) error text goes too. */
+const TIMED_OUT = 'the provider did not answer in time'
+
+/** Picks of the models that see, per provider + URL + a digest of the key, for the life of the process; a failure is never kept (BR-12). Oldest out past MAX_PICKS. */
+const picks = new Map<string, Promise<string>>()
+
+/** The work, or a rejection if it takes longer than `ms`; the timer never outlives the race. */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(TIMED_OUT)), ms)
+  })
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer))
+}
+
+function pickedSeeModel(settings: Settings, provider: ProviderId): Promise<string> {
+  const key = settings.providers[provider].apiKey || process.env[ENV_KEYS[provider]] || ''
+  const cacheKey = `${provider}|${BASE_URLS[provider](settings)}|${createHash('sha256').update(key).digest('hex').slice(0, 16)}`
+  let pick = picks.get(cacheKey)
+  if (!pick) {
+    const name = PROVIDER_NAMES[provider]
+    const entry = (async () => {
+      let ids: string[]
+      try {
+        ids = await withTimeout(getProvider(provider, settings).listModels(), LIST_TIMEOUT_MS)
+      } catch (error) {
+        // The provider's own words, minus the key if it echoed it back (AC-4.5).
+        const text = error instanceof Error ? error.message : String(error)
+        throw new ToolError('tool.vision.listFailed', { provider: name, error: key ? text.replaceAll(key, '***') : text })
+      }
+      const model = pickSeeModel(provider, ids)
+      if (!model) throw new ToolError('tool.vision.noModel', { provider: name })
+      return model
+    })()
+    pick = entry
+    picks.set(cacheKey, entry)
+    if (picks.size > MAX_PICKS) picks.delete(picks.keys().next().value as string)
+    entry.catch(() => picks.get(cacheKey) === entry && picks.delete(cacheKey))
+  }
+  return pick
 }
 
 export function loadPicture(path: string, roots: string[]): Picture {
@@ -74,7 +124,7 @@ export function loadPicture(path: string, roots: string[]): Picture {
 }
 
 export async function look(settings: Settings, pictures: Picture[], question: string, signal: AbortSignal = new AbortController().signal): Promise<{ text: string; usage?: Usage }> {
-  const { provider, model } = visionModel(settings)
+  const { provider, model } = await visionModel(settings)
   let text = ''
   const turn = await getProvider(provider, settings).streamTurn({
     model,

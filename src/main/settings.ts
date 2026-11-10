@@ -2,8 +2,11 @@ import { app, safeStorage } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as z from 'zod/v4'
-import { applyMetaDefault, DEFAULT_AGENTS, defaultSettings, looksLikeApiKey, OFFICE_TOOLS } from '../shared/defaults'
+import { sanitizeAttachmentSettings } from '../shared/attach/settings'
+import { acceptDreamPatch, sanitizeDreamSettings } from '../shared/dream/settings'
+import { applyMetaDefault, DEFAULT_AGENTS, defaultSettings, OFFICE_TOOLS } from '../shared/defaults'
 import { type Language, parseLanguage, resolveLanguage } from '../shared/i18n/language'
+import { acceptImagesPatch, migrateLegacyVision, omitLegacyVision, sanitizeImagesSettings } from '../shared/images/vision'
 import { migrateDefaults } from '../shared/migrate'
 import { sanitizeRemote } from '../shared/remote/settings'
 import { mainError } from './messages'
@@ -54,21 +57,24 @@ export class SettingsStore {
   private settings: Settings
   /** A secret was found unsealed on disk (older versions, or a machine without a keychain): rewrite sealed. */
   private legacyPlaintext = false
+  /** A key was found in a model field on disk and blanked: rewrite without it. */
+  private wipedKey = false
   /** Set only when the person chose a language; without it `language` keeps following the system (spec 025 D3). */
   private explicitLanguage: Language | undefined
 
   constructor(private readonly systemLocales: readonly string[]) {
     this.settings = this.load()
     this.settings.language = resolveLanguage(this.explicitLanguage, this.systemLocales)
-    // A key pasted into the image model field would be sent as a model name and sit unencrypted on disk.
-    const pastedKey = looksLikeApiKey(this.settings.images.model)
-    if (pastedKey) this.settings.images = { ...this.settings.images, model: '' }
     // Meta is the default provider now: saves from before move over once, if there is a Meta key (spec 024).
     const migrated = applyMetaDefault(this.settings, !!(this.settings.providers.meta.apiKey || process.env.META_API_KEY))
     const movedToMeta = migrated !== this.settings
     this.settings = migrated
+    // The vision model moves from the House tab to the Images tab once (spec 038). A fresh install has nothing to rewrite.
+    const vision = migrateLegacyVision(this.settings)
+    this.settings = vision.settings
+    const movedVision = vision.changed && existsSync(settingsPath())
     // Resealing without a keychain would blank the keys on disk, so only when they can be sealed.
-    if (pastedKey || ((this.legacyPlaintext || movedToMeta) && secretsProtected())) this.save()
+    if (this.wipedKey || vision.wipedKey || ((this.legacyPlaintext || movedToMeta || movedVision) && secretsProtected())) this.save()
   }
 
   private open(stored: string | undefined): string {
@@ -84,6 +90,9 @@ export class SettingsStore {
       const stored = JSON.parse(readFileSync(settingsPath(), 'utf8')) as Partial<Settings>
       this.explicitLanguage = parseLanguage(stored.language)
       base = defaultSettings(resolveLanguage(this.explicitLanguage, this.systemLocales))
+      // A key pasted into a model field would be sent as a model name and sit unencrypted on disk: blanked here, the file rewritten.
+      const images = sanitizeImagesSettings(stored.images, base.images)
+      this.wipedKey = images.wipedKey
       const merged: Settings = {
         ...base,
         ...stored,
@@ -105,16 +114,19 @@ export class SettingsStore {
         voice: { ...base.voice, ...stored.voice },
         email: { ...base.email, ...stored.email },
         whatsapp: { ...base.whatsapp, ...stored.whatsapp },
+        // The old vision keys come only from the file, for the one-time move into `images.vision` (spec 038).
         home: { ...base.home, ...stored.home },
         remote: { ...base.remote, ...sanitizeRemote(stored.remote) },
         companies: stored.companies ?? [],
         companySecrets: Object.fromEntries(Object.entries(stored.companySecrets ?? {}).map(([id, value]) => [id, this.open(value)])),
         autoReview: { ...base.autoReview, ...stored.autoReview },
         // Settings saved by older versions lack these sections.
-        images: { ...base.images, ...stored.images },
+        images: images.images,
         instagram: { ...base.instagram, ...stored.instagram },
         background: { ...base.background, ...stored.background },
         privacy: { ...base.privacy, ...stored.privacy },
+        attachments: sanitizeAttachmentSettings(stored.attachments),
+        dream: sanitizeDreamSettings(stored.dream),
         routines: stored.routines ?? []
       }
       if (!merged.agents?.length) merged.agents = base.agents
@@ -202,13 +214,19 @@ export class SettingsStore {
 
   /** Applies a partial update from the renderer. Provider secrets are changed only through setApiKey. */
   update(patch: Partial<PublicSettings>): Settings {
-    const { providers, companyPasswords: _derived, language, ...rest } = patch
+    const { providers, companyPasswords: _derived, language, dream, images, home, ...rest } = patch
     // Validated before anything changes, so a bad value leaves the settings untouched.
     const parsed = language === undefined ? undefined : languageSchema.safeParse(language)
     if (parsed && !parsed.success) throw new Error(mainError(this.settings.language, 'invalid-language'))
     const chosen = parsed?.data
     const previous = this.settings.language
     this.settings = { ...this.settings, ...rest }
+    // A bad cap or switch keeps the previous value (spec 033 AC-1.3).
+    if (dream !== undefined) this.settings.dream = acceptDreamPatch(this.settings.dream, dream)
+    // `images` is replaced whole, so a patch that leaves the see choice out or malforms it keeps the current one (spec 038 AC-1.8).
+    if (images !== undefined) this.settings.images = acceptImagesPatch(this.settings.images, images)
+    // The old House vision keys never come back (AC-3.4).
+    if (home !== undefined) this.settings.home = omitLegacyVision(home)
     if (chosen) {
       this.explicitLanguage = chosen
       this.settings.language = chosen

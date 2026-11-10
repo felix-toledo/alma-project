@@ -1,6 +1,7 @@
 // Text Alma writes and stores (thread titles, company logs, meeting minutes, the memory header): in the language in
 // effect when it is written, and never rewritten afterwards (spec 025 BR-26). Pure, so both languages are tested.
 import type { Language } from '../shared/i18n/language'
+import { LOCALE } from '../shared/i18n/format'
 import { translate } from '../shared/i18n/messages'
 import type { TaskStatus } from '../shared/types'
 
@@ -103,3 +104,7 @@ export function minutesNote(language: Language, minutes: MinutesInput): string {
 }
 
 export const summaryFailed = (language: Language, message: string): string => translate(language, 'minutes.summaryFailed', { message })
+
+/** The morning greeting's conversation (spec 033 AC-7.10): the key's title with the day it was written. */
+export const greetingThreadTitle = (language: Language, at: Date): string =>
+  translate(language, 'dream.greeting.title', { date: at.toLocaleDateString(LOCALE[language], { weekday: 'long', day: 'numeric', month: 'long' }) })

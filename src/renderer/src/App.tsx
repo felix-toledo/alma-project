@@ -107,6 +107,8 @@ export function App(): React.JSX.Element {
 
   const openThread = useCallback(async (threadId: string | null) => {
     dispatch({ type: 'open', thread: threadId ? await request<Thread>({ method: 'threads.get', threadId }) : null })
+    // Opening restarts the 30-day clock of the conversation's attachments (spec 030 AC-6.3); a failure must not block opening.
+    if (threadId) void request({ method: 'threads.open', threadId }).catch(() => undefined)
   }, [])
 
   // Load everything from the coordinator, and again whenever it (re)connects.
@@ -138,13 +140,18 @@ export function App(): React.JSX.Element {
     const offEvent = onEvent((event) => dispatch({ type: 'event', event }))
     const offSettings = window.desktop.settings.onChanged(refreshSettings)
     const offConnected = onConnected(() => void syncAll())
-    const offOpenThread = window.desktop.onOpenThread((threadId) => void openThread(threadId))
+    // A conversation main opened at start (the greeting landing) wins over the default first one.
+    let opened = false
+    const offOpenThread = window.desktop.onOpenThread((threadId) => {
+      opened = true
+      void openThread(threadId)
+    })
     refreshSettings()
     void syncAll().then((threads) => {
       // Not a company chat: those open from Empresas. Settings may not be loaded yet, so ask for them.
       void window.desktop.settings.get().then((s) => {
         const first = listableThreads(threads, s.agents)[0]
-        if (first) void openThread(first.id)
+        if (first && !opened) void openThread(first.id)
       })
     })
     return () => {

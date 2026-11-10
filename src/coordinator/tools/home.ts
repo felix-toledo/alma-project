@@ -4,6 +4,7 @@ import * as z from 'zod/v4'
 import { formatDateTime } from '../../shared/i18n/format'
 import { translate } from '../../shared/i18n/messages'
 import { extractJson, isSensitive, planFromVision, type HomeThing } from '../../shared/home'
+import { attachmentIdInPath } from '../attachments/store'
 import { applyPlanOp, describePlan, replaceFloorShape, type PlanOp } from '../home/plan'
 import { fold } from '../home/model'
 import { cameraQuestion, DEFAULT_CAMERA_QUESTION, DEFAULT_IMAGE_QUESTION, planQuestion } from '../prompts/vision'
@@ -442,6 +443,9 @@ export const lookAtImageTool = defineTool({
   standalone: true,
   schema: z.object({ path: z.string(), question: z.string().default(DEFAULT_IMAGE_QUESTION) }),
   async run({ path, question }, ctx) {
+    // a picture the person attached and the 30-day sweep removed says so (spec 030 AC-6.4), not "no such file"
+    const attached = ctx.inboxDir ? attachmentIdInPath(path, ctx.inboxDir) : undefined
+    if (attached && ctx.attachments?.lookup(attached).state === 'removed') throw new ToolError('tool.attachment.removed')
     return (await look(ctx.settings, [loadPicture(path, pictureRoots(ctx))], question, ctx.signal)).text
   }
 })

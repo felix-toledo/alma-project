@@ -99,6 +99,8 @@ export function toolSummary(name: string, input: unknown, t: T): string {
       return pick('path')
     case 'save_knowledge':
       return pick('title')
+    case 'create_company':
+      return pick('name').slice(0, 140)
     case 'remember':
     case 'forget':
       return pick('text')

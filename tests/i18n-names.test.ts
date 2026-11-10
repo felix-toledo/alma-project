@@ -8,7 +8,8 @@ import { libraryPath, loadLibrary } from '../src/coordinator/compose'
 import { minutesPath } from '../src/coordinator/company/engine'
 import { KnowledgeBase } from '../src/coordinator/knowledge/base'
 import { splitFrontmatter } from '../src/coordinator/knowledge/markdown'
-import { isOwnNote, newFileName, resolveName, welcomeNoteFile } from '../src/shared/i18n/names'
+import { isMessageKey } from '../src/shared/i18n/messages'
+import { isOwnNote, namesOf, newFileName, resolveName, welcomeNoteFile } from '../src/shared/i18n/names'
 import type { Language } from '../src/shared/types'
 
 const NAMES = { es: 'Recuerdos.md', en: 'Memories.md' }
@@ -189,5 +190,20 @@ describe('AC-9.3 vault names', () => {
     expect(newFileName('en', 'note', (name) => name === 'Sin título.md')).toBe('Untitled.md')
     expect(welcomeNoteFile('es')).toBe('Bienvenida.md')
     expect(welcomeNoteFile('en')).toBe('Welcome.md')
+  })
+})
+
+describe('BR-16 (033) dream journal names', () => {
+  it('BR-16 (033) the journal folder follows the language and an existing one wins', () => {
+    expect(isMessageKey('names.dreamsDir')).toBe(true)
+    expect(isMessageKey('names.dreamTypeValue')).toBe(true)
+    const names = namesOf('names.dreamsDir')
+    expect(names).toEqual({ es: 'Sueños', en: 'Dreams' })
+    expect(namesOf('names.dreamTypeValue')).toEqual({ es: 'sueño', en: 'dream' })
+    const present = (...existing: string[]) => (name: string) => existing.includes(name)
+    expect(resolveName('es', names, present())).toBe('Sueños')
+    expect(resolveName('en', names, present())).toBe('Dreams')
+    expect(resolveName('en', names, present('Sueños'))).toBe('Sueños')
+    expect(resolveName('es', names, present('Dreams'))).toBe('Dreams')
   })
 })

@@ -1,5 +1,6 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { sanitizeFileName } from '../../shared/attach/names'
 import { ToolError } from './types'
 
 function isInside(root: string, target: string): boolean {
@@ -40,5 +41,5 @@ export function displayPath(workspace: string, absolute: string): string {
 
 /** Safe stored name for a picture the user sent: unsafe runs become `_`, the last 60 characters are kept. */
 export function inboxFileName(name: string): string {
-  return name.replace(/[^\w.-]+/g, '_').slice(-60)
+  return sanitizeFileName(name)
 }

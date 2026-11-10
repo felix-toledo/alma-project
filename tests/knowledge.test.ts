@@ -8,6 +8,9 @@ import { ToolError } from '../src/coordinator/tools/types'
 import { EMBEDDING_DIMS } from '../src/coordinator/knowledge/db'
 import type { Embedder } from '../src/coordinator/knowledge/embedder'
 import { chunkMarkdown, splitFrontmatter } from '../src/coordinator/knowledge/markdown'
+import { memoryHeader } from '../src/coordinator/generated'
+import type { Change } from '../src/shared/dream/apply'
+import type { Language } from '../src/shared/types'
 
 /** Bag-of-words hashed into 1024 dims: texts sharing words point the same way, like a (very) poor embedding model. */
 function fakeEmbedder(): Embedder & { calls: number } {
@@ -40,7 +43,7 @@ afterEach(async () => {
   bases = []
 })
 
-async function openVault(files: Record<string, string>, embedder = fakeEmbedder()) {
+async function openVault(files: Record<string, string>, embedder = fakeEmbedder(), language?: Language) {
   const root = mkdtempSync(join(tmpdir(), 'alma-vault-'))
   const dataDir = mkdtempSync(join(tmpdir(), 'alma-data-'))
   dirs.push(root, dataDir)
@@ -58,7 +61,8 @@ async function openVault(files: Record<string, string>, embedder = fakeEmbedder(
       rmSync(path, { recursive: true, force: true })
     },
     onStatus: () => {},
-    onChanged: () => {}
+    onChanged: () => {},
+    ...(language ? { language: () => language } : {})
   })
   bases.push(kb)
   await kb.scan()
@@ -204,5 +208,122 @@ describe('KnowledgeBase', { timeout: 30_000 }, () => {
     expect((await kb.readBytes('Notas/a.png', 100)).bytes).toHaveLength(100)
     await expect(kb.readBytes('Notas/a.png', 99)).rejects.toMatchObject({ text: { key: 'tool.kb.tooBig' } })
     await expect(kb.readBytes('Notas', 100)).rejects.toMatchObject({ text: { key: 'tool.kb.noNote' } })
+  })
+})
+
+describe('the memory writer (spec 033)', { timeout: 30_000 }, () => {
+  it('AC-6.5 (033) remember, forget, editor saves and the dream are serialized', async () => {
+    const { kb, root } = await openVault({ [MEMORY_FILE]: '# Recuerdos\n\nMi prosa.\n\n- x\n- y\n' })
+    // Called together, they run in call order: nothing is read before the previous write lands.
+    await Promise.all([
+      kb.remember('a'.repeat(5)),
+      kb.forget('x'),
+      kb.remember('b'.repeat(5)),
+      kb.write(MEMORY_FILE, '# Recuerdos\n\nMi prosa editada.\n\n- y\n- aaaaa\n- bbbbb\n- z\n'),
+      kb.remember('c'.repeat(5)),
+      kb.forget('y')
+    ])
+    expect(await kb.memories()).toEqual(['aaaaa', 'bbbbb', 'z', 'ccccc'])
+    expect(readFileSync(join(root, ...MEMORY_FILE.split('/')), 'utf8')).toContain('Mi prosa editada.')
+  })
+
+  it('AC-6.5 (033) the dream apply waits its turn in the same writer; a write of another path does not', async () => {
+    const { kb } = await openVault({ [MEMORY_FILE]: '# Recuerdos\n\n- x\n' })
+    let entered!: () => void
+    let release!: () => void
+    const inJournal = new Promise<void>((resolve) => { entered = resolve })
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const order: string[] = []
+    const applying = kb.applyDreamChanges(['x'], [dreamReplace('x', 'x cambiada'), dreamAdd('nuevo')], async () => {
+      entered()
+      await gate
+    })
+    await inJournal
+    const remembering = kb.remember('después').then(() => order.push('remember'))
+    const other = kb.write('Notas/otra.md', '# Otra').then(() => order.push('other'))
+    const timeout = new Promise<string>((resolve) => setTimeout(() => resolve('timeout'), 2000))
+    expect(await Promise.race([other.then(() => 'done'), timeout])).toBe('done')
+    expect(order).toEqual(['other'])
+    release()
+    await Promise.all([applying, remembering])
+    expect(await kb.memories()).toEqual(['x cambiada', 'nuevo', 'después'])
+  })
+})
+
+const dreamSrc = [{ thread: 't1', ts: 1 }]
+const dreamAdd = (text: string): Change => ({ kind: 'add', text, why: 'w', sources: dreamSrc })
+const dreamReplace = (old: string, text: string): Change => ({ kind: 'replace', old, text, why: 'w', sources: dreamSrc })
+const dreamRemove = (old: string): Change => ({ kind: 'remove', old, why: 'w', sources: dreamSrc })
+
+describe('the dream in the vault (spec 033)', { timeout: 30_000 }, () => {
+  it('AC-6.6 (033) no memory file: created with the header', async () => {
+    for (const [language, file] of [['es', 'Alma/Recuerdos.md'], ['en', 'Alma/Memories.md']] as const) {
+      const { kb, root } = await openVault({}, fakeEmbedder(), language)
+      await kb.applyDreamChanges([], [dreamAdd('Toma mate')], async () => {})
+      const text = readFileSync(join(root, ...file.split('/')), 'utf8')
+      expect(text.startsWith(memoryHeader(language))).toBe(true)
+      expect(await kb.memories()).toEqual(['Toma mate'])
+    }
+  })
+
+  it('AC-6.5 (033) the journal is written before the memory file, and a failed journal leaves it byte-identical', async () => {
+    const { kb, root } = await openVault({ [MEMORY_FILE]: '# Recuerdos\r\n\r\nMi prosa.\r\n\r\n- x\r\n' })
+    const file = join(root, ...MEMORY_FILE.split('/'))
+    const before = readFileSync(file, 'utf8')
+    let seen = ''
+    const result = await kb.applyDreamChanges(['x'], [dreamRemove('x'), dreamAdd('nuevo')], async (applied) => {
+      seen = readFileSync(file, 'utf8')
+      expect(applied.applied).toHaveLength(2)
+    })
+    expect(seen).toBe(before)
+    expect(result.lines).toEqual(['nuevo'])
+    expect(await kb.memories()).toEqual(['nuevo'])
+    const again = readFileSync(file)
+    await expect(kb.applyDreamChanges(['nuevo'], [dreamAdd('otro')], async () => { throw new Error('disk full') })).rejects.toThrow('disk full')
+    expect(readFileSync(file).equals(again)).toBe(true)
+    // A failed apply does not jam the writer.
+    await kb.remember('sigue andando')
+    expect(await kb.memories()).toEqual(['nuevo', 'sigue andando'])
+  })
+
+  it('AC-5.7 (033) an existing journal gets a section appended', async () => {
+    const hand = '# Mi nota\r\n\r\nescrita a mano\r\n'
+    const { kb, root } = await openVault({ 'Alma/Sueños/2026-11-09.md': hand })
+    const path = await kb.writeJournal('2026-11-09', '---\norigen: ia\n---\n## Primera\n', '## Sección\n\n- algo\n')
+    expect(path).toBe('Alma/Sueños/2026-11-09.md')
+    const text = readFileSync(join(root, ...path.split('/')), 'utf8')
+    expect(text).toBe(`${hand}\r\n## Sección\r\n\r\n- algo\r\n`)
+    // A new date gets the whole first content; the same date again gets one more section.
+    const fresh = await kb.writeJournal('2026-11-10', '---\norigen: ia\n---\n## Primera\n', '## Otra\n')
+    expect(readFileSync(join(root, ...fresh.split('/')), 'utf8')).toBe('---\norigen: ia\n---\n## Primera\n')
+    await kb.writeJournal('2026-11-10', 'no se usa\n', '## Reintento\n')
+    expect(readFileSync(join(root, ...fresh.split('/')), 'utf8')).toBe('---\norigen: ia\n---\n## Primera\n\n## Reintento\n')
+  })
+
+  it('AC-5.8 (033) recall never injects the journal folder; search and read still do', async () => {
+    const note = '# Turno\n\nTurno con el dentista el martes a las diez.'
+    const { kb } = await openVault({
+      'Alma/Sueños/2026-11-09.md': note,
+      'Alma/Dreams/2026-11-08.md': note,
+      'Notas/Sueños.md': note,
+      'Notas/Dreams/turno.md': note
+    })
+    const { fragments } = await kb.recall('¿cuándo es el turno con el dentista?')
+    expect(fragments.map((f) => f.path).sort()).toEqual(['Notas/Dreams/turno.md', 'Notas/Sueños.md'])
+    const found = (await kb.search('turno dentista')).map((hit) => hit.path)
+    expect(found).toEqual(expect.arrayContaining(['Alma/Sueños/2026-11-09.md', 'Alma/Dreams/2026-11-08.md']))
+    expect((await kb.read('Alma/Sueños/2026-11-09.md')).content).toBe(note)
+  })
+
+  it('AC-5.1 (033) folder and file name', async () => {
+    const en = await openVault({}, fakeEmbedder(), 'en')
+    expect(en.kb.journalFolder()).toBe('Alma/Dreams')
+    expect(await en.kb.writeJournal('2026-11-09', 'x\n', 'x\n')).toBe('Alma/Dreams/2026-11-09.md')
+    const es = await openVault({}, fakeEmbedder(), 'es')
+    expect(es.kb.journalFolder()).toBe('Alma/Sueños')
+    // An existing folder under the other language's name wins.
+    const mixed = await openVault({ 'Alma/Sueños/2026-11-01.md': '# viejo\n' }, fakeEmbedder(), 'en')
+    expect(await mixed.kb.writeJournal('2026-11-09', 'x\n', 'x\n')).toBe('Alma/Sueños/2026-11-09.md')
+    expect(existsSync(join(mixed.root, 'Alma', 'Dreams'))).toBe(false)
   })
 })

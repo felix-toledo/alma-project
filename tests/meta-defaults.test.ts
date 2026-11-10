@@ -21,7 +21,7 @@ describe('Meta by default (spec 024)', () => {
     old.agents = old.agents.map((a) => (a.provider === 'meta' ? { ...a, provider: 'anthropic', model: 'claude-opus-5-5' } : a))
     old.agents.find((a) => a.id === 'revisor')!.provider = 'xai' // the person chose this one
     old.autoReview = { ...old.autoReview, provider: 'anthropic', model: 'claude-opus-5-5' }
-    old.images = { provider: 'xai', model: '' }
+    old.images = { ...old.images, provider: 'xai', model: '' }
 
     expect(applyMetaDefault(old, false)).toBe(old)
 
@@ -32,15 +32,15 @@ describe('Meta by default (spec 024)', () => {
     expect(moved.autoReview).toMatchObject({ provider: 'meta', model: '' })
     expect(moved.images.provider).toBe('meta')
     // Only once: a second pass (after the person switched back) changes nothing.
-    expect(applyMetaDefault({ ...moved, images: { provider: 'xai', model: '' } }, true).images.provider).toBe('xai')
+    expect(applyMetaDefault({ ...moved, images: { ...moved.images, provider: 'xai', model: '' } }, true).images.provider).toBe('xai')
   })
 
   it('AC-5.2 keeps an image model the person chose and agents of a company', () => {
     const old = defaultSettings()
-    old.images = { provider: 'xai', model: 'grok-imagine-image' }
+    old.images = { ...old.images, provider: 'xai', model: 'grok-imagine-image' }
     old.agents = [...old.agents, { ...old.agents[0], id: 'ana', companyId: 'c1', provider: 'anthropic', model: 'claude-opus-5-5' }]
     const moved = applyMetaDefault(old, true)
-    expect(moved.images).toEqual({ provider: 'xai', model: 'grok-imagine-image' })
+    expect(moved.images).toEqual({ provider: 'xai', model: 'grok-imagine-image', vision: { provider: '', model: '' } })
     expect(moved.agents.find((a) => a.id === 'ana')?.provider).toBe('anthropic')
   })
 

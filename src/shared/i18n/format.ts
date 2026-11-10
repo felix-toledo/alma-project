@@ -19,3 +19,8 @@ export function formatDateTime(language: Language, at: Date | number, style: key
 export function compareText(language: Language): (a: string, b: string) => number {
   return new Intl.Collator(LOCALE[language], { numeric: true }).compare
 }
+
+/** A dollar amount as the dream's cap and costs show it: cents, and down to a hundredth of a cent. */
+export function formatUsd(language: Language, usd: number): string {
+  return new Intl.NumberFormat(LOCALE[language], { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(usd)
+}

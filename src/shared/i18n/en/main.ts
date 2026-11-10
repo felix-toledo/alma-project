@@ -17,7 +17,8 @@ export const main = {
   'main.error.pathMissing': 'The path does not exist.',
   'main.error.noPrograms': 'Alma does not open programs or scripts.',
   'main.error.invalidLanguage': 'Invalid language',
-  'main.instagram.connect': 'Connect Instagram',
+  'main.attach.pickTitle': 'Attach files',
+  'main.instagram.connect':'Connect Instagram',
   'main.instagram.test': 'Instagram · test mode',
   'main.instagram.publishing': 'Instagram · publishing…'
 } as const

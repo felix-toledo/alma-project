@@ -1,18 +1,11 @@
 // Trims what is resent to the model on every request: old tool output and pictures cost tokens each turn.
+import { KEEP_CHARS, shorten } from '../shared/trim'
 import type { Block, ChatMessage } from '../shared/types'
 
-const KEEP_CHARS = 600 // kept from each end of a tool result from an earlier turn
 const RECENT_MESSAGES = 10 // inside the turn being worked, the latest messages stay whole…
 const KEEP_CHARS_IN_TURN = 1500 // …and older tool results keep this much of each end (long autonomous runs resend them every iteration)
 
 const isRealUserMessage = (m: ChatMessage): boolean => m.role === 'user' && m.content.some((b) => b.type === 'text' || b.type === 'image')
-
-function shorten(text: string, keep: number): string {
-  if (text.length <= keep * 2 + 200) return text
-  return `${text.slice(0, keep)}
-[… trimmed: ${text.length - keep * 2} characters of an earlier answer …]
-${text.slice(-keep)}`
-}
 
 function compactBlock(block: Block, keep: number): Block {
   if (block.type === 'tool_result') {

@@ -1,6 +1,6 @@
 import { Building2, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { canReportTo, companyTemplates, memberAgent, newId, pickName } from '../../../shared/company'
+import { buildCompany, canReportTo, COMPANY_COLORS, companyTemplates, defaultCompanyVault, memberAgent, newId, pickName } from '../../../shared/company'
 import { BUILTIN_TOOLS, CLAUDE_MODELS, emailServersFor, PROVIDER_NAMES } from '../../../shared/defaults'
 import type { AgentProfile, Company, CompanyMember, Effort, ProviderId, PublicSettings, Routine, WhatsAppStatus } from '../../../shared/types'
 import { onEvent, request } from '../lib/coordinator'
@@ -16,15 +16,7 @@ interface Props {
   onSettingsReplaced(settings: PublicSettings): void
 }
 
-const COLORS = ['#8b5cf6', '#10b981', '#0ea5e9', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1']
 const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
-const EMPTY_EMAIL = { address: '', imapHost: '', imapPort: 993, smtpHost: '', smtpPort: 465 }
-
-async function defaultCompanyVault(name: string): Promise<string> {
-  const base = await window.desktop.defaultVaultPath()
-  const root = base.replace(/[\\/][^\\/]+$/, '')
-  return `${root}\\Empresas\\${name.replace(/[\\/:*?"<>|]/g, '-').trim() || 'Empresa'}`
-}
 
 export function TeamsSettings({ settings, onChange, onSettingsReplaced }: Props): React.JSX.Element {
   const t = useT()
@@ -85,35 +77,15 @@ function NewCompany({ settings, onCreate, onCancel }: { settings: PublicSettings
   const finalName = name.trim() || chosen?.name || tr('teams.defaultName')
 
   useEffect(() => {
-    if (!vaultTouched) void defaultCompanyVault(finalName).then(setVault)
+    if (!vaultTouched) void window.desktop.defaultVaultPath().then((base) => setVault(defaultCompanyVault(base, finalName)))
   }, [finalName, vaultTouched])
 
   const create = async (): Promise<void> => {
     setBusy(true)
-    const company: Company = {
-      id: newId('empresa'),
-      name: finalName,
-      mission: chosen?.mission ?? '',
-      goals: chosen?.goals ?? '',
-      vault,
-      color: chosen?.color ?? COLORS[settings.companies.length % COLORS.length],
-      budgetUsd: 20,
-      members: [],
-      email: { ...EMPTY_EMAIL },
-      whatsapp: false,
-      createdAt: Date.now()
-    }
-    const ids = new Map<string, string>()
-    const agents: AgentProfile[] = []
-    const start = settings.companies.length * 5
-    for (const t of chosen?.members ?? []) {
-      const id = newId('puesto')
-      ids.set(t.key, id)
-      company.members.push({ id, title: t.title, reportsTo: null, collaborates: [], budgetUsd: 0 })
-      agents.push(memberAgent(company, company.members[company.members.length - 1], t, pickName(agents.map((a) => a.name), start)))
-    }
-    // Bosses are known once every position has an id.
-    for (const [i, t] of (chosen?.members ?? []).entries()) company.members[i].reportsTo = t.reportsTo ? (ids.get(t.reportsTo) ?? null) : null
+    const { company, agents } = buildCompany(
+      { name: finalName, mission: chosen?.mission ?? '', goals: chosen?.goals ?? '', vault, color: chosen?.color, positions: chosen?.members ?? [] },
+      settings.companies
+    )
     try {
       await onCreate(company, agents)
     } finally {
@@ -232,7 +204,7 @@ function CompanyEditor({
           <label className="field">
             <span>{t('teams.color')}</span>
             <div className="row">
-              {COLORS.map((color) => (
+              {COMPANY_COLORS.map((color) => (
                 <button key={color} className={`swatch${company.color === color ? ' active' : ''}`} style={{ background: color }} title={color} aria-label={t('teams.colorAria', { color })} onClick={() => void patch({ color })} />
               ))}
             </div>

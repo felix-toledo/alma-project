@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ApprovalMode, PendingApproval, PublicSettings, Thread } from '../../../shared/types'
+import type { ApprovalMode, PendingApproval, ProviderId, PublicSettings, Thread } from '../../../shared/types'
 import { PROVIDER_NAMES } from '../../../shared/defaults'
 import { composeMessage } from '../../../shared/attachments'
-import { fileAttachment, imageAttachment, type Attachment } from '../lib/attachments'
+import { addToMessage, fileAttachment, intakeMessages, pickSources, sourcesFromFiles, type Attachment } from '../lib/attachments'
+import type { MessageAttachment } from '../../../shared/attach/compose'
+import type { IntakeSource } from '../../../shared/attach/intake'
+import { createSerial } from '../../../shared/attach/serial'
+import { canAttachTo, canSendMessage, unacknowledgedReaders } from '../../../shared/attach/display'
 import { useT } from '../i18n/useT'
 import { request } from '../lib/coordinator'
 import { approvalModes, folderName, threadTitle } from '../lib/format'
 import type { Draft } from '../lib/state'
 import { MessageList } from './MessageList'
 import { ModelPicker } from './ModelPicker'
-import { CornerDownLeft, Folder, ImageIcon, Paperclip, Square, X } from 'lucide-react'
+import { CornerDownLeft, Folder, Paperclip, Square, X } from 'lucide-react'
 import { Icon } from '../umbra/Icon'
+import { AttachmentChips } from './AttachmentChips'
+import { ProviderNoticeDialog, SecretNameDialog } from './AttachDialogs'
 
 interface Props {
   thread: Thread
@@ -34,8 +40,19 @@ interface Props {
 export function ChatView({ thread, settings, drafts, running, approvals, error, attachments = [], compact = false, ...props }: Props): React.JSX.Element {
   const t = useT()
   const [text, setText] = useState('')
-  /** Pictures pasted or dropped into this chat: saved in the inbox and handed to the agent by path (look_at_image). */
-  const [images, setImages] = useState<Attachment[]>([])
+  /** Files stored for the next message (spec 030); they leave with it as ids. */
+  const [files, setFiles] = useState<MessageAttachment[]>([])
+  // the same chips, current at every moment: an intake that starts after another one reads these, not a render's snapshot
+  const filesRef = useRef<MessageAttachment[]>([])
+  const intakes = useRef(createSerial())
+  const changeFiles = (change: (list: MessageAttachment[]) => MessageAttachment[]): void => {
+    filesRef.current = change(filesRef.current)
+    setFiles(filesRef.current)
+  }
+  /** Why the last files were not attached; replaced by the next intake. */
+  const [notes, setNotes] = useState<string[]>([])
+  /** A dialog waiting for the person's answer: the secret-name warning (AC-3.2) or the provider notice (AC-3.1). */
+  const [ask, setAsk] = useState<{ kind: 'secret'; name: string; answer(ok: boolean): void } | { kind: 'notice'; providers: ProviderId[]; answer(ok: boolean): void } | null>(null)
   const [editingTitle, setEditingTitle] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   const stickToBottom = useRef(true)
@@ -49,29 +66,52 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
     if (el && stickToBottom.current) el.scrollTop = el.scrollHeight
   })
 
-  const addImages = async (files: File[]): Promise<void> => {
-    for (const file of files.filter((f) => f.type.startsWith('image/'))) {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
-        reader.onerror = () => reject(reader.error)
-        reader.readAsDataURL(file)
-      })
-      const name = file.name && file.name !== 'image.png' ? file.name : `imagen-${Date.now()}.png`
-      const path = await request<string>({ method: 'files.saveImage', name, base64 })
-      setImages((list) => [...list, imageAttachment(path, name)])
+  // A company agent's conversation takes no attachments (AC-1.11): no button, and a drop or paste is refused with a message.
+  const canAttach = canAttachTo(thread, settings.agents)
+
+  // Drop, paste and the picker all end here: each file is checked on its own (AC-1.4) and every refusal is shown (AC-2.1).
+  // Intakes run one after another: a second drop or paste waits for the first (and its dialog), then counts the chips it left.
+  const attachFiles = async (sources: IntakeSource[]): Promise<void> => {
+    if (!sources.length) return
+    if (running) {
+      setNotes([t('attach.running')])
+      return
     }
+    await intakes.current(async () => {
+      const result = await addToMessage(thread.id, sources, { canAttach, existing: filesRef.current, confirmSecret: (name) => new Promise<boolean>((answer) => setAsk({ kind: 'secret', name, answer })) })
+      changeFiles((list) => [...list, ...result.added])
+      setNotes(intakeMessages(t, result))
+    })
+  }
+
+  const removeFile = (item: MessageAttachment): void => {
+    changeFiles((list) => list.filter((f) => f.id !== item.id))
+    // the stored copy goes at once (AC-1.2); a failure leaves it for the 30-day sweep
+    void request({ method: 'attachments.remove', id: item.id }).catch(() => undefined)
+  }
+
+  /** True when every provider that will read the files was already told, or the person accepts the notice now (remembered per provider). */
+  const acknowledgeProviders = async (): Promise<boolean> => {
+    const readers = await request<ProviderId[]>({ method: 'attachments.readers', threadId: thread.id, images: files.some((f) => f.kind === 'image') })
+    const known = settings.attachments.noticeAcknowledged
+    const owed = unacknowledgedReaders(readers, known)
+    if (!owed.length) return true
+    if (!(await new Promise<boolean>((answer) => setAsk({ kind: 'notice', providers: owed, answer })))) return false
+    await props.onUpdateSettings({ attachments: { noticeAcknowledged: [...known, ...owed] } })
+    return true
   }
 
   const send = async (): Promise<void> => {
     const message = text.trim()
-    if (!message || running) return
-    setText('')
-    stickToBottom.current = true
+    if (!canSendMessage(message, files.length, running)) return
     try {
-      await request({ method: 'chat.send', threadId: thread.id, text: composeMessage(message, [...attachments, ...images]) })
+      // The first send that reaches a provider shows the notice; cancelling keeps the text and the chips (AC-3.1).
+      if (files.length && !(await acknowledgeProviders())) return
+      setText('')
+      stickToBottom.current = true
+      await request({ method: 'chat.send', threadId: thread.id, text: composeMessage(message, attachments), ...(files.length ? { attachments: files.map((f) => f.id) } : {}) })
       props.onClearAttachments?.()
-      setImages([])
+      changeFiles(() => [])
     } catch (err) {
       setText(message)
       alert((err as Error).message)
@@ -90,11 +130,11 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
       className={`chat${compact ? ' chat-compact' : ''}`}
       onDragOver={(e) => (e.dataTransfer.types.includes('Files') || (props.onAttach && e.dataTransfer.types.includes('text/x-alma-path'))) && e.preventDefault()}
       onDrop={(e) => {
-        // A picture dragged in from the computer is saved for the agent to look at.
-        const dropped = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))
+        // Files dragged in from the computer, of any type: each is checked and attached or refused with a reason.
+        const dropped = [...e.dataTransfer.files]
         if (dropped.length) {
           e.preventDefault()
-          void addImages(dropped)
+          void attachFiles(sourcesFromFiles(dropped))
           return
         }
         // A file dragged from the vault tree becomes an attachment.
@@ -191,7 +231,19 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
       </div>
 
       <footer className="composer">
-        {(attachments.length > 0 || images.length > 0) && (
+        {notes.length > 0 && (
+          <div className="attach-notes notice" role="status">
+            <ul>
+              {notes.map((note, i) => (
+                <li key={i}>{note}</li>
+              ))}
+            </ul>
+            <button type="button" className="icon-button" title={t('common.close')} onClick={() => setNotes([])}>
+              <Icon icon={X} size={12} />
+            </button>
+          </div>
+        )}
+        {(attachments.length > 0 || files.length > 0) && (
           <div className="attachments" aria-label={t('chat.attachments')}>
             {attachments.map((a) => (
               <span key={a.id} className="attachment" title={a.body.slice(0, 400)}>
@@ -202,15 +254,7 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
                 </button>
               </span>
             ))}
-            {images.map((a) => (
-              <span key={a.id} className="attachment" title={a.path}>
-                <Icon icon={ImageIcon} size={12} />
-                <span className="ellipsis">{a.label}</span>
-                <button className="icon-button" title={t('chat.removeAttachment')} onClick={() => setImages((list) => list.filter((i) => i.id !== a.id))}>
-                  <Icon icon={X} size={12} />
-                </button>
-              </span>
-            ))}
+            <AttachmentChips items={files} onRemove={removeFile} />
           </div>
         )}
         <textarea
@@ -218,7 +262,7 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
           placeholder={
             running
               ? t('chat.placeholder.running')
-              : attachments.length
+              : attachments.length || files.length
                 ? t('chat.placeholder.attached')
                 : compact
                   ? t('chat.placeholder.compact')
@@ -227,10 +271,11 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
           rows={compact ? 2 : 3}
           onChange={(e) => setText(e.target.value)}
           onPaste={(e) => {
-            const pasted = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'))
+            // Pictures and files copied in Explorer arrive as files; plain text pastes as usual.
+            const pasted = [...e.clipboardData.files]
             if (pasted.length) {
               e.preventDefault()
-              void addImages(pasted)
+              void attachFiles(sourcesFromFiles(pasted))
             }
           }}
           onKeyDown={(e) => {
@@ -241,6 +286,18 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
           }}
         />
         <div className="composer-bar">
+          {canAttach && (
+            <button
+              type="button"
+              className="ghost"
+              disabled={running}
+              title={t('attach.button')}
+              aria-label={t('attach.button')}
+              onClick={() => void pickSources().then(attachFiles)}
+            >
+              <Icon icon={Paperclip} size="sm" />
+            </button>
+          )}
           <label className="control" title={mode?.hint}>
             <span>{t('chat.approval')}</span>
             <select
@@ -271,12 +328,30 @@ export function ChatView({ thread, settings, drafts, running, approvals, error, 
               <Icon icon={Square} size="sm" /> {t('chat.stop')}
             </button>
           ) : (
-            <button className="primary" onClick={() => void send()} disabled={!text.trim()}>
+            <button className="primary" onClick={() => void send()} disabled={!canSendMessage(text, files.length, running)}>
               {t('chat.send')} <Icon icon={CornerDownLeft} size="sm" />
             </button>
           )}
         </div>
       </footer>
+      {ask?.kind === 'secret' && (
+        <SecretNameDialog
+          name={ask.name}
+          onChoose={(ok) => {
+            ask.answer(ok)
+            setAsk(null)
+          }}
+        />
+      )}
+      {ask?.kind === 'notice' && (
+        <ProviderNoticeDialog
+          providers={ask.providers}
+          onChoose={(ok) => {
+            ask.answer(ok)
+            setAsk(null)
+          }}
+        />
+      )}
     </main>
   )
 }

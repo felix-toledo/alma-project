@@ -7,6 +7,7 @@ import { generatedImagePath, reviewerReasonShown } from '../../../shared/cards'
 import { knowledgeNotePath, toolLabel, toolSummary } from '../lib/format'
 import { openNote } from '../vault/vaultLib'
 import type { Draft } from '../lib/state'
+import { CompanyProposalCard } from './CompanyProposalCard'
 // biome-ignore lint/suspicious/noImportCycles: tool cards render nested message lists (sub-agent runs)
 import { MessageList } from './MessageList'
 import { WorkspaceImage } from './WorkspaceImage'
@@ -148,7 +149,9 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
               </>
             )}
           </div>
-          {approval.preview ? (
+          {approval.preview?.company ? (
+            <CompanyProposalCard proposal={approval.preview.company} />
+          ) : approval.preview ? (
             <PostPreview
               image={approval.preview.imageDataUrl ? <img className="post-image" src={approval.preview.imageDataUrl} alt={t('toolcard.postImage')} /> : undefined}
               caption={approval.preview.caption}
@@ -161,7 +164,7 @@ export function ToolCard({ thread, use, result, state, approval, drafts, approva
             <button className="primary small" onClick={() => respond('allow')}>
               {use.name === 'instagram_publish' ? t('toolcard.publish') : t('toolcard.allow')}
             </button>
-            {approval.allowAlways && (
+            {approval.allowAlways && !approval.preview?.company && (
               <button className="ghost small" onClick={() => respond('always')} title={t('toolcard.alwaysTitle', { tool: toolLabel(use.name, t) })}>
                 {t('toolcard.always')}
               </button>

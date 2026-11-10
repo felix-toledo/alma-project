@@ -1,10 +1,11 @@
-// «Configuración → Casa»: turn the module on, install or connect the engine, choose who answers the rules and which model
-// looks at pictures, see the connected accounts. Everything is per computer: each person sets up what they have.
+// «Configuración → Casa»: turn the module on, install or connect the engine, choose who answers the rules, see the connected
+// accounts (the model that looks at pictures is chosen in Images now, spec 038). Everything is per computer: each person sets up what they have.
 import { Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { HomeEngineStatus, HomeEntry } from '../../../shared/home'
 import { PROVIDER_NAMES } from '../../../shared/defaults'
-import type { ProviderId, PublicSettings } from '../../../shared/types'
+import { resolveVision } from '../../../shared/images/vision'
+import type { PublicSettings } from '../../../shared/types'
 import { useT } from '../i18n/useT'
 import { onEvent, request } from '../lib/coordinator'
 import { Icon } from '../umbra/Icon'
@@ -14,11 +15,14 @@ interface Props {
   settings: PublicSettings
   onChange(patch: Partial<PublicSettings>): Promise<void>
   onSettingsReplaced(settings: PublicSettings): void
+  /** Opens the Images tab, where the model that looks at pictures is chosen (spec 038). */
+  onOpenImages?(): void
 }
 
-export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
+export function HomeSettings({ settings, onChange, onOpenImages }: Props): React.JSX.Element {
   const t = useT()
   const config = settings.home
+  const looks = resolveVision(settings, (p) => settings.providers[p].hasKey || settings.providers[p].fromEnv)
   const patch = (next: Partial<typeof config>): Promise<void> => onChange({ home: { ...config, ...next } })
   const [engine, setEngine] = useState<HomeEngineStatus | null>(null)
   const [entries, setEntries] = useState<HomeEntry[]>([])
@@ -200,15 +204,12 @@ export function HomeSettings({ settings, onChange }: Props): React.JSX.Element {
           <div className="field">
             <span>{t('home.think.vision')}</span>
             <div className="row">
-              <select value={config.visionProvider} onChange={(e) => void patch({ visionProvider: e.target.value, ...(e.target.value ? {} : { visionModel: '' }) })}>
-                <option value="">{t('home.think.visionDefault')}</option>
-                {(Object.keys(PROVIDER_NAMES) as ProviderId[]).map((provider) => (
-                  <option key={provider} value={provider}>
-                    {PROVIDER_NAMES[provider]}
-                  </option>
-                ))}
-              </select>
-              {config.visionProvider && <input className="grow" placeholder={t('home.think.visionModel')} defaultValue={config.visionModel} onBlur={(e) => void patch({ visionModel: e.target.value.trim() })} />}
+              <span className="small grow">{t('home.think.visionUsing', { provider: PROVIDER_NAMES[looks.provider], model: looks.model || (looks.via === 'chosen' ? t('home.think.visionAuto') : '—') })}</span>
+              {onOpenImages && (
+                <button className="ghost small" onClick={onOpenImages}>
+                  {t('home.think.visionOpen')}
+                </button>
+              )}
             </div>
             <span className="muted small">{t('home.think.visionNote')}</span>
           </div>

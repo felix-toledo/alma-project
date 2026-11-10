@@ -1,8 +1,9 @@
 // Text main shows outside the window. Pure on purpose (no electron), so it is tested; the strings live in the dictionaries.
+import { PROVIDER_NAMES } from '../shared/defaults'
 import type { Language } from '../shared/i18n/language'
 import { type MessageKey, translate } from '../shared/i18n/messages'
 import type { RemoteConfirmation } from '../shared/remote/confirmations'
-import type { Settings } from '../shared/types'
+import type { ProviderId, Settings } from '../shared/types'
 
 export function trayMenu(language: Language): { open: string; quit: string; tooltip: string; remoteOff: string } {
   return {
@@ -49,14 +50,14 @@ export function remoteDialog(
   switch (confirmation.kind) {
     case 'enable': {
       const detail = translate(language, 'main.remote.enableDetail')
-      return {
-        ...base,
-        message: translate(language, 'main.remote.enable'),
-        detail: confirmation.dormant.length
-          ? `${detail}\n${translate(language, 'main.remote.dormant', { names: confirmation.dormant.join(', ') })}`
-          : detail
-      }
+      const lines = [detail]
+      if (confirmation.dormant.length) lines.push(translate(language, 'main.remote.dormant', { names: confirmation.dormant.join(', ') }))
+      // The relay is named at every turn-on while it is the selected transport (spec 027 AC-1.13).
+      if (confirmation.relay) lines.push(translate(language, 'main.remote.relayOn'))
+      return { ...base, message: translate(language, 'main.remote.enable'), detail: lines.join('\n') }
     }
+    case 'relay':
+      return { ...base, message: translate(language, 'main.remote.relay'), detail: '' }
     case 'scope':
       return {
         ...base,
@@ -67,6 +68,8 @@ export function remoteDialog(
       return { ...base, message: translate(language, 'main.remote.sensitive'), detail: '' }
     case 'continue':
       return { ...base, message: translate(language, 'main.remote.continue'), detail: '' }
+    case 'attachments':
+      return { ...base, message: translate(language, 'main.remote.attachments', { providers: confirmation.providers.map((p) => PROVIDER_NAMES[p]).join(', ') }), detail: '' }
     case 'unexclude':
       return { ...base, message: translate(language, 'main.remote.unexclude', { folder: confirmation.folder }), detail: '' }
     case 'camera':
@@ -84,6 +87,11 @@ export function remoteDialog(
     case 'download':
       return { ...base, message: translate(language, 'main.remote.download'), detail: confirmation.url }
   }
+}
+
+/** The providers an allowed Send files dialog covers: they join the desktop notice list (spec 031 AC-1.4). */
+export function acknowledgedProviders(confirmations: readonly RemoteConfirmation[]): ProviderId[] {
+  return confirmations.flatMap((c) => (c.kind === 'attachments' ? c.providers : []))
 }
 
 /**
@@ -111,6 +119,11 @@ export const REMOTE_OPEN_URLS = {
 /** Titles of the Instagram windows the person watches. */
 export function instagramTitle(language: Language, kind: 'connect' | 'test' | 'publishing'): string {
   return translate(language, `main.instagram.${kind}`)
+}
+
+/** Title of the native "attach files" dialog (spec 030 AC-1.8). */
+export function attachPickTitle(language: Language): string {
+  return translate(language, 'main.attach.pickTitle')
 }
 
 export type MainError = 'rejected-origin' | 'cancelled' | 'unknown-provider' | 'unknown-company' | 'path-missing' | 'no-programs' | 'invalid-language' | 'unknown-target' | 'missing-data'

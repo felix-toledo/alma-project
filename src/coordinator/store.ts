@@ -19,7 +19,9 @@ export class ThreadStore {
 
   constructor(
     dataDir: string,
-    private language: () => Language = () => 'es'
+    private language: () => Language = () => 'es',
+    /** Runs before a conversation goes: its attachment files are deleted with it (spec 030 AC-5.4). */
+    private onDelete?: (id: string) => void
   ) {
     this.dir = join(dataDir, 'threads')
     mkdirSync(this.dir, { recursive: true })
@@ -66,10 +68,27 @@ export class ThreadStore {
   }
 
   delete(id: string): void {
+    // files first: a crash in between leaves a conversation whose chips say "removed", never files nobody can delete
+    try {
+      this.onDelete?.(id)
+    } catch (error) {
+      console.error('[store] could not delete the attachments of a conversation:', error instanceof Error ? error.name : 'error')
+    }
     clearTimeout(this.timers.get(id))
     this.timers.delete(id)
     this.threads.delete(id)
     rmSync(this.file(id), { force: true })
+  }
+
+  /**
+   * The conversation was opened (spec 030 BR-16). Unlike `save` it leaves `updatedAt` alone: retention and the sidebar
+   * order key on it, and opening a conversation must neither extend one nor reorder the other.
+   */
+  markOpened(id: string, at: number): void {
+    const thread = this.threads.get(id)
+    if (!thread) return
+    thread.lastOpenedAt = at
+    this.schedule(id)
   }
 
   /** Debounced write; agent runs call this after every message. */
@@ -77,6 +96,10 @@ export class ThreadStore {
     const thread = this.threads.get(id)
     if (!thread) return
     thread.updatedAt = Date.now()
+    this.schedule(id)
+  }
+
+  private schedule(id: string): void {
     clearTimeout(this.timers.get(id))
     this.timers.set(id, setTimeout(() => this.flush(id), 300))
   }

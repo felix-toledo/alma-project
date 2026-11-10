@@ -190,6 +190,8 @@ function applyEvent(state: AppState, event: LiveEvent): AppState {
     case 'remote.pairing':
     case 'remote.devices':
     case 'remote.tested':
+    // The dream card in settings keeps its own state.
+    case 'dream.status':
       return state
   }
 }

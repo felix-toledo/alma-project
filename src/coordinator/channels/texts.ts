@@ -1,19 +1,25 @@
 // What the code itself says on Telegram and WhatsApp (the agent's own answers follow the person's language, not
 // this). Pure and in the app language of the moment, so both channels share it and the tests can read it.
+import { APPROVAL_INPUT_LIMIT, canAnswerFrom } from '../../shared/companyAuthoring'
 import type { Language } from '../../shared/i18n/language'
 import { translate } from '../../shared/i18n/messages'
 import type { PendingApproval } from '../../shared/types'
 
-const INPUT_LIMIT = 1500
+export { APPROVAL_INPUT_LIMIT }
 
-/** The approval question as plain text; WhatsApp adds how to answer it. */
+/** The approval question as plain text; WhatsApp adds how to answer it. A company proposal that does not fit is not cut: it is left to the desktop (spec 029 BR-23). */
 export function approvalPrompt(language: Language, approval: PendingApproval, options: { askYesNo?: boolean } = {}): string {
   const input = JSON.stringify(approval.input, null, 1)
+  const shown = !canAnswerFrom('telegram', approval, APPROVAL_INPUT_LIMIT)
+    ? translate(language, 'chan.seeOnDesktop')
+    : input.length > APPROVAL_INPUT_LIMIT
+      ? `${input.slice(0, APPROVAL_INPUT_LIMIT)}…`
+      : input
   return [
     translate(language, approval.flagged ? 'chan.flagged' : 'chan.allowQuestion'),
     approval.reason ?? '',
     translate(language, 'chan.tool', { name: approval.toolName }),
-    input.length > INPUT_LIMIT ? `${input.slice(0, INPUT_LIMIT)}…` : input,
+    shown,
     options.askYesNo ? translate(language, 'wa.yesNo') : ''
   ]
     .filter(Boolean)

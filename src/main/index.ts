@@ -8,6 +8,7 @@ import {
   MessageChannelMain,
   net,
   Notification,
+  powerMonitor,
   protocol,
   session,
   shell,
@@ -30,11 +31,15 @@ import type {
   Settings
 } from '../shared/types'
 import { audit, initAudit } from '../shared/audit'
+import { acknowledgeNotice, threadReaders } from '../shared/attach/readers'
+import { IDLE_POLL_MS } from '../shared/presence'
 import { planRemoteChange, stripRemotePatch } from '../shared/remote/confirmations'
+import { Grants, inspectGranted, openableAttachment, pickPaths, readGranted, touchesAttachmentStore } from './attach'
 import { newCommands } from './guard'
 import { connectInstagram, disconnectInstagram, instagramStatus, publishToInstagram } from './instagram'
-import { hostConfirmation, mainError, REMOTE_OPEN_URLS, remoteDialog, securityDialog, trayMenu, trayState } from './messages'
+import { acknowledgedProviders, attachPickTitle, hostConfirmation, mainError, REMOTE_OPEN_URLS, remoteDialog, securityDialog, trayMenu, trayState } from './messages'
 import { movedExclusions } from './remote-exclusions'
+import { type TrackerInput, type TrackerState, trackPresence } from './presence'
 import { renderSvgToPng } from './render'
 import { decrypt, encrypt, SettingsStore } from './settings'
 
@@ -73,9 +78,30 @@ let tray: Tray | null = null
 let quitting = false
 /** Paired device names, owned by the coordinator; the turn-on dialog lists them (spec 026 AC-1.11). */
 let dormantDeviceNames: string[] = []
+/** The paths the window may ask `attach:inspect` and `attach:read` about (spec 030 AC-1.8). */
+const attachGrants = new Grants()
 
 function postToCoordinator(message: ParentToCoordinator, transfer?: Electron.MessagePortMain[]): void {
   coordinator?.postMessage(message, transfer)
+}
+
+let presence: TrackerState = { locked: false }
+
+/** Presence signals (spec 034): what powerMonitor sees goes to the coordinator, which decides. Nothing is kept here. */
+function trackAndPost(input: TrackerInput): void {
+  const step = trackPresence(presence, input)
+  presence = step.state
+  // Dropped when there is no coordinator: never queued nor replayed (AC-1.4).
+  for (const event of step.events) postToCoordinator({ type: 'presence', event })
+}
+
+function watchPresence(): void {
+  const idleSec = (): number => powerMonitor.getSystemIdleTime()
+  powerMonitor.on('lock-screen', () => trackAndPost({ type: 'lock', now: Date.now(), idleSec: idleSec() }))
+  powerMonitor.on('suspend', () => trackAndPost({ type: 'suspend', now: Date.now(), idleSec: idleSec() }))
+  powerMonitor.on('unlock-screen', () => trackAndPost({ type: 'unlock', now: Date.now() }))
+  powerMonitor.on('resume', () => trackAndPost({ type: 'resume', now: Date.now() }))
+  setInterval(() => trackAndPost({ type: 'poll', now: Date.now(), idleSec: idleSec() }), IDLE_POLL_MS)
 }
 
 function pushSettings(updated: Settings): void {
@@ -107,8 +133,11 @@ function updateSettings(patch: Partial<PublicSettings>): PublicSettings {
   }
   // Remote access widenings get one native confirmation each; a refusal saves nothing (spec 026 BR-29, AC-1.4).
   let remote: RemoteSettings | undefined
+  let acknowledged: Settings['attachments'] | undefined
   if (patch.remote) {
-    const planned = planRemoteChange(settings.get().remote, { ...settings.get().remote, ...patch.remote }, dormantDeviceNames, { activeVault: settings.get().activeVault })
+    // The providers the Send files dialog names are the ones that read the remote chat's agent (spec 031 AC-1.4).
+    const attachReaders = threadReaders(settings.get(), { agentId: settings.get().remote.agentId }, true, process.env)
+    const planned = planRemoteChange(settings.get().remote, { ...settings.get().remote, ...patch.remote }, dormantDeviceNames, { activeVault: settings.get().activeVault, attachReaders })
     for (const confirmation of planned.confirmations) {
       const text = remoteDialog(settings.get().language, confirmation)
       const answer = dialog.showMessageBoxSync(mainWindow!, {
@@ -126,8 +155,11 @@ function updateSettings(patch: Partial<PublicSettings>): PublicSettings {
       }
     }
     remote = planned.next
+    // Allow was answered for every confirmation: the providers it named count as acknowledged (Cancel never reaches here).
+    const owed = acknowledgedProviders(planned.confirmations)
+    if (owed.length) acknowledged = acknowledgeNotice(settings.get().attachments, owed)
   }
-  const effective = remote ? { ...patch, remote } : patch
+  const effective = { ...patch, ...(remote ? { remote } : {}), ...(acknowledged ? { attachments: acknowledged } : {}) }
   const changed = changedKeys(effective as Record<string, unknown>)
   pushSettings(settings.update(effective))
   // The ones that widen what agents may do get their new value in the trail; the rest, just the name.
@@ -154,6 +186,17 @@ function applyVoiceHotkey(current: Settings): void {
   }
 }
 
+/** The greeting conversation the window lands in at its next opening, held until then (spec 033 BR-29, plan G7). */
+let landing: string | null = null
+
+/** An opening is the window becoming visible from hidden, minimized or not created; a window already visible keeps it pending. */
+function land(): void {
+  if (!landing || !mainWindow) return
+  mainWindow.webContents.send('app:openThread', landing)
+  postToCoordinator({ type: 'landing.used', threadId: landing })
+  landing = null
+}
+
 function showWindow(): void {
   if (!mainWindow) createWindow()
   mainWindow!.show()
@@ -171,6 +214,8 @@ function notify(title: string, body: string, threadId?: string, always = false):
   if (!Notification.isSupported()) return
   const notification = new Notification({ title, body, icon: join(RESOURCES, 'icon.png') })
   notification.on('click', () => {
+    // Clicking the greeting's notification is its landing too, even on a window that was already visible.
+    if (threadId && threadId === landing) land()
     showWindow()
     if (threadId) mainWindow?.webContents.send('app:openThread', threadId)
   })
@@ -236,8 +281,24 @@ async function handleHostRequest(request: HostRequest): Promise<{ ok: boolean; m
     }
     case 'net.online':
       return { ok: net.isOnline(), message: '' }
+    // The coordinator already checked the record and the extension; main re-checks the real file (spec 030 AC-7.5).
+    case 'attachment.open': {
+      const target = openableAttachment(request.path, attachmentRoot())
+      if (!target) {
+        audit({ action: 'attachment.open', actor: 'user', outcome: 'denied' })
+        return { ok: false, message: mainError(settings.get().language, 'no-programs') }
+      }
+      const failure = await shell.openPath(target)
+      audit({ action: 'attachment.open', actor: 'user', outcome: failure ? 'error' : 'ok' })
+      return { ok: !failure, message: failure }
+    }
   }
 }
+
+/** Where the coordinator keeps chat attachments: `<userData>/inbox/attachments`. */
+const attachmentRoot = (): string => join(app.getPath('userData'), 'inbox', 'attachments')
+
+const defaultVaultPath = (): string => join(app.getPath('documents'), 'Alma', 'Vault')
 
 function isInside(root: string, target: string): boolean {
   const rel = relative(resolve(root), resolve(target))
@@ -276,7 +337,7 @@ function startCoordinator(): void {
     serviceName: 'Alma Coordinator',
     stdio: 'inherit'
   })
-  postToCoordinator({ type: 'init', dataDir: app.getPath('userData'), settings: settings.get() })
+  postToCoordinator({ type: 'init', dataDir: app.getPath('userData'), settings: settings.get(), packaged: app.isPackaged, defaultVaultPath: defaultVaultPath() })
   coordinator.on('message', (message: CoordinatorToParent) => {
     switch (message.type) {
       case 'alwaysAllow': {
@@ -302,6 +363,9 @@ function startCoordinator(): void {
         break
       case 'remote.devices':
         dormantDeviceNames = message.names
+        break
+      case 'landing':
+        landing = message.threadId
         break
     }
   })
@@ -339,6 +403,9 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     if (!startHidden) mainWindow?.show()
   })
+  // ponytail: a landing the coordinator reports after the first show at start waits for the next opening; a startup flag if that race shows up.
+  mainWindow.on('show', land)
+  mainWindow.on('restore', land)
   // With the tray enabled, closing the window keeps the app (and its routines) running.
   mainWindow.on('close', (event) => {
     if (!quitting && settings.get().background.runInTray) {
@@ -490,6 +557,20 @@ function registerIpc(): void {
     return disconnectInstagram()
   })
 
+  // Chat attachments (spec 030): the page reads only paths that came from a real File or the dialog, once each.
+  ipcMain.on('attach:grant', (event, path: unknown) => {
+    if (isTrusted(event) && typeof path === 'string') attachGrants.grant(path)
+  })
+  handle('attach:pick', () =>
+    pickPaths(async () => {
+      const options = { title: attachPickTitle(settings.get().language), properties: ['openFile' as const, 'multiSelections' as const] }
+      const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options)
+      return result.canceled ? [] : result.filePaths
+    }, attachGrants)
+  )
+  handle('attach:inspect', (_event, path: unknown) => inspectGranted(path as string, attachGrants))
+  handle('attach:read', (_event, path: unknown) => readGranted(path as string, attachGrants))
+
   handle('dialog:pickFolder', async (): Promise<string | null> => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'] })
     return result.canceled ? null : result.filePaths[0]
@@ -498,6 +579,12 @@ function registerIpc(): void {
   // Opening a file hands it to the OS, which would run a program: only folders and documents.
   handle('shell:openPath', (_event, path: string): string | Promise<string> => {
     if (typeof path !== 'string' || !isAbsolute(path) || !existsSync(path)) return mainError(settings.get().language, 'path-missing')
+    // Stored attachments open only through attachments.open, which checks the type (spec 030 AC-7.5).
+    if (touchesAttachmentStore(path, attachmentRoot())) {
+      // no file name: an attachment is called what the person called it, and the trail never carries that
+      audit({ action: 'shell.openPath', actor: 'user', outcome: 'denied' })
+      return mainError(settings.get().language, 'no-programs')
+    }
     if (statSync(path).isFile() && EXECUTABLE.test(path)) {
       audit({ action: 'shell.openPath', actor: 'user', target: basename(path), outcome: 'denied' })
       return mainError(settings.get().language, 'no-programs')
@@ -505,7 +592,7 @@ function registerIpc(): void {
     return shell.openPath(path)
   })
 
-  handle('vault:defaultPath', () => join(app.getPath('documents'), 'Alma', 'Vault'))
+  handle('vault:defaultPath', defaultVaultPath)
 
   // A folder renamed in Alma's own vault view keeps its remote exclusion: no dialog, only existing entries move (spec 028 AC-1.11).
   handle('remote:moveExclusions', (_event, args: unknown): void => {
@@ -534,6 +621,9 @@ app.whenReady().then(() => {
   registerIpc()
   registerVaultProtocol()
   startCoordinator()
+  // Alma started; a later restart of a crashed coordinator is not (plan 034 §9.1).
+  postToCoordinator({ type: 'presence', event: { kind: 'start' } })
+  watchPresence()
   createWindow()
   applyBackgroundSettings(settings.get())
   applyVoiceHotkey(settings.get())

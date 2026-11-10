@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, watch, type FSWatcher } from 'node:fs'
 import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, sep } from 'node:path'
+import { applyChanges, type Change, MAX_MEMORY_CHARS } from '../../shared/dream/apply'
 import type { Language } from '../../shared/i18n/language'
 import { isOwnNote, namesOf, resolveName, type NameKey } from '../../shared/i18n/names'
 import type { KnowledgeOverview, KnowledgeStatus, SearchHit, VaultEntry } from '../../shared/types'
@@ -18,6 +19,10 @@ export const ALMA_DIR = 'Alma'
 const inAlma = (key: NameKey): Record<Language, string> => ({ es: `${ALMA_DIR}/${namesOf(key).es}`, en: `${ALMA_DIR}/${namesOf(key).en}` })
 export const MEMORY_FILES = inAlma('names.memoryFile')
 export const KNOWLEDGE_DIRS = inAlma('names.knowledgeDir')
+/** The dream journal folder (spec 033 BR-16). */
+export const DREAM_DIRS = inAlma('names.dreamsDir')
+
+export type ApplyResult = ReturnType<typeof applyChanges>
 /** The Spanish names: what a vault with neither one gets under `es`. */
 export const MEMORY_FILE = MEMORY_FILES.es
 export const KNOWLEDGE_DIR = KNOWLEDGE_DIRS.es
@@ -30,7 +35,6 @@ const RRF_K = 60
 /** bge-m3 cosine similarity: unrelated Spanish text sits around 0.30–0.35, a real match above ~0.55. */
 const RECALL_MIN_SIMILARITY = 0.45
 const DUPLICATE_SIMILARITY = 0.9
-const MAX_MEMORY_CHARS = 4000
 
 
 /** FTS5 expression for free text: every meaningful word as a quoted prefix, OR-ed so BM25 ranks partial matches. */
@@ -86,6 +90,8 @@ export class KnowledgeBase {
   private rescan = false
   private pumping = false
   private closed = false
+  /** remember, forget, editor saves of the memory file and the dream write it one at a time (spec 033 AC-6.5). */
+  private memoryQueue: Promise<unknown> = Promise.resolve()
 
   constructor(private options: Options) {
     this.root = options.root
@@ -276,7 +282,11 @@ export class KnowledgeBase {
   async recall(request: string, limit = 5): Promise<{ memories: string[]; fragments: SearchHit[] }> {
     const memories = await this.memories()
     if (!request.trim()) return { memories, fragments: [] }
-    const fused = (await this.rawSearch(request, 30)).filter((hit) => !this.isMemoryFile(hit.path))
+    // The dream journal holds hunches: never injected unasked, still found by search and read (spec 033 BR-5).
+    // Either language's folder, in any case: Windows names `alma/sueños` the same folder as `Alma/Sueños`.
+    const journal = [`${DREAM_DIRS.es}/`, `${DREAM_DIRS.en}/`].map((dir) => dir.toLowerCase())
+    const inJournal = (path: string): boolean => journal.some((dir) => path.toLowerCase().startsWith(dir))
+    const fused = (await this.rawSearch(request, 30)).filter((hit) => !this.isMemoryFile(hit.path) && !inJournal(hit.path))
     const hasVectors = fused.some((hit) => hit.similarity !== undefined)
     const relevant = fused.filter((hit) =>
       hasVectors ? (hit.similarity ?? 0) >= RECALL_MIN_SIMILARITY : (hit.keywordRank ?? Infinity) < limit
@@ -334,7 +344,17 @@ export class KnowledgeBase {
     return { bytes: await readFile(absolute), mtime: Math.floor(info.mtimeMs) }
   }
 
-  async write(path: string, content: string): Promise<{ mtime: number }> {
+  private serialized<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.memoryQueue.then(task)
+    this.memoryQueue = run.catch(() => {})
+    return run
+  }
+
+  write(path: string, content: string): Promise<{ mtime: number }> {
+    return this.isMemoryFile(path) ? this.serialized(() => this.writeNow(path, content)) : this.writeNow(path, content)
+  }
+
+  private async writeNow(path: string, content: string): Promise<{ mtime: number }> {
     const absolute = this.resolve(path)
     await mkdir(dirname(absolute), { recursive: true })
     await writeFile(absolute, content, 'utf8')
@@ -384,10 +404,14 @@ export class KnowledgeBase {
     const current = await readFile(absolute, 'utf8').catch(() => '')
     // Keep whatever the user wrote around the list; only the bullet lines are rewritten.
     const prose = current ? current.split(/\r?\n/).filter((line) => !/^\s*[-*]\s+/.test(line)).join('\n').trimEnd() : memoryHeader(this.language).trimEnd()
-    await this.write(file, `${prose}\n\n${lines.map((line) => `- ${line}`).join('\n')}\n`)
+    await this.writeNow(file, `${prose}\n\n${lines.map((line) => `- ${line}`).join('\n')}\n`)
   }
 
-  async remember(text: string, ctx: Say = {}): Promise<string> {
+  remember(text: string, ctx: Say = {}): Promise<string> {
+    return this.serialized(() => this.rememberNow(text, ctx))
+  }
+
+  private async rememberNow(text: string, ctx: Say): Promise<string> {
     const line = text.replace(/\s+/g, ' ').trim()
     if (!line) throw new ToolError('tool.kb.emptyMemory')
     const memories = await this.memories()
@@ -400,7 +424,11 @@ export class KnowledgeBase {
     return toolText(ctx, 'tool.kb.remembered', { line, file: this.memoryFile() })
   }
 
-  async forget(text: string, ctx: Say = {}): Promise<string> {
+  forget(text: string, ctx: Say = {}): Promise<string> {
+    return this.serialized(() => this.forgetNow(text, ctx))
+  }
+
+  private async forgetNow(text: string, ctx: Say): Promise<string> {
     const memories = await this.memories()
     const wanted = normalize(text)
     let matches = memories.filter((m) => normalize(m) === wanted)
@@ -409,6 +437,42 @@ export class KnowledgeBase {
     if (matches.length > 1) throw new ToolError('tool.kb.manyMemoryMatches', { count: matches.length, data: matches.map((m) => `- ${m}`).join('\n') })
     await this.writeMemories(memories.filter((m) => m !== matches[0]))
     return toolText(ctx, 'tool.kb.forgotten', { line: matches[0] })
+  }
+
+  /**
+   * The dream's changes against the file as it is now, in the memory writer's turn (spec 033 BR-20). The journal is
+   * written first, so no memory changes without its record; a failed journal leaves the memory file untouched.
+   */
+  applyDreamChanges(snapshot: string[], changes: Change[], journal: (result: ApplyResult) => Promise<void>): Promise<ApplyResult> {
+    return this.serialized(async () => {
+      const result = applyChanges(await this.memories(), snapshot, changes)
+      await journal(result)
+      if (result.applied.length) await this.writeMemories(result.lines)
+      return result
+    })
+  }
+
+  /** The journal folder in use: an existing one under either language's name wins (BR-16, ADR 0019). */
+  journalFolder(): string {
+    return this.nameInUse(DREAM_DIRS)
+  }
+
+  /**
+   * Creates the night's note, or appends one more section to a file already there, changing nothing in it (AC-5.7).
+   * `signal`: the dream's; aborted before the write, nothing is written (AC-1.4).
+   */
+  async writeJournal(date: string, firstContent: string, section: string, signal?: AbortSignal): Promise<string> {
+    const path = `${this.journalFolder()}/${date}.md`
+    const existing = await readFile(join(this.root, ...path.split('/')), 'utf8').catch(() => null)
+    signal?.throwIfAborted()
+    if (existing === null) {
+      await this.write(path, firstContent)
+      return path
+    }
+    const eol = existing.includes('\r\n') ? '\r\n' : '\n'
+    const end = existing === '' || existing.endsWith('\n') ? '' : eol
+    await this.write(path, `${existing}${end}${eol}${section.replace(/\r?\n/g, eol)}`)
+    return path
   }
 
   /**

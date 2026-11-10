@@ -88,7 +88,7 @@ describe('tool audit trail (spec 026 T22)', () => {
     const original = events.push.bind(events)
     events.push = (...items: LiveEvent[]) => {
       for (const item of items) {
-        if (item.type === 'approval.request') queueMicrotask(() => broker.respond(item.approval.approvalId, 'allow'))
+        if (item.type === 'approval.request') queueMicrotask(() => broker.respond(item.approval.approvalId, 'allow', 'desktop'))
       }
       return original(...items)
     }

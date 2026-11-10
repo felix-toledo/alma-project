@@ -14,9 +14,6 @@ export interface HomeSettings {
   mirrored: boolean
   /** Agent that answers the rules that need judgment; empty = the default agent. */
   agentId: string
-  /** Model that looks at pictures (plans, cameras). Empty = the model of that agent. */
-  visionProvider: string
-  visionModel: string
 }
 
 export type HomeEngineState = 'off' | 'missing' | 'installing' | 'starting' | 'ready' | 'error' | 'unsupported'

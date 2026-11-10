@@ -120,10 +120,10 @@ describe('AC-3.6 sort sites', () => {
     }
   })
 
-  it('AC-3.6 sort sites leaves no localeCompare but the two version sorts', async () => {
+  it('AC-3.6 sort sites leaves no localeCompare but the provider version sort', async () => {
     const { readSources } = await import('./support/arch')
     const sources = readSources(process.cwd())
     const found = Object.keys(sources).filter((file) => sources[file].includes('localeCompare'))
-    expect(found.sort()).toEqual(['src/coordinator/images.ts', 'src/coordinator/providers/xai.ts'])
+    expect(found.sort()).toEqual(['src/coordinator/providers/xai.ts'])
   })
 })

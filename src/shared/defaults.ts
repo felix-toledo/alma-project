@@ -1,3 +1,4 @@
+import { DREAM_CAP } from './dream/settings'
 import { defaultTexts } from './i18n/defaultTexts'
 import { defaultRemote } from './remote/settings'
 import type { Language } from './i18n/language'
@@ -118,11 +119,13 @@ export function defaultSettings(language: Language = 'es'): Settings {
     alwaysAllowTools: [],
     mcpServers: {},
     defaultWorkspace: '',
-    images: { provider: 'meta', model: '' },
+    images: { provider: 'meta', model: '', vision: { provider: '', model: '' } },
     instagram: { testMode: true },
     routines: [],
     background: { runInTray: true, launchAtLogin: false },
     privacy: { threadRetentionDays: 0 },
+    attachments: { noticeAcknowledged: [] },
+    dream: { enabled: false, capUsd: DREAM_CAP.default },
     vaults: [],
     activeVault: '',
     telegram: { enabled: true, allowedUsers: [], agentId: 'general', chatId: null, threadId: null },
@@ -150,7 +153,7 @@ export function defaultSettings(language: Language = 'es'): Settings {
     remote: defaultRemote(),
     companies: [],
     companySecrets: {},
-    home: { enabled: false, mode: 'managed', externalUrl: '', mirrored: false, agentId: '', visionProvider: '', visionModel: '' }
+    home: { enabled: false, mode: 'managed', externalUrl: '', mirrored: false, agentId: '' }
   }
 }
 
@@ -179,7 +182,7 @@ export function applyMetaDefault(settings: Settings, hasMetaKey: boolean): Setti
       defaults.has(a.id) && !a.companyId && a.provider === 'anthropic' && a.model === DEFAULT_CLAUDE_MODEL ? { ...a, provider: 'meta', model: DEFAULT_META_MODEL } : a
     ),
     autoReview: autoReview.provider === 'anthropic' && autoReview.model === DEFAULT_CLAUDE_MODEL ? { ...autoReview, provider: 'meta', model: DEFAULT_META_MODEL } : autoReview,
-    images: images.provider === 'xai' && !images.model ? { provider: 'meta', model: '' } : images
+    images: images.provider === 'xai' && !images.model ? { ...images, provider: 'meta', model: '' } : images
   }
 }
 

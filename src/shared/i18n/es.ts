@@ -1,9 +1,11 @@
 import { ambience } from './es/ambience'
+import { attach } from './es/attach'
 import { channels } from './es/channels'
 import { chat } from './es/chat'
 import { companies } from './es/companies'
 import { common } from './es/common'
 import { coordinator } from './es/coordinator'
+import { dream } from './es/dream'
 import { format } from './es/format'
 import { general } from './es/general'
 import { home } from './es/home'
@@ -19,4 +21,4 @@ import { remote } from './es/remote'
 import type { Message } from './messages'
 
 // es.ts is the source of the keys: `en` must define exactly the same ones.
-export const es = { ...ambience, ...channels, ...chat, ...companies, ...common, ...coordinator, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice, ...remote } satisfies Record<string, Message>
+export const es = { ...ambience, ...attach, ...channels, ...chat, ...companies, ...common, ...coordinator, ...dream, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice, ...remote } satisfies Record<string, Message>

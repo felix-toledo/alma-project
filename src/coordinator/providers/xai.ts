@@ -205,6 +205,8 @@ export class XaiProvider implements Provider {
         messages: toOpenAiMessages(request.system, request.messages, this.id === 'deepseek' ? 'deepseek' : undefined),
         // DeepSeek maps every effort level (low…max) onto its own; xAI's chat models don't take one.
         ...(this.id === 'deepseek' ? { reasoning_effort: request.effort } : {}),
+        // DeepSeek documents max_tokens (its reasoning included); the rest take OpenAI's max_completion_tokens.
+        ...(request.maxOutputTokens ? (this.id === 'deepseek' ? { max_tokens: request.maxOutputTokens } : { max_completion_tokens: request.maxOutputTokens }) : {}),
         ...(request.tools.length
           ? {
               tools: request.tools.map((tool) => ({

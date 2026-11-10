@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
+import { planSeeModelSave, planSeeProvider } from '../../../shared/attach/readers'
 import { BUILTIN_TOOLS, CLAUDE_MODELS, emailServersFor, looksLikeApiKey, PROVIDER_NAMES, READ_ONLY_TOOLS } from '../../../shared/defaults'
+import { hasSeeRule, SEE_PROVIDERS, seeCandidates } from '../../../shared/images/models'
+import { resolveVision } from '../../../shared/images/vision'
 import { importMcpJson } from '../../../shared/mcp-import'
+import type { DreamFailure } from '../../../shared/dream/schedule'
+import { acceptDreamPatch, DREAM_CAP, type DreamStatusView } from '../../../shared/dream/settings'
+import { formatDateTime, formatUsd } from '../../../shared/i18n/format'
 import type {
   AgentProfile,
   Effort,
@@ -21,10 +27,11 @@ import type {
 import { useLanguage, useT, type T } from '../i18n/useT'
 import { enrollmentPhrases, kokoroVoices, windowsVoices } from '../../../shared/voices'
 import { recordFor } from '../voice/audio'
-import { request } from '../lib/coordinator'
+import { onEvent, request } from '../lib/coordinator'
 import { approvalModes, toolLabel } from '../lib/format'
 import { Play, RefreshCw, X } from 'lucide-react'
 import { AmbienceSettings } from '../umbra/AmbienceControls'
+import { SeeProviderDialog } from './AttachDialogs'
 import { Icon } from '../umbra/Icon'
 import { TeamsSettings } from '../companies/TeamsSettings'
 import { HomeSettings } from '../home/HomeSettings'
@@ -79,7 +86,7 @@ export function SettingsDialog(props: Props): React.JSX.Element {
             {tab === 'agents' && <AgentsTab {...props} />}
             {tab === 'teams' && <TeamsSettings settings={props.settings} onChange={props.onChange} onSettingsReplaced={props.onSettingsReplaced} />}
             {tab === 'approvals' && <ApprovalsTab {...props} />}
-            {tab === 'home' && <HomeSettings settings={props.settings} onChange={props.onChange} onSettingsReplaced={props.onSettingsReplaced} />}
+            {tab === 'home' && <HomeSettings settings={props.settings} onChange={props.onChange} onSettingsReplaced={props.onSettingsReplaced} onOpenImages={() => setTab('images')} />}
             {tab === 'remote' && <RemoteSettings settings={props.settings} onChange={props.onChange} onSettingsReplaced={props.onSettingsReplaced} />}
             {tab === 'mcp' && <McpTab {...props} />}
             {tab === 'images' && <ImagesTab {...props} />}
@@ -780,8 +787,84 @@ function GeneralTab({ settings, onChange }: Props): React.JSX.Element {
           {t('general.background.login')}
         </label>
       </div>
+      <DreamCard settings={settings} onChange={onChange} />
       <PrivacyCard settings={settings} onChange={onChange} />
     </>
+  )
+}
+
+/** The nightly dream (spec 033): the switch, the nightly cap, the model it would use and the status line. */
+function DreamCard({ settings, onChange }: Pick<Props, 'settings' | 'onChange'>): React.JSX.Element {
+  const t = useT()
+  const language = useLanguage()
+  const [status, setStatus] = useState<DreamStatusView | null>(null)
+  const [draft, setDraft] = useState(String(settings.dream.capUsd))
+  const [invalid, setInvalid] = useState(false)
+  const usd = (amount: number): string => formatUsd(language, amount)
+  const date = (at: number): string => formatDateTime(language, at, 'short')
+  useEffect(() => setDraft(String(settings.dream.capUsd)), [settings.dream.capUsd])
+  // The named model follows the keys (AC-1.2), so a change of providers asks again.
+  useEffect(() => {
+    // Unanswered (the coordinator restarting): no line until the next `dream.status` event.
+    void request<DreamStatusView>({ method: 'dream.status' })
+      .then(setStatus)
+      .catch(() => setStatus(null))
+    return onEvent((event) => {
+      if (event.type === 'dream.status') setStatus(event.status)
+    })
+  }, [settings.providers, settings.dream])
+  const saveCap = (): void => {
+    const value = Number(draft)
+    const next = acceptDreamPatch(settings.dream, { capUsd: value })
+    setInvalid(next.capUsd !== value)
+    if (next.capUsd !== value) setDraft(String(settings.dream.capUsd))
+    else if (value !== settings.dream.capUsd) void onChange({ dream: next })
+  }
+  const last = status?.last
+  const failure = status?.failure
+  const failureKey = { 'no-key': 'noKey', 'no-vault': 'noVault', 'read-only': 'readOnly', offline: 'offline', provider: 'provider', interrupted: 'interrupted' } as const satisfies Record<DreamFailure, string>
+  return (
+    <div className="card">
+      <h3>{t('dream.title')}</h3>
+      <p className="muted small">{t('dream.about', { cap: usd(settings.dream.capUsd) })}</p>
+      <label className="check touch-target">
+        <input type="checkbox" checked={settings.dream.enabled} onChange={(e) => void onChange({ dream: { ...settings.dream, enabled: e.target.checked } })} />
+        {t('dream.switch')}
+      </label>
+      <label className="field">
+        <span>{t('dream.cap')}</span>
+        <input
+          type="number"
+          className="touch-target"
+          min={DREAM_CAP.min}
+          max={DREAM_CAP.max}
+          step={0.01}
+          value={draft}
+          aria-invalid={invalid}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={saveCap}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveCap()
+          }}
+        />
+      </label>
+      {invalid && <p className="text-danger small" role="alert">{t('dream.capInvalid')}</p>}
+      {status && (
+        <p className="muted small">
+          {status.choice ? t('dream.model', { model: status.choice.model, provider: PROVIDER_NAMES[status.choice.provider] }) : t('dream.noModel')}
+        </p>
+      )}
+      <p className="muted small" role="status">
+        {status?.running
+          ? t('dream.status.running')
+          : !last
+            ? t('dream.status.never')
+            : last.outcome === 'skipped'
+              ? t('dream.status.skipped', { date: date(last.at) })
+              : t(last.outcome === 'capped' ? 'dream.status.capped' : 'dream.status.last', { date: date(last.at), cost: usd(last.costUsd) })}
+        {failure && ` ${t(`dream.failure.${failureKey[failure.reason]}`, { date: date(failure.at) })}`}
+      </p>
+    </div>
   )
 }
 
@@ -841,7 +924,16 @@ function PrivacyCard({ settings, onChange }: Pick<Props, 'settings' | 'onChange'
 
 // ---------------------------------------------------------------------------
 
-function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
+function ImagesTab(props: Props): React.JSX.Element {
+  return (
+    <>
+      <CreateGroup {...props} />
+      <SeeGroup {...props} />
+    </>
+  )
+}
+
+function CreateGroup({ settings, onChange }: Props): React.JSX.Element {
   const t = useT()
   const [model, setModel] = useState(settings.images.model)
   const source: ModelSource = `image-${settings.images.provider}`
@@ -861,7 +953,7 @@ function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
             value={settings.images.provider}
             onChange={(e) => {
               setModel('')
-              void onChange({ images: { provider: e.target.value as ImageProviderId, model: '' } })
+              void onChange({ images: { ...settings.images, provider: e.target.value as ImageProviderId, model: '' } })
             }}
           >
             <option value="meta">
@@ -904,6 +996,103 @@ function ImagesTab({ settings, onChange }: Props): React.JSX.Element {
           {models.error && <span className="text-danger small">{models.error}</span>}
         </label>
       </div>
+    </div>
+  )
+}
+
+/** The model field of the see group; keyed by provider so the suggestions and the typed text restart when the provider changes. */
+function SeeModel({ provider, settings, onChange, onAsk }: Pick<Props, 'settings' | 'onChange'> & { provider: ProviderId; onAsk(provider: ProviderId, model: string): void }): React.JSX.Element {
+  const t = useT()
+  const saved = settings.images.vision.model
+  const [model, setModel] = useState(saved)
+  const models = useModels(provider)
+  const isKey = looksLikeApiKey(model)
+  const save = planSeeModelSave(settings, provider, model)
+  return (
+    <label className="field grow">
+      <span>{t('images.see.model')}</span>
+      <div className="row">
+        <input list="see-models" value={model} onChange={(e) => setModel(e.target.value)} className="grow" />
+        <button className="ghost small" onClick={models.load} disabled={models.loading} title={t('images.see.fetchModels')} aria-label={t('images.see.fetchModels')}>
+          <Icon icon={RefreshCw} size="sm" />
+        </button>
+        <button
+          className="primary small"
+          disabled={model === saved || save.action === 'blocked'}
+          onClick={() => (save.action === 'confirm' ? onAsk(provider, model) : void onChange(save.patch))}
+        >
+          {t('common.save')}
+        </button>
+      </div>
+      {isKey && <span className="text-danger small">{t('images.isKey')}</span>}
+      <datalist id="see-models">
+        {seeCandidates(provider, models.models).map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
+      {models.error && <span className="text-danger small">{models.error}</span>}
+    </label>
+  )
+}
+
+function SeeGroup({ settings, onChange }: Props): React.JSX.Element {
+  const t = useT()
+  const [asking, setAsking] = useState<{ provider: ProviderId; model: string } | null>(null)
+  const { vision } = settings.images
+  const hasKey = (provider: ProviderId): boolean => settings.providers[provider].hasKey || settings.providers[provider].fromEnv
+  const target = resolveVision(settings, hasKey)
+  const { held } = target
+  const choose = (provider: ProviderId | ''): void => {
+    const plan = planSeeProvider(settings, provider)
+    if (provider && plan.dialog) setAsking({ provider, model: '' })
+    else void onChange(plan.patch)
+  }
+  return (
+    <div className="card">
+      <h3>{t('images.see.title')}</h3>
+      <p className="muted small">{t('images.see.about')}</p>
+      <div className="row">
+        <label className="field">
+          <span>{t('images.see.provider')}</span>
+          <select value={vision.provider} onChange={(e) => choose(e.target.value as ProviderId | '')}>
+            <option value="">{t('images.see.auto')}</option>
+            {SEE_PROVIDERS.map((p) => (
+              <option key={p} value={p}>
+                {PROVIDER_NAMES[p]}
+                {hasKey(p) ? '' : ` · ${t('images.missingKey')}`}
+              </option>
+            ))}
+          </select>
+        </label>
+        {vision.provider && (
+          <SeeModel key={vision.provider} provider={vision.provider} settings={settings} onChange={onChange} onAsk={(provider, model) => setAsking({ provider, model })} />
+        )}
+      </div>
+      {vision.provider && !vision.model && (
+        <p className="muted small">{t(hasSeeRule(vision.provider) ? 'images.see.autoRule' : 'images.see.autoNone', { provider: PROVIDER_NAMES[vision.provider] })}</p>
+      )}
+      {!vision.provider && <p className="muted small">{t('images.see.using', { provider: PROVIDER_NAMES[target.provider], model: target.model || '—' })}</p>}
+      {held && (
+        <div className="row">
+          <span className="small grow">{t('images.see.held', { provider: PROVIDER_NAMES[held], using: `${PROVIDER_NAMES[target.provider]} · ${target.model || '—'}` })}</span>
+          <button className="primary small" onClick={() => setAsking({ provider: held, model: '' })}>
+            {t('images.see.confirmNow', { provider: PROVIDER_NAMES[held] })}
+          </button>
+        </div>
+      )}
+      <p className="muted small">{t('home.think.visionNote')}</p>
+      {asking && (
+        <SeeProviderDialog
+          provider={asking.provider}
+          initialModel={asking.model}
+          settings={settings}
+          onCancel={() => setAsking(null)}
+          onConfirm={(patch) => {
+            setAsking(null)
+            void onChange(patch)
+          }}
+        />
+      )}
     </div>
   )
 }

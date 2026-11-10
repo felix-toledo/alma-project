@@ -1,6 +1,7 @@
 import * as z from 'zod/v4'
 import { translateText, type MessageKey, type ParamsArg } from '../../shared/i18n/messages'
-import type { HostRequest, Language, PendingApproval, Routine, Settings, ToolText } from '../../shared/types'
+import type { AgentProfile, HostRequest, Language, PendingApproval, Routine, Settings, ToolText } from '../../shared/types'
+import type { AttachmentReader } from '../attachments/store'
 import type { RecentMessage } from '../channels/whatsapp'
 import type { CompanyEngine } from '../company/engine'
 import type { Company } from '../../shared/types'
@@ -23,6 +24,21 @@ export interface Host {
 /** The language of the run a tool call belongs to. Contexts built by hand (tests) carry none and read as Spanish. */
 export const languageOf = (ctx: Pick<ToolContext, 'language' | 'settings'>): Language => ctx.language ?? ctx.settings?.language ?? 'es'
 
+/** Scalars only: what a tool may put in the audit line of its own (ids and counts, never what the person wrote). */
+export type AuditDetail = Record<string, string | number | boolean | null>
+
+/** What `create_company` / `edit_company` need from the shell (spec 029): injected so tests fake all of it. */
+export interface CompanyAuthoringHost {
+  /** The base of `<parent>\Empresas\`. */
+  defaultVaultPath: string
+  folderHasFiles(path: string): Promise<boolean>
+  initVault(path: string): Promise<void>
+  /** `update` is applied to the live settings at once (no await in between), so a save never overwrites what changed while the run waited. */
+  save(update: (current: Settings) => { companies: Company[]; agents: AgentProfile[]; vaults?: string[]; routines?: Routine[] }): void
+  /** Per run, created fresh with the run. */
+  calls: { create: number }
+}
+
 export interface ToolContext {
   workspace: string
   signal: AbortSignal
@@ -31,6 +47,8 @@ export interface ToolContext {
   language?: Language
   /** Set by the agent: gets the key of a result written through `toolText`, to store it for display. */
   reportText?(text: ToolText): void
+  /** Set by the agent for a tool with an `auditAction`: adds ids and counts to that tool's audit line, whatever the outcome. */
+  reportAudit?(detail: AuditDetail): void
   host: Host
   /** The active vault, if any. */
   knowledge?: KnowledgeBase | null
@@ -49,6 +67,10 @@ export interface ToolContext {
   inboxDir?: string
   /** Sends a picture to the user's own Telegram chat; false if Telegram isn't connected. */
   sendTelegramPhoto?(jpeg: Buffer, caption: string): Promise<boolean>
+  /** The attachments store, for `read_attachment` (spec 030): ids in, files out, no listing. */
+  attachments?: AttachmentReader
+  /** Present only in a run that may create or edit companies (spec 029). */
+  authoring?: CompanyAuthoringHost
   /** The user's linked WhatsApp, when it's turned on. */
   whatsapp?: {
     resolve(to: string): Promise<{ jid: string; label: string }>
@@ -67,6 +89,14 @@ export interface ToolDefinition<I = unknown> {
   run(input: I, ctx: ToolContext): Promise<string>
   /** What the user sees in the approval card besides the raw input. */
   preview?(input: I, ctx: ToolContext): Promise<PendingApproval['preview']>
+  /** Runs after the Zod parse and before preview and approval; a `ToolError` ends the call with no card. */
+  validate?(input: I, ctx: ToolContext): Promise<void>
+  /** Fail closed: with no preview (missing or failed) the call errors instead of asking. */
+  previewRequired?: boolean
+  /** Every outcome (including a call refused by `validate` or a missing required preview, before any card) is audited under this action, with the detail the tool reports, instead of the generic `tool.authorize` / `tool.run`. */
+  auditAction?: string
+  /** The run cuts a result to the middle at this many characters instead of the default; only for a tool whose own limit is higher (`read_attachment`). */
+  maxResultChars?: number
 }
 
 /**
@@ -108,6 +138,10 @@ export function defineTool<S extends z.ZodType>(tool: {
   schema: S
   run(input: z.infer<S>, ctx: ToolContext): Promise<string>
   preview?(input: z.infer<S>, ctx: ToolContext): Promise<PendingApproval['preview']>
+  validate?(input: z.infer<S>, ctx: ToolContext): Promise<void>
+  previewRequired?: boolean
+  auditAction?: string
+  maxResultChars?: number
 }): ToolDefinition {
   return tool as unknown as ToolDefinition
 }

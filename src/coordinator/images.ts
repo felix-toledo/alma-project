@@ -1,6 +1,7 @@
 // Image generation through OpenAI-compatible image APIs: Meta (default, Muse Image), xAI or OpenAI.
 import OpenAI from 'openai'
 import { META_BASE_URL, OPENAI_BASE_URL } from '../shared/defaults'
+import { createCandidates, pickImageModel } from '../shared/images/models'
 import type { ImageProviderId, Settings } from '../shared/types'
 import { ToolError } from './tools/types'
 import { readableErrorsFetch } from './providers/xai'
@@ -8,8 +9,6 @@ import { readableErrorsFetch } from './providers/xai'
 export type AspectRatio = '1:1' | '4:5' | '16:9' | '9:16'
 
 const FALLBACK_MODEL: Record<ImageProviderId, string> = { xai: 'grok-2-image', openai: 'gpt-image-1', meta: 'muse-image-1.0' }
-
-const IMAGE_MODEL: Record<ImageProviderId, RegExp> = { xai: /image|imagine/, openai: /^(gpt-image|dall-e)/, meta: /^muse-image/ }
 
 /** OpenAI's image models take a fixed set of sizes; Meta takes any WxH; xAI takes the ratio as a prompt hint. */
 const OPENAI_SIZES: Record<AspectRatio, '1024x1024' | '1024x1536' | '1536x1024'> = {
@@ -30,12 +29,6 @@ const ASPECT_HINT: Record<AspectRatio, string> = {
   '4:5': 'vertical 4:5 portrait composition',
   '9:16': 'tall vertical 9:16 composition',
   '16:9': 'wide horizontal 16:9 composition'
-}
-
-export function pickImageModel(provider: ImageProviderId, ids: string[]): string | undefined {
-  return ids
-    .filter((id) => IMAGE_MODEL[provider].test(id) && !/video|edit/.test(id))
-    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0]
 }
 
 export function imageMimeType(bytes: Uint8Array): 'image/png' | 'image/jpeg' | 'image/webp' | undefined {
@@ -73,7 +66,7 @@ export async function listImageModels(settings: Settings, provider?: ImageProvid
   provider ??= settings.images.provider
   const ids: string[] = []
   for await (const model of client.models.list()) ids.push(model.id)
-  return ids.filter((id) => IMAGE_MODEL[provider].test(id)).sort()
+  return createCandidates(provider, ids)
 }
 
 async function resolveModel(settings: Settings, client: OpenAI, provider: ImageProviderId, cacheKey: string): Promise<string> {

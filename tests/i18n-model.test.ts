@@ -37,6 +37,7 @@ import * as companyToolsModule from '../src/coordinator/tools/company'
 import * as whatsappToolModule from '../src/coordinator/tools/whatsapp'
 import * as telegramToolModule from '../src/coordinator/tools/telegram'
 import * as voiceToolModule from '../src/coordinator/tools/voice'
+import * as readAttachmentModule from '../src/coordinator/attachments/read-tool'
 import { CompanyEngine } from '../src/coordinator/company/engine'
 import { CompanyStore } from '../src/coordinator/company/store'
 import * as hubModule from '../src/coordinator/home/hub'
@@ -952,6 +953,7 @@ describe('AC-4.2 every registered tool', () => {
       ...companyToolsModule.companyTools,
       ...homeToolsModule.homeTools,
       homeToolsModule.lookAtImageTool,
+      readAttachmentModule.readAttachmentTool,
       ...emailModule.emailTools,
       telegramToolModule.sendTelegramTool,
       voiceToolModule.endVoiceConversationTool,
@@ -1457,7 +1459,7 @@ describe('AC-4.4 the reviewer reason shown to the person', () => {
     const request = events.find((e) => e.type === 'approval.request') as Extract<LiveEvent, { type: 'approval.request' }>
     expect(request.approval.reason).toBe('It writes outside the folder.')
     expect(events.find((e) => e.type === 'approval.reason')).toEqual({ type: 'approval.reason', approvalId: request.approval.approvalId, reasonShown: 'Escribe fuera de la carpeta.' })
-    broker.respond(request.approval.approvalId, 'deny')
+    broker.respond(request.approval.approvalId, 'deny', 'desktop')
     expect((await pending).allowed).toBe(false)
     reviewVerdict = { verdict: 'allow', reason: 'ok' }
   })

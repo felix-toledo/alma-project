@@ -1,9 +1,11 @@
 import { ambience } from './en/ambience'
+import { attach } from './en/attach'
 import { channels } from './en/channels'
 import { chat } from './en/chat'
 import { companies } from './en/companies'
 import { common } from './en/common'
 import { coordinator } from './en/coordinator'
+import { dream } from './en/dream'
 import { format } from './en/format'
 import { general } from './en/general'
 import { home } from './en/home'
@@ -19,4 +21,4 @@ import { remote } from './en/remote'
 import type { es } from './es'
 import type { Message } from './messages'
 
-export const en = { ...ambience, ...channels, ...chat, ...companies, ...common, ...coordinator, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice, ...remote } satisfies Record<keyof typeof es, Message>
+export const en = { ...ambience, ...attach, ...channels, ...chat, ...companies, ...common, ...coordinator, ...dream, ...format, ...general, ...home, ...languages, ...main, ...routines, ...settings, ...shell, ...tools, ...vault, ...voice, ...remote } satisfies Record<keyof typeof es, Message>

@@ -13,6 +13,8 @@ export interface TurnRequest {
   system: string
   tools: ToolSpec[]
   messages: ChatMessage[]
+  /** A hard limit on the answer, thinking included; the provider's own default when absent. */
+  maxOutputTokens?: number
   signal: AbortSignal
   onText(delta: string): void
   onThinking(delta: string): void

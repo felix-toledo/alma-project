@@ -3,6 +3,7 @@ import type { Block, ChatMessage, PendingApproval, Thread } from '../../../share
 import type { Draft } from '../lib/state'
 import { splitMessage } from '../../../shared/attachments'
 import { useT } from '../i18n/useT'
+import { SentAttachments } from './AttachmentChips'
 import { Markdown } from './Markdown'
 // biome-ignore lint/suspicious/noImportCycles: tool cards render nested message lists (sub-agent runs)
 import { ToolCard } from './ToolCard'
@@ -69,7 +70,8 @@ export function MessageList({ thread, messages, draft, drafts, approvals, runnin
       {messages.map((message, index) => {
         if (message.role === 'user') {
           const text = message.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('\n')
-          if (!text) return null
+          // an attachment-only message has no text but still shows what was sent (spec 030 AC-2.7)
+          if (!text && !message.attachments?.length) return null
           const sent = splitMessage(text)
           return (
             <div key={index} className="msg user">
@@ -81,6 +83,7 @@ export function MessageList({ thread, messages, draft, drafts, approvals, runnin
                     <pre>{sent.attachments}</pre>
                   </details>
                 )}
+                {message.attachments && message.attachments.length > 0 && <SentAttachments items={message.attachments} />}
               </div>
             </div>
           )

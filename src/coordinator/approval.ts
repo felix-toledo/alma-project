@@ -1,5 +1,6 @@
 import type { AgentProfile, Language, LiveEvent, PendingApproval, ProviderId, Settings, ToolText } from '../shared/types'
 import { translate } from '../shared/i18n/messages'
+import { APPROVAL_INPUT_LIMIT, canAnswerFrom, type AnswerChannel } from '../shared/companyAuthoring'
 import { autoReviewPrompt, BOSS_SYSTEM, bossReviewPrompt, REVIEW_SYSTEM } from './prompts/review'
 import { getProvider } from './providers'
 import { reviewerReasonForDisplay } from './reviewer-reason'
@@ -7,9 +8,15 @@ import type { ToolRisk } from './tools/types'
 
 export type Decision = 'allow' | 'deny' | 'always'
 
+/** The answer and the channel it came through; a run that was stopped settles as a deny with no channel. */
+export interface Answer {
+  decision: Decision
+  via?: AnswerChannel
+}
+
 interface Waiter {
   approval: PendingApproval
-  resolve(decision: Decision): void
+  resolve(answer: Answer): void
 }
 
 /** Holds tool calls waiting for the user's answer in the UI. */
@@ -20,16 +27,21 @@ export class ApprovalBroker {
 
   /** `asked` gets the id as soon as the card is out, for what arrives later (the translated reason). */
   ask(approval: Omit<PendingApproval, 'approvalId'>, signal: AbortSignal, asked?: (approvalId: string) => void): Promise<Decision> {
+    return this.askAnswer(approval, signal, asked).then((answer) => answer.decision)
+  }
+
+  /** The same as `ask`, with the channel the answer came through. */
+  askAnswer(approval: Omit<PendingApproval, 'approvalId'>, signal: AbortSignal, asked?: (approvalId: string) => void): Promise<Answer> {
     const approvalId = crypto.randomUUID()
     const full: PendingApproval = { ...approval, approvalId }
-    return new Promise<Decision>((resolve) => {
-      const settle = (decision: Decision): void => {
+    return new Promise<Answer>((resolve) => {
+      const settle = (answer: Answer): void => {
         if (!this.waiting.delete(approvalId)) return
         signal.removeEventListener('abort', onAbort)
         this.emit({ type: 'approval.resolved', approvalId })
-        resolve(decision)
+        resolve(answer)
       }
-      const onAbort = (): void => settle('deny')
+      const onAbort = (): void => settle({ decision: 'deny' })
       signal.addEventListener('abort', onAbort, { once: true })
       this.waiting.set(approvalId, { approval: full, resolve: settle })
       this.emit({ type: 'approval.request', approval: full })
@@ -45,8 +57,12 @@ export class ApprovalBroker {
     this.emit({ type: 'approval.reason', approvalId, reasonShown })
   }
 
-  respond(approvalId: string, decision: Decision): void {
-    this.waiting.get(approvalId)?.resolve(decision)
+  /** A channel that could not show the whole input of a company tool cannot allow it (spec 029 BR-23): the approval stays pending. */
+  respond(approvalId: string, decision: Decision, via: AnswerChannel): void {
+    const waiter = this.waiting.get(approvalId)
+    if (!waiter) return
+    if (decision !== 'deny' && !canAnswerFrom(via, waiter.approval, APPROVAL_INPUT_LIMIT)) return
+    waiter.resolve({ decision, via })
   }
 
   pending(): PendingApproval[] {
@@ -79,7 +95,10 @@ export interface AuthorizationRequest {
 }
 
 /** A refusal also carries what the model is told (English) and what the card shows, as one key (BR-18). */
-export type Authorization = { allowed: true; note: string } | { allowed: false; note: string; denial: ToolText }
+export type Authorization = ({ allowed: true; note: string } | { allowed: false; note: string; denial: ToolText }) & {
+  /** The channel the person answered through, when someone did and the caller named it. */
+  via?: AnswerChannel
+}
 
 function deny(language: Language, why: 'blocked' | 'cancelled' | 'rejectedByYou'): Authorization {
   return { allowed: false, note: translate(language, `approval.note.${why}`), denial: { key: `tool.denied.${why}` } }
@@ -95,7 +114,7 @@ async function autoReview(request: AuthorizationRequest): Promise<{ verdict: 'al
 async function askUser(request: AuthorizationRequest, flagged: boolean, reason?: string, allowAlways = true, source?: { provider: ProviderId; model: string }): Promise<Authorization> {
   const language = request.language ?? request.settings.language
   request.setState('pending-approval', reason)
-  const decision = await request.broker.ask(
+  const { decision, via } = await request.broker.askAnswer(
     {
       threadId: request.threadId,
       subagentId: request.subagentId,
@@ -116,13 +135,14 @@ async function askUser(request: AuthorizationRequest, flagged: boolean, reason?:
       })
     }
   )
+  const answered = (authorization: Authorization): Authorization => (via ? { ...authorization, via } : authorization)
   if (decision === 'always' && allowAlways) {
     request.rememberAlwaysAllow(request.toolName)
-    return { allowed: true, note: translate(language, 'approval.note.alwaysAllowed') }
+    return answered({ allowed: true, note: translate(language, 'approval.note.alwaysAllowed') })
   }
-  if (decision === 'always') return { allowed: true, note: translate(language, 'approval.note.approvedByYou') }
-  if (decision === 'allow') return { allowed: true, note: translate(language, 'approval.note.approvedByYou') }
-  return deny(language, request.signal.aborted ? 'cancelled' : 'rejectedByYou')
+  if (decision === 'always') return answered({ allowed: true, note: translate(language, 'approval.note.approvedByYou') })
+  if (decision === 'allow') return answered({ allowed: true, note: translate(language, 'approval.note.approvedByYou') })
+  return answered(deny(language, request.signal.aborted ? 'cancelled' : 'rejectedByYou'))
 }
 
 /** The boss's verdict on an outgoing action, in their own voice (their instructions shape the judgment). */

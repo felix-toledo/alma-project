@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { pickImageModel } from '../src/coordinator/images'
+import { pickImageModel } from '../src/shared/images/models'
 import { generateImageTool, instagramPublishTool } from '../src/coordinator/tools/media'
 import type { HostRequest } from '../src/shared/types'
 import { defaultSettings } from '../src/shared/defaults'
@@ -45,7 +45,7 @@ afterEach(() => rmSync(workspace, { recursive: true, force: true }))
 function context(hostResult = { ok: true, message: 'Publicado en Instagram.' }) {
   const settings = defaultSettings()
   settings.providers.xai = { apiKey: 'test', baseUrl }
-  settings.images = { provider: 'xai', model: '' } // the tests talk to a local xAI-shaped server
+  settings.images = { ...settings.images, provider: 'xai', model: '' } // the tests talk to a local xAI-shaped server
   const hostRequests: HostRequest[] = []
   return {
     hostRequests,

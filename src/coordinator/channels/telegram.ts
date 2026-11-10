@@ -1,6 +1,7 @@
 // Telegram channel: the bot runs inside the coordinator (long polling, no server or open port needed).
 import { Bot, InlineKeyboard, InputFile, Keyboard, type Context } from 'grammy'
 import { audit } from '../../shared/audit'
+import { canAnswerFrom } from '../../shared/companyAuthoring'
 import type { HomeSnapshot, HomeThing } from '../../shared/home'
 import type { Language } from '../../shared/i18n/language'
 import { type MessageKey, type ParamsArg, translate } from '../../shared/i18n/messages'
@@ -18,7 +19,7 @@ import {
   toggleControl,
   type MenuView
 } from './home-menu'
-import { approvalButtons, approvalPrompt, approvalToast, describeTelegramError } from './texts'
+import { APPROVAL_INPUT_LIMIT, approvalButtons, approvalPrompt, approvalToast, describeTelegramError } from './texts'
 
 const TELEGRAM_LIMIT = 4096
 const STATUS_EDIT_MS = 1500
@@ -303,7 +304,9 @@ ${ctx.message!.caption}` : ''}`)
     const language = this.deps.settings().language
     const text = approvalPrompt(language, approval)
     const buttons = approvalButtons(language)
-    const keyboard = new InlineKeyboard().text(buttons.allow, `ap:${approval.approvalId}:allow`)
+    const keyboard = new InlineKeyboard()
+    // Rechazar always stays; Permitir only when the whole input is on screen (spec 029 BR-23).
+    if (canAnswerFrom('telegram', approval, APPROVAL_INPUT_LIMIT)) keyboard.text(buttons.allow, `ap:${approval.approvalId}:allow`)
     if (approval.allowAlways) keyboard.text(buttons.always, `ap:${approval.approvalId}:always`)
     keyboard.text(buttons.deny, `ap:${approval.approvalId}:deny`)
     const message = await this.bot!.api.sendMessage(chatId, text, { reply_markup: keyboard })

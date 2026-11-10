@@ -71,7 +71,7 @@ function autoRespond(decision: 'allow' | 'deny' | 'always'): void {
   const original = events.push.bind(events)
   events.push = (...items: LiveEvent[]) => {
     for (const item of items) {
-      if (item.type === 'approval.request') queueMicrotask(() => broker.respond(item.approval.approvalId, decision))
+      if (item.type === 'approval.request') queueMicrotask(() => broker.respond(item.approval.approvalId, decision, 'desktop'))
     }
     return original(...items)
   }

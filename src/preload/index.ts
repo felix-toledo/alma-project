@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import type { DesktopApi } from '../shared/desktop-api'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { DesktopApi, PathInfo, PathRead } from '../shared/desktop-api'
 import type { AudioEnvelope, CoordinatorMessage, InstagramStatus, PublicSettings, RequestEnvelope, SecretProviderId } from '../shared/types'
 
 // MessagePorts can't cross the context bridge, so the preload keeps the port and relays messages.
@@ -17,6 +17,14 @@ ipcRenderer.on('coordinator:port', (event) => {
   port.start()
   for (const message of queue.splice(0)) port.postMessage(message)
   for (const listener of connectionListeners) listener()
+})
+
+// The window's first show can come before React listens (the greeting landing at start, spec 033 BR-29): the request is kept for it.
+let unopened: string | null = null
+const openListeners = new Set<(threadId: string) => void>()
+ipcRenderer.on('app:openThread', (_event, threadId: string) => {
+  if (openListeners.size) for (const listener of openListeners) listener(threadId)
+  else unopened = threadId
 })
 
 ipcRenderer.on('coordinator:restarted', () => ipcRenderer.send('coordinator:connect'))
@@ -65,10 +73,22 @@ const api: DesktopApi = {
   remote: {
     moveExclusions: (from: string, to: string): Promise<void> => ipcRenderer.invoke('remote:moveExclusions', { from, to })
   },
+  attach: {
+    // Only a real File (dropped from the computer) has a path; the grant is sent before any inspect or read of it.
+    pathOf(file: File): string {
+      const path = webUtils.getPathForFile(file)
+      if (path) ipcRenderer.send('attach:grant', path)
+      return path
+    },
+    pick: (): Promise<string[]> => ipcRenderer.invoke('attach:pick'),
+    inspect: (path: string): Promise<PathInfo> => ipcRenderer.invoke('attach:inspect', path),
+    read: (path: string): Promise<PathRead> => ipcRenderer.invoke('attach:read', path)
+  },
   onOpenThread(listener: (threadId: string) => void): () => void {
-    const handler = (_event: unknown, threadId: string): void => listener(threadId)
-    ipcRenderer.on('app:openThread', handler)
-    return () => ipcRenderer.removeListener('app:openThread', handler)
+    openListeners.add(listener)
+    if (unopened) listener(unopened)
+    unopened = null
+    return () => openListeners.delete(listener)
   },
   onReminder(listener: (reminder: { title: string; body: string }) => void): () => void {
     const handler = (_event: unknown, reminder: { title: string; body: string }): void => listener(reminder)

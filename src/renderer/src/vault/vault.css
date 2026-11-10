@@ -734,6 +734,59 @@
   border-radius: 999px;
   background: var(--bg-elev-2);
 }
+/* Files a sent message carried: thumbnail or icon, name, size, and the "removed" / "open" states. */
+.sent-files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  white-space: normal;
+}
+.sent-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+.sent-file-name {
+  min-width: 0;
+  max-width: 260px;
+}
+.sent-file.gone .sent-file-name,
+.sent-file.gone > svg {
+  opacity: var(--op-dim);
+  text-decoration: line-through;
+}
+.sent-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--r-sm);
+}
+
+/* Why a file was not attached: the warning color of .notice, kept next to the chips it refers to. */
+.attach-notes {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 860px;
+  margin: 0 auto 8px;
+}
+.attach-notes ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+.chat-compact .attach-notes {
+  max-width: none;
+}
 .vault-tabs .ghost {
   white-space: nowrap;
 }

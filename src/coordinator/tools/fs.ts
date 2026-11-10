@@ -9,8 +9,17 @@ const SKIPPED_DIRS = new Set(['node_modules', '.git', 'out', 'dist', 'build', '.
 const MAX_READ_BYTES = 2 * 1024 * 1024
 const MAX_SEARCH_FILE_BYTES = 1024 * 1024
 
-function looksBinary(buffer: Buffer): boolean {
+export function looksBinary(buffer: Uint8Array): boolean {
   return buffer.subarray(0, 8000).includes(0)
+}
+
+/** The numbered lines `read_file` returns (`offset` 1-based), and whether the slice reaches the end of the text. */
+export function numberLines(text: string, offset: number, limit: number): { body: string; total: number; complete: boolean } {
+  const lines = text.split(/\r?\n/)
+  const slice = lines.slice(offset - 1, offset - 1 + limit)
+  const width = String(offset + slice.length).length
+  const body = slice.map((line, i) => `${String(offset + i).padStart(width)}\t${line}`).join('\n')
+  return { body, total: lines.length, complete: offset - 1 + slice.length >= lines.length }
 }
 
 async function readText(path: string, label: string): Promise<string> {
@@ -64,12 +73,9 @@ export const readFileTool = defineTool({
   }),
   async run({ path, offset = 1, limit = 2000 }, ctx) {
     const target = resolveInWorkspace(ctx.workspace, path)
-    const lines = (await readText(target, path)).split(/\r?\n/)
-    const slice = lines.slice(offset - 1, offset - 1 + limit)
-    const width = String(offset + slice.length).length
-    const body = slice.map((line, i) => `${String(offset + i).padStart(width)}\t${line}`).join('\n')
-    if (offset - 1 + slice.length >= lines.length) return truncateMiddle(body)
-    return truncateMiddle(toolText(ctx, 'tool.fs.moreLines', { data: body, total: lines.length }))
+    const { body, total, complete } = numberLines(await readText(target, path), offset, limit)
+    if (complete) return truncateMiddle(body)
+    return truncateMiddle(toolText(ctx, 'tool.fs.moreLines', { data: body, total }))
   }
 })
 

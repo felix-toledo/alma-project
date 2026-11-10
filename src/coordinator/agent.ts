@@ -2,9 +2,13 @@ import * as z from 'zod/v4'
 import { chainOfCommand, colleagues, directReports } from '../shared/company'
 import { toolTrail } from './tool-trail'
 import { formatDateTime } from '../shared/i18n/format'
+import { ATTACHMENTS_SYSTEM_SENTENCE } from '../shared/attach/compose'
 import { translate, translateText } from '../shared/i18n/messages'
 import type { AgentProfile, Block, ChatMessage, EventScope, Language, LiveEvent, ProviderId, Routine, Settings, SubagentRun, Thread, ToolState, ToolText, Usage } from '../shared/types'
 import { authorize, type ApprovalBroker } from './approval'
+import { expandAttachments } from './attachments/expand'
+import { readAttachmentTool } from './attachments/read-tool'
+import type { AttachmentReader } from './attachments/store'
 import { compactHistory } from './context'
 import { CHANNEL_GUIDES, companyBlock, DELEGATE_BLOCK, environmentBlock, fragmentsBlock, HOME_GUIDE, KNOWLEDGE_GUIDE, memoriesBlock, replyLanguageRule, SUBAGENT_BLOCK } from './prompts/system'
 import type { KnowledgeBase } from './knowledge/base'
@@ -14,6 +18,7 @@ import { getProvider } from './providers'
 import type { ToolSpec } from './providers/types'
 import { builtinToolsByName } from './tools'
 import { companyTools } from './tools/company'
+import { companyAuthoringTools, offersCompanyAuthoring } from './tools/company-authoring'
 import { homeTools, lookAtImageTool } from './tools/home'
 import type { HomeService } from './home'
 import { OFFICE_GUIDE } from './tools/office'
@@ -23,7 +28,7 @@ import { sendTelegramTool } from './tools/telegram'
 import { endVoiceConversationTool } from './tools/voice'
 import { webTools } from './tools/web'
 import { whatsAppTools } from './tools/whatsapp'
-import { jsonSchemaOf, ToolError, truncateMiddle, type Host, type ToolContext, type ToolDefinition } from './tools/types'
+import { jsonSchemaOf, ToolError, truncateMiddle, type AuditDetail, type CompanyAuthoringHost, type Host, type ToolContext, type ToolDefinition } from './tools/types'
 
 const MAX_ITERATIONS = 80
 const DELEGATE_TOOL = 'delegate_task'
@@ -56,6 +61,8 @@ export interface RunContext {
   unattended?: boolean
   /** The agent's seat when it works in a company. */
   company?: ToolContext['company'] | null
+  /** Lets this run create and edit companies (spec 029); the tools are offered only where `offersCompanyAuthoring` says so. */
+  authoring?: CompanyAuthoringHost | null
   /** Tools this run may use without asking (a rule the user already approved). */
   autoApprove?: string[]
   /** The house (domotica); only offered when it is turned on and the agent isn't a company's. */
@@ -63,6 +70,8 @@ export interface RunContext {
   /** Where pictures the user sent are saved. */
   inboxDir?: string
   sendTelegramPhoto?(jpeg: Buffer, caption: string): Promise<boolean>
+  /** The attachments store: `read_attachment` and the history expansion read through it, sub-agents included (spec 030). */
+  attachments?: AttachmentReader
   /** Every model turn's token usage (company budgets). */
   onUsage?(usage: Usage, provider: ProviderId): void
 }
@@ -75,10 +84,12 @@ export function appTools(ctx: RunContext): ToolDefinition[] {
     ...webTools,
     sendTelegramTool,
     lookAtImageTool,
+    readAttachmentTool,
     ...(ctx.home && !ctx.company && ctx.getSettings().home.enabled ? homeTools : []),
     ...(emailConfigured(ctx.getSettings()) ? emailTools : []),
     ...(ctx.whatsapp ? whatsAppTools : []),
     ...(ctx.company ? companyTools : []),
+    ...(ctx.authoring && offersCompanyAuthoring({ depth: ctx.depth, unattended: ctx.unattended, hasSeat: !!ctx.company, channel: ctx.thread.channel }) ? companyAuthoringTools : []),
     ...(ctx.depth === 0 && ctx.thread.channel === 'voice' ? [endVoiceConversationTool] : [])
   ]
 }
@@ -128,6 +139,8 @@ export function delegateSpec(agents: AgentProfile[]): ToolSpec {
 function systemPrompt(profile: AgentProfile, ctx: RunContext, canDelegate: boolean, knowledge: string): string {
   const shell = process.platform === 'win32' ? 'PowerShell (Windows)' : 'bash'
   const parts = [profile.systemPrompt.trim(), environmentBlock(ctx.thread.workspace, shell, localNow()), replyLanguageRule(ctx.unattended ? 'unattended' : 'attended', ctx.language)]
+  // always present, with the tool (spec 030 G9): attachments are data, never instructions
+  parts.push(ATTACHMENTS_SYSTEM_SENTENCE)
   if (ctx.depth > 0) parts.push(SUBAGENT_BLOCK)
   if (canDelegate) parts.push(DELEGATE_BLOCK)
   const channel = ctx.depth === 0 && ctx.thread.channel ? CHANNEL_GUIDES[ctx.thread.channel] : ''
@@ -249,7 +262,7 @@ export async function runAgent(profile: AgentProfile, messages: ChatMessage[], c
       effort: ctx.depth === 0 && ctx.thread.channel === 'voice' ? 'low' : profile.effort,
       system,
       tools,
-      messages: compactHistory(messages),
+      messages: compactHistory(expandAttachments(messages, ctx.attachments)),
       signal: ctx.signal,
       onText: (text) => ctx.emit({ type: 'stream.text', scope: ctx.scope, text }),
       onThinking: (text) => ctx.emit({ type: 'stream.thinking', scope: ctx.scope, text }),
@@ -326,7 +339,10 @@ async function executeTool(
     }
   }
 
+  // What a tool with its own audit action reports (ids and counts), kept for whichever outcome ends the call.
+  const audited: AuditDetail = {}
   const toolContext = {
+    reportAudit: (detail: AuditDetail) => void Object.assign(audited, detail),
     workspace: ctx.thread.workspace,
     signal: ctx.signal,
     settings: ctx.getSettings(),
@@ -339,12 +355,32 @@ async function executeTool(
     sendTelegram: ctx.sendTelegram,
     whatsapp: ctx.whatsapp ?? undefined,
     company: ctx.company ?? undefined,
+    authoring: ctx.authoring ?? undefined,
     home: ctx.home ?? undefined,
     inboxDir: ctx.inboxDir,
+    attachments: ctx.attachments,
     sendTelegramPhoto: ctx.sendTelegramPhoto
   }
-  const preview = builtin?.preview ? await builtin.preview(input, toolContext).catch(() => undefined) : undefined
+  const failed = (error: unknown, note: 'toolstate.invalidInput' | 'toolstate.failed'): ToolResult => {
+    setToolState(ctx, use.id, { status: 'error', note: translate(ctx.language, note) })
+    return errorResult(use.id, error instanceof ToolError ? error.text : { key: 'tool.error', params: { data: (error as Error).message } })
+  }
   const risk = builtin?.risk ?? 'exec'
+  // A call that ends before the card is an outcome too (029 AC-6.4): same dedicated action, same ids-and-counts detail.
+  const failedBeforeCard = (error: unknown, note: 'toolstate.invalidInput' | 'toolstate.failed'): ToolResult => {
+    if (builtin?.auditAction) toolTrail({ risk, name: use.name, input, threadId: ctx.thread.id, agentId: profile.id, note: '' }, 'error', 'tool.run', { action: builtin.auditAction, detail: { ...audited } })
+    return failed(error, note)
+  }
+  if (builtin?.validate) {
+    try {
+      await builtin.validate(input, toolContext)
+    } catch (error) {
+      // A `ToolError` from `validate` is the input being refused; anything else is the tool failing.
+      return failedBeforeCard(error, error instanceof ToolError ? 'toolstate.invalidInput' : 'toolstate.failed')
+    }
+  }
+  const preview = builtin?.preview ? await builtin.preview(input, toolContext).catch(() => undefined) : undefined
+  if (builtin?.previewRequired && !preview) return failedBeforeCard(new ToolError('tool.company.noPreview'), 'toolstate.failed')
   const authorization = await authorize({
     settings: ctx.getSettings(),
     language: ctx.language,
@@ -367,7 +403,8 @@ async function executeTool(
     boss: bossOf(ctx)
   })
   const trail = (outcome: 'ok' | 'denied' | 'error', action: string): void => {
-    toolTrail({ risk, name: use.name, input, threadId: ctx.thread.id, agentId: profile.id, note: authorization.note }, outcome, action)
+    const own = builtin?.auditAction ? { action: builtin.auditAction, detail: { ...audited, ...(authorization.via ? { via: authorization.via } : {}) } } : undefined
+    toolTrail({ risk, name: use.name, input, threadId: ctx.thread.id, agentId: profile.id, note: authorization.note }, outcome, action, own)
   }
   if (!authorization.allowed) {
     trail('denied', 'tool.authorize')
@@ -390,7 +427,7 @@ async function executeTool(
     }
     trail(isError ? 'error' : 'ok', 'tool.run')
     setToolState(ctx, use.id, { status: isError ? 'error' : 'done', note: authorization.note })
-    return { type: 'tool_result', tool_use_id: use.id, content: truncateMiddle(content), ...(isError ? { is_error: true } : {}), ...(said ? { i18n: said } : {}) }
+    return { type: 'tool_result', tool_use_id: use.id, content: truncateMiddle(content, builtin?.maxResultChars), ...(isError ? { is_error: true } : {}), ...(said ? { i18n: said } : {}) }
   } catch (error) {
     const text: ToolText | string = error instanceof ToolError ? error.text : { key: 'tool.error', params: { data: (error as Error).message } }
     trail('error', 'tool.run')

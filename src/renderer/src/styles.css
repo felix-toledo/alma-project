@@ -922,6 +922,11 @@ pre.code.diff-add {
   cursor: pointer;
 }
 
+/* The umbra minimum target (tokens.css --touch-min) where the compact desktop adapter would shrink it to 32 px. */
+.touch-target {
+  min-height: 44px;
+}
+
 .radio {
   align-items: flex-start;
   padding: 6px 0;
@@ -1022,6 +1027,52 @@ pre.code.diff-add {
   border-radius: 8px;
   padding: 8px 12px;
   max-width: 560px;
+}
+
+/* Company proposal on the approval card: model-written text wraps and scrolls, never overflows the card. */
+.company-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.proposal-text {
+  overflow-wrap: anywhere;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.proposal-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.proposal-positions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.proposal-position {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+}
+
+.proposal-position summary {
+  cursor: pointer;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.proposal-flags {
+  margin-top: 8px;
 }
 
 .tab-content.single {

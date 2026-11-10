@@ -2,6 +2,11 @@
 import type { Language } from './i18n/language'
 export type { Language }
 import type { MessageKey } from './i18n/messages'
+import type { CompanyProposalView } from './companyAuthoring'
+import type { MessageAttachment } from './attach/compose'
+import type { RefusalReason } from './attach/rules'
+import type { PresenceEvent } from './presence'
+import type { DreamSettings, DreamStatusView } from './dream/settings'
 import type { FlowStep,HomeEngineStatus, HomePlan, HomeSettings, HomeSnapshot, JudgmentRule, CameraWatch, HomeAutomation } from './home'
 
 export type ProviderId = 'anthropic' | 'xai' | 'deepseek' | 'vercel' | 'meta'
@@ -32,6 +37,12 @@ export interface AgentProfile {
 }
 
 export type ImageProviderId = 'xai' | 'openai' | 'meta'
+
+/** The provider and model that look at pictures (spec 038); '' = not set, an empty model = "the newest that can see". */
+export interface VisionChoice {
+  provider: ProviderId | ''
+  model: string
+}
 
 export type RoutineSchedule =
   | { kind: 'daily'; time: string; /** 0 = Sunday … 6 = Saturday; empty = every day */ days: number[] }
@@ -182,13 +193,15 @@ export type RemoteScope = 'chat' | 'approve' | 'home' | 'cameras' | 'vault' | 'h
 /** Remote access from the person's own phone over Tailscale (spec 026). Off by default; scopes are global. */
 export interface RemoteSettings {
   enabled: boolean
-  /** Only 'tailscale' is valid; the test transport is not a setting (AC-3.7). */
-  transport: 'tailscale'
+  /** How phones reach the PC: Tailscale (the default) or Alma's relay (spec 027). The test transport is not a setting (AC-3.7). */
+  transport: 'tailscale' | 'relay'
   scopes: Record<RemoteScope, boolean>
   /** The locks-and-alarms sub-switch under home automation. */
   sensitive: boolean
   /** The continue-conversations sub-switch under History (spec 028 BR-18); off at every turn-on. */
   continueHistory: boolean
+  /** The send-files sub-switch under Chat (spec 031 BR-2); off at every turn-on and whenever Chat is off. */
+  sendFiles: boolean
   /** Camera entity ids the phone may see (allow-list, persists across turn-ons). */
   cameras: string[]
   /** Vault-relative folders the Notes scope never reaches (spec 028 BR-14); kept across turn-ons. */
@@ -200,11 +213,24 @@ export interface RemoteSettings {
 /** Why the remote channel is not serving (spec 026 AC-2.4): exactly one cause, never generic. */
 export type RemoteFailure = 'noInternet' | 'tailscaleDown' | 'httpsOff' | 'listener' | 'phoneSilent' | 'portTaken' | 'serveBusy'
 
+/** Why the relay is not serving (spec 027 BR-30): the closed list; a phone's failed handshake is an audited failure, never one of these. */
+export type RelayFailure = 'relayUnreachable' | 'relayRefused' | 'relayFull' | 'relayVersion' | 'relayGone'
+
+/** Why the relay check failed (spec 027 AC-7.3): exactly one. */
+export type RelayTestCause = 'noInternet' | RelayFailure | 'phoneSilent'
+export type RelayTestResult = { ok: true } | { ok: false; cause: RelayTestCause }
+
 /** What the Remote access tab shows about the channel. */
 export interface RemoteStatus {
   state: 'off' | 'connecting' | 'online' | 'error'
   address?: string
   failure?: RemoteFailure
+  /** The relay's own cause (spec 027), kept apart from `failure` so the channel's typed cause table does not change. */
+  relayFailure?: RelayFailure
+  /** The relay address changed since phones paired through it (spec 027 AC-4.8). */
+  relayRenamed?: boolean
+  /** This build offers no relay (a packaged app whose relay domain is still the placeholder, spec 027 AC-6.7): the tab does not show the choice. */
+  relayHidden?: boolean
   detail?: string
   keyExpiresInDays?: number
   renamed?: boolean
@@ -282,13 +308,17 @@ export interface Settings {
   mcpServers: Record<string, McpServerConfig>
   defaultWorkspace: string
   /** Empty model = pick the newest image model the account lists. */
-  images: { provider: ImageProviderId; model: string }
+  images: { provider: ImageProviderId; model: string; vision: VisionChoice }
   /** Test mode fills in the post but never clicks "Compartir". */
   instagram: { testMode: boolean }
   routines: Routine[]
   background: { runInTray: boolean; launchAtLogin: boolean }
   /** Conversations untouched for this many days are deleted; 0 keeps them. */
   privacy: { threadRetentionDays: number }
+  /** Providers the person was already told receive attached content (spec 030 AC-3.1). */
+  attachments: { noticeAcknowledged: ProviderId[] }
+  /** The nightly dream (spec 033): off by default, with a nightly cost cap in USD. */
+  dream: DreamSettings
   /** Vault folders the user opened (absolute paths). */
   vaults: string[]
   /** The vault every conversation draws knowledge from; empty = none. */
@@ -307,6 +337,8 @@ export interface Settings {
   multimediaAdded?: boolean
   /** One-time migration marker: the default agents, auto-review and images moved to Meta (spec 024). */
   metaDefaultApplied?: boolean
+  /** One-time migration marker: `home.visionProvider`/`visionModel` were copied into `images.vision` (spec 038). */
+  visionMigrated?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -507,6 +539,8 @@ export interface ChatMessage {
   usage?: Usage
   /** Set when the model stopped for a reason the user should see (refusal, truncation). */
   notice?: string
+  /** What the person attached to this user message (spec 030 BR-21); the store holds the files. */
+  attachments?: MessageAttachment[]
 }
 
 export type ToolStatus = 'pending-approval' | 'reviewing' | 'running' | 'done' | 'denied' | 'error'
@@ -541,8 +575,12 @@ export interface Thread {
   workspace: string
   /** 'company': a task, review or meeting prep an agent of a company worked on by itself. */
   channel?: ThreadChannel
+  /** The company a conversation belongs to when its agent alone does not say so (a company's WhatsApp chat). */
+  companyId?: string
   createdAt: number
   updatedAt: number
+  /** When the conversation was last opened (spec 030 BR-16); the attachment sweep counts 30 days from here. Never moves `updatedAt`. */
+  lastOpenedAt?: number
   messages: ChatMessage[]
   /** Keyed by the `delegate_task` tool_use id that started the run. */
   subagents: Record<string, SubagentRun>
@@ -622,7 +660,13 @@ export interface PendingApproval {
   /** False for actions that must be approved every time, like publishing. */
   allowAlways: boolean
   /** What will be published, so the user approves the actual post. */
-  preview?: { imageDataUrl?: string; caption?: string; note?: string }
+  preview?: {
+    imageDataUrl?: string
+    caption?: string
+    note?: string
+    /** What a company the person is asked to approve would contain (spec 029). */
+    company?: CompanyProposalView
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -634,7 +678,8 @@ export type CoordinatorRequest =
   | { method: 'threads.create'; agentId: string; workspace: string }
   | { method: 'threads.update'; threadId: string; title?: string; agentId?: string; workspace?: string; /** null = back to the agent's own model */ model?: ModelChoice | null }
   | { method: 'threads.delete'; threadId: string }
-  | { method: 'chat.send'; threadId: string; text: string }
+  /** `attachments`: ids from `attachments.store` (spec 030); the message may have no text when it has some. */
+  | { method: 'chat.send'; threadId: string; text: string; attachments?: string[] }
   | { method: 'chat.stop'; threadId: string }
   | { method: 'approval.respond'; approvalId: string; decision: 'allow' | 'deny' | 'always' }
   | { method: 'approval.pending' }
@@ -648,6 +693,8 @@ export type CoordinatorRequest =
   | { method: 'remote.revokeAll' }
   | { method: 'remote.test'; deviceId: string }
   | { method: 'remote.status' }
+  /** The relay connection check of the wizard (spec 027 AC-7.3): one cause when it fails. */
+  | { method: 'remote.relayTest' }
   | { method: 'remote.devices' }
   | { method: 'remote.detect' }
   | { method: 'remote.serve' }
@@ -746,8 +793,24 @@ export type CoordinatorRequest =
   | { method: 'home.rules' }
   | { method: 'home.rule.toggle'; kind: 'ha' | 'judgment'; id: string; enabled: boolean }
   | { method: 'home.rule.delete'; kind: 'ha' | 'judgment' | 'watch'; id: string }
-  /** Saves a picture the user pasted or dropped in the chat; returns the path the agent can look at. */
-  | { method: 'files.saveImage'; name: string; base64: string }
+  // Chat attachments (spec 030). The coordinator re-checks type and size on the bytes it gets.
+  /** Stores one file for the conversation; answers a `StoreResult`. */
+  | { method: 'attachments.store'; threadId: string; name: string; size: number; base64: string }
+  /** The chip's X: deletes the stored file and its record at once. */
+  | { method: 'attachments.remove'; id: string }
+  /** Bytes for a thumbnail (raster pictures only); answers a `PreviewResult`. */
+  | { method: 'attachments.preview'; id: string }
+  /** Opens a stored file with the system app (only types on the open list). */
+  | { method: 'attachments.open'; id: string }
+  /** Providers that would read the attachment of this conversation (`images`: a picture is attached); answers `ProviderId[]`. */
+  | { method: 'attachments.readers'; threadId: string; images: boolean }
+  /** The conversation was selected in the window: its attachment clock restarts. */
+  | { method: 'threads.open'; threadId: string }
+  /** The status line under the dream switch (spec 033 AC-1.5); answers a `DreamStatusView`. */
+  | { method: 'dream.status' }
+
+export type StoreResult = { ok: true; attachment: MessageAttachment } | { ok: false; reason: RefusalReason }
+export type PreviewResult = { state: 'removed' | 'unknown' } | { state: 'present'; mediaType?: string; base64?: string }
 
 export type RequestEnvelope = { kind: 'request'; reqId: number } & CoordinatorRequest
 /** Microphone stream from the renderer: 80 ms of mono 16 kHz Int16 PCM, fire-and-forget (no response). */
@@ -801,6 +864,8 @@ export type LiveEvent =
   | { type: 'home.rules'; rules: HomeRulesView }
   /** An agent started adding a device and a step needs the window (QR, external page). */
   | { type: 'home.flow'; step: FlowStep }
+  /** The dream's status changed (spec 033 AC-1.5). */
+  | { type: 'dream.status'; status: DreamStatusView }
 
 export type EventEnvelope = { kind: 'event'; event: LiveEvent }
 export type CoordinatorMessage = ResponseEnvelope | EventEnvelope
@@ -809,12 +874,17 @@ export type CoordinatorMessage = ResponseEnvelope | EventEnvelope
 // Main ⇄ coordinator (utilityProcess parentPort)
 
 export type ParentToCoordinator =
-  | { type: 'init'; dataDir: string; settings: Settings }
+  /** `defaultVaultPath`: the default vault folder under Documents, which only main can resolve (spec 029). */
+  | { type: 'init'; dataDir: string; settings: Settings; packaged: boolean; defaultVaultPath: string }
   | { type: 'settings'; settings: Settings }
   | { type: 'client' }
   | { type: 'host.result'; reqId: number; ok: boolean; message: string }
   /** The global voice hotkey was pressed. */
   | { type: 'voice.trigger' }
+  /** A presence event seen by main (spec 034); validated with PresenceEventSchema where the coordinator receives it. */
+  | { type: 'presence'; event: PresenceEvent }
+  /** The window opened on the greeting conversation it was told to land in (spec 033 BR-29). */
+  | { type: 'landing.used'; threadId: string }
 
 /** Things only the main process can do for the coordinator: it owns windows and the browser session. */
 export type HostRequest =
@@ -832,6 +902,8 @@ export type HostRequest =
   | { action: 'remote.open'; target: 'tailscale-download' | 'tailscale-terms' }
   /** The OS network flag, no probe (spec 026 PD-13). */
   | { action: 'net.online' }
+  /** Opens a stored attachment with the system app (spec 030 BR-25); main re-checks the store root and the type. */
+  | { action: 'attachment.open'; path: string }
 
 export type CoordinatorToParent =
   /** The user picked "Siempre permitir": main persists it in settings and pushes them back. */
@@ -843,3 +915,5 @@ export type CoordinatorToParent =
   | { type: 'settings.patch'; patch: Partial<Omit<Settings, 'providers'>> }
   /** The coordinator owns the device list: main caches the names for the turn-on dialog (spec 026 AC-1.11). */
   | { type: 'remote.devices'; names: string[] }
+  /** The next opening of the window lands in this conversation, the morning greeting's (spec 033 BR-29). */
+  | { type: 'landing'; threadId: string }

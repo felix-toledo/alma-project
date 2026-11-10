@@ -106,7 +106,7 @@ export class AnthropicProvider implements Provider {
     const adaptive = supportsAdaptiveThinking(model)
     const params: Anthropic.Beta.MessageCreateParamsStreaming = {
       model,
-      max_tokens: 64000,
+      max_tokens: request.maxOutputTokens ?? 64000,
       stream: true,
       system: [{ type: 'text', text: request.system }],
       messages: toAnthropicMessages(request.messages),

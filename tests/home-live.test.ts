@@ -64,7 +64,7 @@ install('Motor administrado (instalación real)', () => {
     const { HomeHub } = await import('../src/coordinator/home/hub')
     const dataDir = mkdtempSync(join(tmpdir(), 'alma-engine-'))
     const seen: string[] = []
-    const settings = { home: { enabled: true, mode: 'managed' as const, externalUrl: '', mirrored: false, agentId: 'general', visionProvider: '', visionModel: '' } }
+    const settings = { home: { enabled: true, mode: 'managed' as const, externalUrl: '', mirrored: false, agentId: 'general' } }
     const engine = new HomeEngine({
       dataDir,
       settings: () => settings,
