@@ -1,3 +1,4 @@
+import type { PhoneChipReason } from '../../shared/attach/phone-chips'
 import type { Refusal } from '../../shared/remote/api'
 import type { PwaKey } from '../i18n/es'
 
@@ -15,12 +16,13 @@ export type Operation =
   | 'home'
   | 'cameras'
   | 'status'
+  | 'attach'
 
 /** `network` is the PC not answering (or answering nonsense); `not-delivered` is a send the PC did not take. */
 export type Failure = Refusal | 'network' | 'not-delivered'
 
 export const OPERATIONS: readonly Operation[] = [
-  'notes.list', 'notes.find', 'notes.read', 'notes.image', 'threads.list', 'threads.read', 'threads.send', 'threads.stop', 'chat', 'home', 'cameras', 'status'
+  'notes.list', 'notes.find', 'notes.read', 'notes.image', 'threads.list', 'threads.read', 'threads.send', 'threads.stop', 'chat', 'home', 'cameras', 'status', 'attach'
 ]
 
 // An exhaustive Record: a new Refusal without a text is a type error here (AC-6.3).
@@ -44,6 +46,15 @@ const BASE: Record<Failure, PwaKey> = {
   gone: 'remote.pwa.error.invalid',
   unsupported: 'remote.pwa.error.invalid',
   'run-active': 'remote.pwa.run.active',
+  'attach-off': 'remote.pwa.attach.off',
+  'notice-needed': 'remote.pwa.attach.noticeNeeded',
+  'too-many': 'remote.pwa.attach.tooMany',
+  'secret-name': 'remote.pwa.attach.secret',
+  'file-type': 'remote.pwa.attach.type',
+  'file-content': 'remote.pwa.attach.content',
+  'file-empty': 'remote.pwa.attach.empty',
+  'file-malformed': 'remote.pwa.attach.malformed',
+  storage: 'remote.pwa.attach.storage',
   network: 'remote.pwa.pcUnreachable',
   'not-delivered': 'remote.pwa.notDelivered'
 }
@@ -62,17 +73,24 @@ const BY_OPERATION: { [reason in Failure]?: Partial<Record<Operation, PwaKey>> }
     'notes.image': 'remote.pwa.photoTooBig',
     cameras: 'remote.pwa.photoTooBig',
     chat: 'remote.pwa.tooLong',
-    'threads.send': 'remote.pwa.tooLong'
+    'threads.send': 'remote.pwa.tooLong',
+    attach: 'remote.pwa.attach.tooBig'
   },
-  unavailable: forAll(NOTES, 'remote.pwa.note.unavailable'),
-  gone: { ...forAll(THREADS, 'remote.pwa.thread.gone'), 'notes.read': 'remote.pwa.note.gone' },
+  // On a send, `unavailable` is a file id the PC no longer holds (031 AC-4.2): the chip is told to be attached again.
+  unavailable: { ...forAll(NOTES, 'remote.pwa.note.unavailable'), ...forAll(['attach', 'chat', 'threads.send'], 'remote.pwa.attach.expired') },
+  gone: { ...forAll(THREADS, 'remote.pwa.thread.gone'), 'notes.read': 'remote.pwa.note.gone', attach: 'remote.pwa.thread.gone' },
   unsupported: forAll(NOTES, 'remote.pwa.file.unsupported'),
-  busy: { chat: 'remote.pwa.notDelivered' }
+  busy: { chat: 'remote.pwa.notDelivered', attach: 'remote.pwa.attach.busy' }
 }
 
 /** The one dictionary key a failed operation shows (AC-6.3); every outcome has a concrete text, never a generic error. */
 export function outcomeKey(reason: Failure, operation: Operation): PwaKey {
   return BY_OPERATION[reason]?.[operation] ?? BASE[reason]
+}
+
+/** The loose line a failed side action shows; none for a send refused as `unavailable`, where the chips already say which file expired (031 AC-8.7). */
+export function noteKeyFor(reason: Failure, operation: Operation): PwaKey | null {
+  return reason === 'unavailable' && operation === 'threads.send' ? null : outcomeKey(reason, operation)
 }
 
 /**
@@ -81,4 +99,14 @@ export function outcomeKey(reason: Failure, operation: Operation): PwaKey {
  */
 export function retryOffered(reason: Failure): boolean {
   return reason === 'network'
+}
+
+/** The one dictionary key a chip shows for its reason (031 AC-8.5); the text names the file with `{name}`. `unreadable` is the only reason the PC never sends. */
+export function attachOutcomeKey(reason: PhoneChipReason): PwaKey {
+  return reason === 'unreadable' ? 'remote.pwa.attach.failed' : outcomeKey(reason, 'attach')
+}
+
+/** Retry on a chip (031 AC-8.5): the PC not answering or an upload that failed; never for a type, size, secret name, switch off or notice. */
+export function attachRetryOffered(reason: PhoneChipReason): boolean {
+  return reason === 'network' || reason === 'unreadable'
 }

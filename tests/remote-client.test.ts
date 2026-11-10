@@ -701,6 +701,26 @@ describe('T41 PWA logic (AC-4.12, 5.3, 6.8, 8.1, 8.5)', () => {
       expect(worker.opened).toEqual(['./'])
     })
 
+    it("AC-7.13 (033) the service worker's greeting text equals the dictionary", async () => {
+      for (const [language, dictionary] of [
+        ['es-AR', es],
+        ['en-US', en]
+      ] as const) {
+        // The greeting's encrypted fixed code; no payload, or any other, is the approval push as before.
+        for (const [data, expected] of [
+          [{ text: () => 'g' }, dictionary['remote.pwa.push.greeting']],
+          [null, dictionary['remote.pwa.push.text']],
+          [{ text: () => 'other' }, dictionary['remote.pwa.push.text']]
+        ] as const) {
+          const worker = loadWorker(language)
+          const waited: Promise<unknown>[] = []
+          await worker.listeners.push({ data, waitUntil: (p: Promise<unknown>) => waited.push(p) } as never)
+          await Promise.all(waited)
+          expect(worker.notifications).toEqual([{ title: 'Alma', body: expected }])
+        }
+      }
+    })
+
     it('forget tells the PC and wipes even when the PC is unreachable', async () => {
       const storage = memoryStorage()
       const device = await generateDeviceKey()
@@ -750,8 +770,8 @@ describe('T41 PWA logic (AC-4.12, 5.3, 6.8, 8.1, 8.5)', () => {
 })
 
 describe('PWA shell cache name (028 BR-26, T67)', () => {
-  it('AC-4.1 (028) the shell cache is v9, so installed phones drop the code that had no Notes or conversations', () => {
+  it('AC-4.1 (028) the shell cache is v11, so installed phones drop the code without the greeting push (v10 dropped the code that had no relay client)', () => {
     const source = readFileSync(join(__dirname, '..', 'src', 'remote-client', 'public', 'sw.js'), 'utf8')
-    expect(source).toMatch(/const SHELL = 'alma-shell-v9'/)
+    expect(source).toMatch(/const SHELL = 'alma-shell-v11'/)
   })
 })

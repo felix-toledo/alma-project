@@ -11,6 +11,9 @@ import {
   notesReadBody,
   pongBody,
   pushSubscribeBody,
+  putBody,
+  putThreadBody,
+  removeBody,
   sessionBody,
   sessionChallengeBody,
   threadsListBody,
@@ -41,6 +44,7 @@ import type { DeviceStore, RemoteStateStore } from './store'
 import { expiredDevices } from './store'
 import { SessionStore } from './session'
 import { TransportStartError, okResponse, refusalResponse, type RemoteTransport } from './transport'
+import { failedResponse, UploadsFlow, type PhoneFilesPort, type PutTarget, type StoredUpload, type UploadTimers } from './uploads'
 
 /** Dependencies of the remote channel. Grows as tasks land; the full shape is plan section 3. */
 export interface RemoteDeps {
@@ -56,8 +60,8 @@ export interface RemoteDeps {
   host: { confirm(kind: 'pair' | 'serve' | 'revokeAll', params: Record<string, string>): Promise<boolean> }
   /** The single shared remote thread (T20; wired to the coordinator in T35). */
   conversation(fresh?: boolean): Thread
-  /** Runs the configured agent; resolves after the answer is committed. */
-  ask(threadId: string, text: string): Promise<void>
+  /** Runs the configured agent; resolves after the answer is committed. `attachments` are the ids bound to the message (spec 031). */
+  ask(threadId: string, text: string, attachments?: string[]): Promise<void>
   /** Cancels the current run of a thread. */
   cancel(threadId: string): void
   /** The existing approval broker, fronted by the approve scope (T21; 'always' cannot be expressed). */
@@ -71,12 +75,18 @@ export interface RemoteDeps {
   vault(): RemoteVault | null
   /** The thread store as the Conversations feature reads it (spec 028). */
   threads: RemoteThreads
+  /** The attachment store as a phone's upload reaches it (spec 031); this module imports no file-system API. */
+  files: PhoneFilesPort
+  /** Timers behind the 15-minute expiry of a pending upload. */
+  timers: UploadTimers
   /** The remote audit entry of a phone-initiated call (AC-7.7; T26 owns the mapping). */
   record(entry: AuditEvent): void
   /** A tested phone answered its ping (T25; T35 wires it to the wizard). */
   onTestResult(deviceId: string, ok: boolean): void
-  /** The one outbound POST remote access makes: approval pushes with an empty body (T46). */
+  /** The one outbound POST remote access makes: the content-free approval and greeting pushes (T46, 033 BR-30). */
   post(url: string, headers: Record<string, string>, body: Uint8Array): Promise<{ ok: boolean }>
+  /** The dream service's pending landing for one device, consumed by asking (spec 033 BR-29). */
+  landing?(deviceId: string): string | null
 }
 
 const NO_STORE = { 'cache-control': 'no-store' }
@@ -118,10 +128,18 @@ export class RemoteChannel {
   private readonly cameras: CamerasFlow
   private readonly notes: NotesFlow
   private readonly threadsFlow: ThreadsFlow
+  private readonly uploads: UploadsFlow
+  /** What the two sends need of the pending list; late-bound because the flows are built before it. */
+  private readonly pendingUploads: Pick<UploadsFlow, 'claimForSend' | 'bound'> = {
+    claimForSend: (deviceId, threadId, ids, text) => this.uploads.claimForSend(deviceId, threadId, ids, text),
+    bound: (deviceId, ids) => this.uploads.bound(deviceId, ids)
+  }
   private readonly ties = new RunTies()
   private readonly followMarks = new Map<string, number>()
   /** The vault path an image request resolved to, so its audit entry can name it without the flow knowing about audit. */
   private readonly resolvedImages = new WeakMap<RemoteRequest, string>()
+  /** What a put stored (kind and size, never a name), so its audit entry can say so without the flow knowing about audit. */
+  private readonly storedUploads = new WeakMap<RemoteRequest, StoredUpload>()
   private readonly devices: DevicesAdmin
   private readonly push: PushFlow
   private syncing: Promise<void> = Promise.resolve()
@@ -167,7 +185,16 @@ export class RemoteChannel {
     ['POST /api/threads/send', async (request, device) => {
       if (!device) return refusalResponse('unknown-device')
       const body = threadsSendBody.parse(request.body)
-      return this.threadsFlow.send(device.deviceId, body.id, body.text)
+      return this.threadsFlow.send(device.deviceId, body.id, body.text, body.attachments)
+    }],
+    ['POST /api/chat/attach', async (request, device) => this.attach(request, device, { shared: true }, putBody.parse(request.body))],
+    ['POST /api/threads/attach', async (request, device) => {
+      const { id, ...file } = putThreadBody.parse(request.body)
+      return this.attach(request, device, { shared: false, id }, file)
+    }],
+    ['POST /api/attachments/remove', async (request, device) => {
+      if (!device) return refusalResponse('unknown-device')
+      return this.uploads.remove(device.deviceId, removeBody.parse(request.body).id)
     }],
     ['POST /api/threads/stop', async (request, device) => {
       if (!device) return refusalResponse('unknown-device')
@@ -183,7 +210,8 @@ export class RemoteChannel {
     this.approvals = new ApprovalsFlow({ ...deps, threadId: () => deps.conversation().id, ties: this.ties })
     this.chat = new ChatFlow({ ...deps, approvals: (deviceId) => this.approvals.list(deviceId),
       waiting: (deviceId) => this.approvals.waiting(deviceId, deps.conversation().id),
-      ties: this.ties
+      ties: this.ties,
+      uploads: this.pendingUploads
     })
     this.home = new HomeFlow({
       settings: deps.settings,
@@ -204,7 +232,17 @@ export class RemoteChannel {
       sharedId: () => deps.conversation().id,
       ties: this.ties,
       waiting: (deviceId, threadId) => this.approvals.waiting(deviceId, threadId),
-      sendShared: (deviceId, text) => this.chat.send(deviceId, text)
+      sendShared: (deviceId, text, ids) => this.chat.send(deviceId, text, ids),
+      uploads: this.pendingUploads
+    })
+    this.uploads = new UploadsFlow({
+      now: deps.now,
+      sharedId: () => deps.conversation().id,
+      reachable: (id) => this.threadsFlow.reachable(id),
+      isRunning: (id) => deps.threads.isRunning(id),
+      files: deps.files,
+      timers: deps.timers,
+      onLeftover: () => auditRemote(deps.record, 'remote.attachments.discard', 'error')
     })
     this.devices = new DevicesAdmin({
       settings: deps.settings,
@@ -215,6 +253,7 @@ export class RemoteChannel {
       closeConnections: (deviceId) => this.transport?.closeDevice(deviceId),
       onDeviceGone: (deviceId) => {
         this.abortRuns((tie) => tie.deviceId === deviceId)
+        this.uploads.dropDevice(deviceId)
         for (const key of this.followMarks.keys()) if (key.startsWith(`${deviceId}|`)) this.followMarks.delete(key)
         this.releaseHeld()
       },
@@ -240,6 +279,11 @@ export class RemoteChannel {
     await this.push.notify(approval.threadId)
   }
 
+  /** The morning greeting's push to every subscribed phone (spec 033 BR-30); silent when there is nothing to tell. */
+  async notifyGreeting(): Promise<void> {
+    await this.push.notifyGreeting()
+  }
+
   /** Reconciles the transport with the settings: off stops everything, on starts it once. Calls queue, so a second one never starts a second listener. */
   sync(): Promise<void> {
     const run = this.syncing.then(() => this.reconcile())
@@ -249,6 +293,8 @@ export class RemoteChannel {
 
   private async reconcile(): Promise<void> {
     const remote = this.deps.settings().remote
+    // Files not yet sent never outlive the switch that allowed them (spec 031 AC-3.1); History and continue are not part of it.
+    if (!remote.sendFiles || !remote.scopes.chat) this.uploads.dropAll()
     if (!remote.enabled) {
       await this.stop()
       return
@@ -305,6 +351,7 @@ export class RemoteChannel {
 
   async stop(): Promise<void> {
     this.abortRuns(() => true)
+    this.uploads.dropAll()
     this.chat.close()
     this.threadsFlow.close()
     this.unsubscribeEvents?.()
@@ -407,7 +454,7 @@ export class RemoteChannel {
   handle: RemoteHandler = async (request, signal): Promise<RemoteResponse> => {
     let timer: ReturnType<typeof setTimeout> | undefined
     const cut = new Promise<RemoteResponse>((resolve) => {
-      timer = setTimeout(() => resolve({ status: 500, headers: { ...NO_STORE }, body: { error: 'failed' } }), REMOTE_LIMITS.timeoutMs)
+      timer = setTimeout(() => resolve(failedResponse()), REMOTE_LIMITS.timeoutMs)
     })
     const slot: PollSlot = { deviceId: null, done: false }
     try {
@@ -443,7 +490,10 @@ export class RemoteChannel {
       }
     }
     const cameraId = route.path === '/api/cameras/still' ? (request.query.get('id') ?? undefined) : undefined
-    const refused = this.refusal(route, device, cameraId)
+    // A send needs the Files sub-switch only when its body names pending uploads (the schema already passed).
+    const ids = (request.body as { attachments?: unknown } | null)?.attachments
+    const carriesFiles = route.files === 'with-ids' && Array.isArray(ids) && ids.length > 0
+    const refused = this.refusal(route, device, cameraId, carriesFiles)
     if (refused) return refused
     const handler = this.handlers.get(`${route.method} ${route.path}`)
     if (!handler) return { status: 500, headers: { ...NO_STORE }, body: { error: 'not-implemented' } }
@@ -466,10 +516,10 @@ export class RemoteChannel {
   }
 
   /** The uniform refusal when the settings do not allow this device the route, or null (audited like any denial). */
-  private refusal(route: RouteSpec, device: DeviceAuth | null, cameraId: string | undefined): RemoteResponse | null {
-    const verdict = authorizeRemote({ device, remote: this.deps.settings().remote, route, cameraId })
+  private refusal(route: RouteSpec, device: DeviceAuth | null, cameraId: string | undefined, carriesFiles = false): RemoteResponse | null {
+    const verdict = authorizeRemote({ device, remote: this.deps.settings().remote, route, cameraId, carriesFiles })
     if (verdict.ok) return null
-    if (verdict.reason === 'scope-off' || verdict.reason === 'write-off' || verdict.reason === 'sensitive-off' || verdict.reason === 'camera-not-allowed') {
+    if (verdict.reason === 'scope-off' || verdict.reason === 'write-off' || verdict.reason === 'sensitive-off' || verdict.reason === 'camera-not-allowed' || verdict.reason === 'attach-off') {
       this.auditDenied(route, device?.deviceId)
     } else if (verdict.reason === 'unknown-device') {
       this.auditDenied(route, undefined)
@@ -507,11 +557,20 @@ export class RemoteChannel {
   private auditResponse(route: RouteSpec, request: RemoteRequest, device: DeviceAuth | null, response: RemoteResponse): void {
     const body = response.body as { error?: unknown; path?: unknown } | null
     const error = body?.error
+    // A send that carries attachments says how many, never which (spec 031 AC-7.1).
+    const ids = route.files === 'with-ids' ? (request.body as { attachments?: unknown[] } | null)?.attachments : undefined
+    const count = ids?.length ? { attachments: ids.length } : undefined
+    if (route.audit === 'upload') {
+      // One entry for every put that reached the PC: kind and size when it was stored, only the outcome when it was not.
+      const outcome = typeof error !== 'string' ? 'ok' : error === 'storage' || error === 'failed' ? 'error' : 'denied'
+      auditRemote(this.deps.record, ROUTE_OPS[route.path] ?? route.path, outcome, device?.deviceId, { detail: { ...this.storedUploads.get(request) } })
+      return
+    }
     if (route.audit === 'open') {
       if (this.isFollow(route, request, device, response)) return
       const served = { path: typeof body?.path === 'string' ? body.path : undefined, image: this.resolvedImages.get(request) }
       const target = targetOf(route, request, device, served)
-      auditRemote(this.deps.record, ROUTE_OPS[route.path] ?? route.path, typeof error === 'string' ? 'error' : 'ok', device?.deviceId, { target })
+      auditRemote(this.deps.record, ROUTE_OPS[route.path] ?? route.path, typeof error === 'string' ? 'error' : 'ok', device?.deviceId, { target, detail: count })
       return
     }
     if (typeof error === 'string') {
@@ -522,7 +581,7 @@ export class RemoteChannel {
       return
     }
     if (route.audit === 'change' || route.audit === 'picture') {
-      auditRemote(this.deps.record, ROUTE_OPS[route.path] ?? route.path, 'ok', device?.deviceId, { target: targetOf(route, request, device) })
+      auditRemote(this.deps.record, ROUTE_OPS[route.path] ?? route.path, 'ok', device?.deviceId, { target: targetOf(route, request, device), detail: count })
     }
   }
 
@@ -586,7 +645,10 @@ export class RemoteChannel {
 
   private async status(device: DeviceAuth | null): Promise<RemoteResponse> {
     if (!device) return refusalResponse('unknown-device')
-    return this.ok(statusView(this.deps.settings().remote))
+    const remote = this.deps.settings().remote
+    // Asked even with History off: that first opening is the landing, and the app opens as today (BR-29).
+    const landing = this.deps.landing?.(device.deviceId)
+    return this.ok({ ...statusView(remote), ...(landing && remote.scopes.history ? { landing } : {}) })
   }
 
   /**
@@ -617,16 +679,23 @@ export class RemoteChannel {
   private async chatSend(request: RemoteRequest, device: DeviceAuth | null): Promise<RemoteResponse> {
     if (!device) return refusalResponse('unknown-device')
     const body = chatSendBody.parse(request.body)
-    const result = this.chat.send(device.deviceId, body.text)
-    if (!('ok' in result)) {
-      if (result.error === 'busy' || result.error === 'run-active') return refusalResponse(result.error)
-      return { status: 500, headers: { ...NO_STORE }, body: { error: result.error } }
-    }
-    return this.ok({ ok: true })
+    const result = this.chat.send(device.deviceId, body.text, body.attachments)
+    if ('ok' in result) return this.ok({ ok: true })
+    return result.error === 'failed' ? failedResponse() : refusalResponse(result.error)
+  }
+
+  /** A file for the Chat tab's thread or a conversation by id; the pending list and every rule about the file live in the flow and the store. */
+  private async attach(request: RemoteRequest, device: DeviceAuth | null, target: PutTarget, file: { name: string; size: number; base64: string }): Promise<RemoteResponse> {
+    if (!device) return refusalResponse('unknown-device')
+    const { response, stored } = this.uploads.put(device.deviceId, target, file)
+    if (stored) this.storedUploads.set(request, stored)
+    return response
   }
 
   private async chatNew(): Promise<RemoteResponse> {
+    const replaced = this.deps.conversation().id
     this.chat.newThread()
+    this.uploads.dropThread(replaced)
     return this.ok({ ok: true })
   }
 

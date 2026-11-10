@@ -1,7 +1,11 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { deviceExportList } from '../src/coordinator/channels/remote/devices-admin'
+import { eraseRelay, transportExport } from '../src/coordinator/channels/remote/relay-privacy'
+import { RelayStore } from '../src/coordinator/channels/remote/relay-store'
+import { exportPersonalData } from '../src/coordinator/privacy'
 import { defaultRemote } from '../src/shared/remote/settings'
 import { HOST, makeThread, openSession, pairDevice, testChannel, type Harness } from './support/remote-harness'
 
@@ -123,5 +127,98 @@ describe('privacy of the notes and conversations routes (spec 028)', () => {
     // Erasing the phones never touches the vault or the conversations.
     expect(t.vault.entries.map((entry) => entry.path)).toContain('Diario/hoy.md')
     expect(t.chat.threads.map((thread) => thread.id)).toContain('t1')
+  })
+})
+
+describe('privacy of the relay (spec 027 T23)', () => {
+  const dirs: string[] = []
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+  })
+  const folder = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'alma-relay-privacy-'))
+    dirs.push(dir)
+    return dir
+  }
+  const box = { seal: async (plain: string) => `sealed:${plain}`, open: async (sealed: string) => sealed.slice('sealed:'.length) }
+  const storeIn = (dir: string) => RelayStore.load({ dir, sealBox: box, random: (length) => crypto.getRandomValues(new Uint8Array(length)), domain: () => 'relay.example' })
+
+  it('AC-8.2 (027) erase deletes the relay credentials and the routing id, and disconnects first', async () => {
+    const dir = folder()
+    const store = await storeIn(dir)
+    const id = await store.ensureRoutingId()
+    await store.recordPairing()
+    const steps: string[] = []
+    await eraseRelay({
+      store,
+      disconnect: () => {
+        steps.push(`disconnect while the id is ${store.routingId() === id ? 'still there' : 'gone'}`)
+      }
+    })
+    expect(steps).toEqual(['disconnect while the id is still there'])
+    expect(existsSync(join(dir, 'relay-sealed'))).toBe(false)
+    expect(store.routingId()).toBeNull()
+    expect(store.pairedDomain()).toBeNull()
+    expect((await storeIn(dir)).routingId()).toBeNull()
+    // The next use makes a new id, so the old address is dead for good.
+    expect(await store.ensureRoutingId()).not.toBe(id)
+  })
+
+  it('AC-8.2 (027) erase deletes the credentials even when disconnecting fails or nothing is there', async () => {
+    const dir = folder()
+    const store = await storeIn(dir)
+    await store.ensureRoutingId()
+    await expect(
+      eraseRelay({
+        store,
+        disconnect: async () => {
+          throw new Error('socket already closed')
+        }
+      })
+    ).resolves.toBeUndefined()
+    expect(existsSync(join(dir, 'relay-sealed'))).toBe(false)
+    await expect(eraseRelay({ store: await storeIn(folder()), disconnect: () => {} })).resolves.toBeUndefined()
+  })
+
+  it('AC-8.2 (027) the relay is told nothing: erasing contacts no host', async () => {
+    const source = readFileSync(join(__dirname, '..', 'src', 'coordinator', 'channels', 'remote', 'relay-privacy.ts'), 'utf8')
+    expect(source).not.toMatch(/fetch\s*\(|WebSocket|node:(?:https?|net|tls|dns)/)
+  })
+
+  it('AC-8.3 (027) export lists the transport choice without credentials', async () => {
+    const tailscale = defaultRemote()
+    expect(transportExport(tailscale)).toEqual({ transport: 'tailscale', relayOn: false })
+    expect(transportExport({ ...tailscale, enabled: true })).toEqual({ transport: 'tailscale', relayOn: false })
+    expect(transportExport({ ...tailscale, transport: 'relay' })).toEqual({ transport: 'relay', relayOn: false })
+    expect(transportExport({ ...tailscale, transport: 'relay', enabled: true })).toEqual({ transport: 'relay', relayOn: true })
+    // Whatever else is attached to the settings object at runtime, only the two facts leave.
+    const crowded = { ...tailscale, transport: 'relay' as const, enabled: true, routingId: 'abcdefghijklmnopqrstuvwxyz', relayDomain: 'relay.example', privateKey: 'd-secret' }
+    const json = JSON.stringify(transportExport(crowded as never))
+    expect(Object.keys(JSON.parse(json))).toEqual(['transport', 'relayOn'])
+    for (const banned of ['routingId', 'abcdefgh', 'relay.example', 'privateKey', 'd-secret', 'key', 'token', 'secret']) expect(json).not.toContain(banned)
+  })
+
+  it('AC-8.3 (027) the personal-data export never copies the sealed relay file', async () => {
+    const data = folder()
+    const target = folder()
+    const remoteDir = join(data, 'remote')
+    const store = await storeIn(remoteDir)
+    const id = await store.ensureRoutingId()
+    mkdirSync(join(data, 'threads'), { recursive: true })
+    writeFileSync(join(data, 'threads', 't.json'), '{}')
+    const out = exportPersonalData(data, target)
+    const copied = readdirSync(out, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile())
+    expect(copied.length).toBeGreaterThan(0)
+    for (const entry of copied) expect(readFileSync(join(entry.parentPath, entry.name), 'utf8')).not.toContain(id)
+    expect(existsSync(join(out, 'remote'))).toBe(false)
+  })
+
+  it('AC-8.2 (027) and the 026 erase is unchanged: devices are revoked and the channel needs nothing from the relay', async () => {
+    const t = await testChannel({ remote: { enabled: true } })
+    await t.channel.sync()
+    await pairDevice(t, 'phone-a')
+    t.setConfirm(false)
+    expect(await t.channel.erase()).toEqual({ devices: 1 })
+    expect(t.confirmCalls).toEqual([])
   })
 })

@@ -1,13 +1,17 @@
+import type { PhoneAttachmentView } from '../../shared/attach/phone'
 import { REMOTE_LIMITS } from '../../shared/remote/limits'
 import type { PwaKey } from '../i18n/es'
+import { readAttachmentViews } from './attach'
 import type { FetchLike, FetchResponse } from './session'
 
-/** One committed chat message as the narrow API serves it (PD-12): text only. */
+/** One committed chat message as the narrow API serves it (PD-12): text, and the names of its attachments (031 BR-10). */
 export interface PwaMessage {
   index: number
   role: string
   text: string
   at: number
+  /** Name, kind and size only (031 BR-10); never an id. */
+  attachments?: PhoneAttachmentView[]
 }
 
 export interface PwaState {
@@ -33,6 +37,12 @@ function isMessage(value: unknown): value is PwaMessage {
   )
 }
 
+/** The fields the screen renders; anything else on the wire stays off the render model. */
+function readMessage(message: PwaMessage): PwaMessage {
+  const attachments = readAttachmentViews(message.attachments)
+  return { index: message.index, role: message.role, text: message.text, at: message.at, ...(attachments ? { attachments } : {}) }
+}
+
 /**
  * One long-poll round (AC-8.1): a single GET, never queued behind another; the
  * caller's signal aborts it (hiding the page). A key refusal (`unknown-device`,
@@ -56,7 +66,7 @@ export async function pollOnce(deps: { fetch: FetchLike; token: string; since: n
   if (!isRecord(state) || typeof state.rev !== 'number' || typeof state.running !== 'boolean') {
     return { ok: false, reason: 'network' }
   }
-  const messages = Array.isArray(state.messages) ? state.messages.filter(isMessage) : []
+  const messages = Array.isArray(state.messages) ? state.messages.filter(isMessage).map(readMessage) : []
   const approvals = Array.isArray(state.approvals) ? state.approvals : []
   return {
     ok: true,

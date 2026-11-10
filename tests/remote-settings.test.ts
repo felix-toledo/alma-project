@@ -16,6 +16,7 @@ describe('remote settings (spec 026 T2)', () => {
       scopes: { chat: false, approve: false, home: false, cameras: false, vault: false, history: false },
       sensitive: false,
       continueHistory: false,
+      sendFiles: false,
       cameras: [],
       vaultExcluded: [],
       agentId: 'general'
@@ -53,6 +54,7 @@ describe('remote settings (spec 026 T2)', () => {
       scopes: { chat: true, approve: false, home: false, cameras: false, vault: false, history: false },
       sensitive: false,
       continueHistory: false,
+      sendFiles: false,
       cameras: [],
       vaultExcluded: [],
       agentId: 'revisor'

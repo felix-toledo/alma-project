@@ -13,6 +13,12 @@ export function canList(status: StatusView): { key: PwaKey; on: boolean }[] {
     { key: 'remote.pwa.can.sensitive', on: on(status.sensitive) },
     { key: 'remote.pwa.can.notes', on: on(scopes.vault) },
     { key: 'remote.pwa.can.threads', on: on(scopes.history) },
-    { key: 'remote.pwa.can.continue', on: on(status.continue) }
+    { key: 'remote.pwa.can.continue', on: on(status.continue) },
+    { key: 'remote.pwa.can.attach', on: on(status.sendFiles) }
   ]
+}
+
+/** The attach button (031 AC-8.4): on only while the last status says the PC allows files; off, it names why. A missing key is off. */
+export function attachButton(status: StatusView | null): { enabled: boolean; reason: PwaKey | null } {
+  return status?.sendFiles === true ? { enabled: true, reason: null } : { enabled: false, reason: 'remote.pwa.attach.off' }
 }

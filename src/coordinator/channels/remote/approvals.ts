@@ -1,3 +1,4 @@
+import { canAnswerFrom } from '../../../shared/companyAuthoring'
 import { REMOTE_LIMITS } from '../../../shared/remote/api'
 import type { ApprovalView, PendingApproval, Settings } from '../../../shared/types'
 import type { RunTies } from './runs'
@@ -31,7 +32,8 @@ function viewOf(approval: PendingApproval, shared: string): ApprovalView {
     flagged: approval.flagged,
     ...(reason !== undefined ? { reason } : {}),
     ...(approval.threadId !== shared ? { thread: approval.threadId } : {}),
-    question: approval.flagged ? 'chan.flagged' : 'chan.allowQuestion'
+    question: approval.flagged ? 'chan.flagged' : 'chan.allowQuestion',
+    whole: canAnswerFrom('phone', approval, REMOTE_LIMITS.approvalInputChars)
   }
 }
 
@@ -66,8 +68,9 @@ export class ApprovalsFlow {
    * id is indistinguishable from an unknown one, so ids do not leak threads.
    */
   answer(deviceId: string, approvalId: string, decision: 'allow' | 'deny'): 'ok' | 'already-answered' {
-    const found = this.list(deviceId).some((view) => view.id === approvalId)
-    if (!found) return 'already-answered'
+    const view = this.list(deviceId).find((row) => row.id === approvalId)
+    // A proposal the phone could not show whole is left pending for the desktop; Rechazar still goes through (spec 029 BR-23).
+    if (!view || (decision === 'allow' && !view.whole)) return 'already-answered'
     this.deps.respondApproval(approvalId, decision)
     return 'ok'
   }

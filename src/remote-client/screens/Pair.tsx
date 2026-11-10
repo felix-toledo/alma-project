@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { b64u, fingerprint } from '../../shared/remote/crypto'
 import { phoneLanguage, translatePwa, type PwaKey, type PwaLanguage } from '../i18n'
-import { pwaFetch } from '../http'
+import { connectToPc, missingCodeKey, pwaFetch } from '../http'
 import { idbStorage } from '../idb'
 import { generateDeviceKey } from '../lib/keys'
 import { PwaHeader } from './Header'
@@ -74,7 +74,11 @@ export function Pair({ onPaired }: { onPaired(deviceId: string): void }): React.
     void (async () => {
       const fragment = parsePairFragment(location.hash)
       history.replaceState(null, '', location.pathname)
-      if (!fragment) return show({ stage: 'error', key: 'remote.pwa.pairing.rescan' })
+      if (!fragment) return show({ stage: 'error', key: await missingCodeKey() })
+      // Before anything is sent: this must be the PC the code names (over a direct address the hello check below does it).
+      const reached = await connectToPc(fragment.fingerprint)
+      if (!alive()) return
+      if (!reached.ok) return show({ stage: 'error', key: reached.key })
       const hello = await checkHello({ fetch: pwaFetch, expectedFingerprint: fragment.fingerprint })
       if (!alive()) return
       if (!hello.ok) return show({ stage: 'error', key: hello.reason === 'mismatch' ? 'remote.pwa.fingerprint' : 'remote.pwa.pcUnreachable' })

@@ -1,3 +1,4 @@
+import { phoneAttachmentViews, type PhoneAttachmentView } from '../../../shared/attach/phone'
 import { REMOTE_LIMITS } from '../../../shared/remote/api'
 import type { ChatMessage } from '../../../shared/types'
 
@@ -6,6 +7,8 @@ export interface ThreadViewMessage {
   role: 'user' | 'assistant'
   text: string
   at: number
+  /** Name, kind and size of what was attached, and nothing else of it (spec 031 BR-10); absent when there is none. */
+  attachments?: PhoneAttachmentView[]
 }
 
 export interface ThreadViewPage {
@@ -16,13 +19,16 @@ export interface ThreadViewPage {
   earlier: boolean
 }
 
-/** Only the text blocks: tool calls, results and thinking never leave the PC through a read (BR-4). */
+/** Only the text blocks: tool calls, results and thinking never leave the PC through a read (BR-4). Attachments leave as names (spec 031 BR-10). */
 function textOf(message: ChatMessage): string {
   return message.content
     .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
     .map((block) => block.text)
     .join('\n')
 }
+
+/** A message with neither text nor attachments is left out; one with attachments only is listed (spec 031 AC-5.3). */
+const isListed = (message: ChatMessage): boolean => textOf(message).length > 0 || (message.attachments?.length ?? 0) > 0
 
 function byteCut(text: string, budget: number): string {
   if (budget <= 0) return ''
@@ -71,8 +77,9 @@ export function threadPage(
   const messages = raw
     .slice(start, end)
     .map((message, offset): ThreadViewMessage | null => {
-      const text = textOf(message)
-      return text.length === 0 ? null : { index: start + offset, role: message.role, text, at: message.ts }
+      if (!isListed(message)) return null
+      const attachments = phoneAttachmentViews(message.attachments)
+      return { index: start + offset, role: message.role, text: textOf(message), at: message.ts, ...(attachments.length > 0 ? { attachments } : {}) }
     })
     .filter((message): message is ThreadViewMessage => message !== null)
   const kept = fit(messages, envelope, page.since !== undefined ? 'oldest' : 'newest')
@@ -80,5 +87,5 @@ export function threadPage(
   // A delta cut by the cap hands back a cursor just after what it sent, so the phone asks again for the rest.
   const last = kept.at(-1)
   const cursor = page.since !== undefined && last && kept.length < messages.length ? last.index + 1 : rev
-  return { rev: cursor, messages: kept, earlier: page.since === undefined && raw.slice(0, firstIndex).some((message) => textOf(message).length > 0) }
+  return { rev: cursor, messages: kept, earlier: page.since === undefined && raw.slice(0, firstIndex).some(isListed) }
 }

@@ -1,3 +1,5 @@
+import type { PhoneAttachmentView } from '../attach/phone'
+
 /** What the narrow API returns for notes, conversations and status (spec 028). Types only, so the phone can import it. */
 
 export interface NoteEntry {
@@ -50,7 +52,7 @@ export interface ThreadWindow {
   /** The running run was started by the asking device, the only one that can stop it. */
   ownRun: boolean
   waiting: boolean
-  messages: { index: number; role: 'user' | 'assistant'; text: string; at: number }[]
+  messages: { index: number; role: 'user' | 'assistant'; text: string; at: number; attachments?: PhoneAttachmentView[] }[]
   /** More messages exist before the first one returned. */
   earlier: boolean
 }
@@ -59,4 +61,8 @@ export interface StatusView {
   scopes: Record<'chat' | 'approve' | 'home' | 'cameras' | 'vault' | 'history', boolean>
   sensitive: boolean
   continue: boolean
+  /** The send-files sub-switch, counted only while Chat is on (spec 031 AC-1.9). A PC that predates it omits the key: the phone reads that as off. */
+  sendFiles?: boolean
+  /** The morning greeting's conversation, once per device after delivery and only with History on (spec 033 BR-29). */
+  landing?: string
 }

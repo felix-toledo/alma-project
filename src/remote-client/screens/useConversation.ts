@@ -3,10 +3,10 @@ import type { ThreadWindow } from '../../shared/remote/wire'
 import type { PwaKey } from '../i18n/es'
 import { endsView, foldWindow, windowEvent } from '../lib/conversations'
 import { useLatest } from '../lib/latest'
-import { outcomeKey, type Failure, type Operation } from '../lib/outcome'
+import { noteKeyFor, outcomeKey, type Failure, type Operation } from '../lib/outcome'
 import { backoffMs } from '../lib/poll'
 import { nextScreenState, startScreen, type ScreenEvent, type ScreenState } from '../lib/screen-state'
-import { earlierCursor } from '../lib/threads'
+import { earlierCursor, type ThreadActionOutcome } from '../lib/threads'
 import type { Pwa } from '../usePwa'
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -23,7 +23,8 @@ export interface Conversation {
   reload(): void
   refresh(): Promise<void>
   loadEarlier(): Promise<void>
-  send(text: string): Promise<boolean>
+  /** The outcome, so the composer can clear, expire or keep its chips (031 AC-4.3, AC-8.7). */
+  send(text: string, attachments?: string[]): Promise<ThreadActionOutcome>
   stop(): Promise<void>
 }
 
@@ -117,7 +118,7 @@ export function useConversation(pwa: Pwa, id: string, live: boolean): Conversati
   const fail = useCallback(
     (reason: Failure, operation: Operation) => {
       if (endsView(reason)) apply({ type: 'failed', reason, operation })
-      else setNote(outcomeKey(reason, operation))
+      else setNote(noteKeyFor(reason, operation))
     },
     [apply]
   )
@@ -145,20 +146,20 @@ export function useConversation(pwa: Pwa, id: string, live: boolean): Conversati
   }, [id, asked, latest, held, apply, fail])
 
   const send = useCallback(
-    async (text: string): Promise<boolean> => {
+    async (text: string, attachments?: string[]): Promise<ThreadActionOutcome> => {
       setBusy(true)
-      const out = await latest.current.threads.send(id, text)
+      const out = await latest.current.threads.send(id, text, attachments)
       if (out.ok) {
         setNote(null)
         await refresh()
-        return true
+        return out
       }
       setBusy(false)
       if (out.reason === 'write-off') setContinueOn(false)
       else fail(out.reason, 'threads.send')
       // A busy or already-running answer means the window on screen is out of date.
       if (out.reason === 'busy' || out.reason === 'run-active') await refresh()
-      return false
+      return out
     },
     [id, latest, refresh, fail]
   )

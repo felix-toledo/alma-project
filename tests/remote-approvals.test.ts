@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { ApprovalBroker } from '../src/coordinator/approval.js'
+import { APPROVAL_INPUT_LIMIT } from '../src/coordinator/channels/texts.js'
+import { ApprovalsFlow } from '../src/coordinator/channels/remote/approvals.js'
+import { RunTies } from '../src/coordinator/channels/remote/runs.js'
+import { defaultSettings } from '../src/shared/defaults.js'
+import { REMOTE_LIMITS } from '../src/shared/remote/api.js'
 import type { RemoteResponse } from '../src/shared/remote/api.js'
 import type { ApprovalView, PendingApproval, RemoteSettings } from '../src/shared/types.js'
 import { HOST, openSession, pairDevice, testChannel, type Harness } from './support/remote-harness.js'
@@ -65,7 +71,8 @@ describe('T21 approvals (AC-5.6 a 5.9, 5.25, 8.3, BR-12)', () => {
         input: JSON.stringify({ command: 'ls' }, null, 1),
         flagged: false,
         reason: 'list files',
-        question: 'chan.allowQuestion'
+        question: 'chan.allowQuestion',
+        whole: true
       }
     ])
     const raw = JSON.stringify(body(res))
@@ -131,7 +138,7 @@ describe('T21 approvals (AC-5.6 a 5.9, 5.25, 8.3, BR-12)', () => {
   it('AC-5.7: ya respondido en el PC → 409 already-answered y nada corre dos veces', async () => {
     const { t, headers } = await served()
     const mine = t.approvals.askApproval(approval('remote'))
-    t.approvals.broker.respond(mine.approvalId, 'deny')
+    t.approvals.broker.respond(mine.approvalId, 'deny', 'desktop')
     await expect(mine.decision).resolves.toBe('deny')
     const res = await t.transport.request({
       method: 'POST',
@@ -170,7 +177,7 @@ describe('T21 approvals (AC-5.6 a 5.9, 5.25, 8.3, BR-12)', () => {
     expect(rejected.status).toBe(400)
     const res = await t.transport.request({ method: 'GET', path: '/api/approvals', headers })
     expect(Object.keys(body(res).approvals[0] ?? {}).sort()).toEqual(
-      ['flagged', 'id', 'input', 'question', 'reason', 'tool']
+      ['flagged', 'id', 'input', 'question', 'reason', 'tool', 'whole']
     )
     expect(JSON.stringify(body(res))).not.toContain('always')
     // BR-12/OQ-6: publish is answered (once), allow or deny only.
@@ -266,5 +273,90 @@ describe('T21 approvals (AC-5.6 a 5.9, 5.25, 8.3, BR-12)', () => {
     expect(answer.status).toBe(200)
     const resolved = await second
     expect(body(resolved).approvals).toEqual([])
+  })})
+
+const proposal = (size: number): Partial<PendingApproval> => ({ toolName: 'create_company', input: { name: 'x'.repeat(size) }, allowAlways: false })
+
+describe('approvals of company tools on the phone (spec 029)', () => {
+  it('AC-2.9 (029) the phone answers only with approve on, never always', async () => {
+    const { t, headers } = await served()
+    const mine = t.approvals.askApproval(approval('remote', proposal(10)))
+    const listed = await t.transport.request({ method: 'GET', path: '/api/approvals', headers })
+    expect(body(listed).approvals[0]).toMatchObject({ id: mine.approvalId, tool: 'create_company', whole: true })
+    const always = await t.transport.request({ method: 'POST', path: '/api/approvals/answer', headers, body: { id: mine.approvalId, decision: 'always' } })
+    expect(always.status).toBe(400)
+    expect(t.approvals.broker.pending()).toHaveLength(1)
+    const allow = await t.transport.request({ method: 'POST', path: '/api/approvals/answer', headers, body: { id: mine.approvalId, decision: 'allow' } })
+    expect(allow.status).toBe(200)
+    await expect(mine.decision).resolves.toBe('allow')
+  })
+
+  it('AC-2.9 (029) with approve off the phone sees and answers nothing and the desktop still can', async () => {
+    const { t, headers } = await served({ chat: true, approve: false, home: false, cameras: false, vault: false, history: false })
+    const mine = t.approvals.askApproval(approval('remote', proposal(10)))
+    const list = await t.transport.request({ method: 'GET', path: '/api/approvals', headers })
+    const answer = await t.transport.request({ method: 'POST', path: '/api/approvals/answer', headers, body: { id: mine.approvalId, decision: 'allow' } })
+    expect([list.status, answer.status]).toEqual([403, 403])
+    expect(t.approvals.answered).toEqual([])
+    t.approvals.broker.respond(mine.approvalId, 'allow', 'desktop')
+    await expect(mine.decision).resolves.toBe('allow')
+  })
+
+  it('AC-2.12 (029) the phone does not see Permitir for a proposal that does not fit', async () => {
+    const { t, headers } = await served()
+    const mine = t.approvals.askApproval(approval('remote', proposal(2000)))
+    const other = t.approvals.askApproval(approval('remote', { toolUseId: 'tu2', input: { command: 'x'.repeat(3000) } }))
+    const list = await t.transport.request({ method: 'GET', path: '/api/approvals', headers })
+    expect(body(list).approvals.map((view) => [view.id, view.whole])).toEqual([
+      [mine.approvalId, false],
+      [other.approvalId, true]
+    ])
+    const allow = await t.transport.request({ method: 'POST', path: '/api/approvals/answer', headers, body: { id: mine.approvalId, decision: 'allow' } })
+    expect(allow.status).toBe(409)
+    expect(allow.body).toEqual({ error: 'already-answered' })
+    // Nothing reached the broker: it is still pending for the desktop, whose card is complete.
+    expect(t.approvals.answered).toEqual([])
+    expect(t.approvals.broker.pending().map((pending) => pending.approvalId)).toContain(mine.approvalId)
+    // Rechazar still works from the phone.
+    const deny = await t.transport.request({ method: 'POST', path: '/api/approvals/answer', headers, body: { id: mine.approvalId, decision: 'deny' } })
+    expect(deny.status).toBe(200)
+    await expect(mine.decision).resolves.toBe('deny')
+  })
+
+  it('AC-2.12 (029) the flow refuses allow for a proposal that does not fit, another device and a settled id, and keeps deny', () => {
+    const broker = new ApprovalBroker(() => {})
+    const ties = new RunTies()
+    ties.start('d1', 'by-id')
+    const answered: string[] = []
+    const flow = new ApprovalsFlow({
+      pendingApprovals: () => broker.pending(),
+      respondApproval: (id, decision) => {
+        answered.push(`${id}:${decision}`)
+        broker.respond(id, decision, 'phone')
+      },
+      threadId: () => 'remote',
+      ties,
+      settings: defaultSettings
+    })
+    const ask = (threadId: string, size: number) => {
+      let id = ''
+      void broker.ask({ threadId, toolUseId: 't', toolName: 'create_company', input: { name: 'x'.repeat(size) }, flagged: false, allowAlways: false }, new AbortController().signal, (given) => {
+        id = given
+      })
+      return id
+    }
+    const long = ask('by-id', 2000)
+    const short = ask('by-id', 10)
+    expect(flow.answer('d2', short, 'allow')).toBe('already-answered')
+    expect(flow.answer('d1', long, 'allow')).toBe('already-answered')
+    expect(answered).toEqual([])
+    expect(flow.answer('d1', long, 'deny')).toBe('ok')
+    expect(flow.answer('d1', short, 'allow')).toBe('ok')
+    expect(flow.answer('d1', short, 'allow')).toBe('already-answered')
+    expect(answered).toEqual([`${long}:deny`, `${short}:allow`])
+  })
+
+  it('AC-2.12 (029) the phone and Telegram share one input limit', () => {
+    expect(REMOTE_LIMITS.approvalInputChars).toBe(APPROVAL_INPUT_LIMIT)
   })
 })

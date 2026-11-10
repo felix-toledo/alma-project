@@ -47,6 +47,7 @@ export function Settings({ pwa, language }: { pwa: Pwa; language: PwaLanguage })
         )}
       </StateView>
       <p className="pwa-muted pwa-version">{translatePwa(language, 'remote.pwa.version', { version: __APP_VERSION__ })}</p>
+      {pwa.shellHash && <p className="pwa-muted pwa-version pwa-hash">{translatePwa(language, 'remote.pwa.shell.hash', { hash: pwa.shellHash })}</p>}
       <div className="pwa-actions pwa-center">
         <button type="button" className="danger" onClick={forget}>
           <LogOut size={20} strokeWidth={1.75} aria-hidden="true" />

@@ -1,9 +1,9 @@
-import { allowedPushEndpoint, buildVapid, vapidPublicKey } from '../../../shared/remote/push'
+import { allowedPushEndpoint, buildVapid, encryptPushPayload, GREETING_PUSH_CODE, vapidPublicKey } from '../../../shared/remote/push'
 import type { Settings } from '../../../shared/types'
 import type { RunTies } from './runs'
 import type { DeviceStore, RemoteStateStore } from './store'
 
-/** The only outbound call remote access ever makes (AC-9.1): one POST per approval. */
+/** The only outbound call remote access ever makes (AC-9.1): one POST per approval push and per greeting push (033 BR-30). */
 export interface PushPost {
   (url: string, headers: Record<string, string>, body: Uint8Array): Promise<{ ok: boolean }>
 }
@@ -68,22 +68,38 @@ export class PushFlow {
     if (!this.deps.settings().remote.scopes.approve) return
     const owner = threadId === this.deps.threadId() ? null : this.deps.ties.ownerOf(threadId)
     if (threadId !== this.deps.threadId() && !owner) return
-    const vapid = this.deps.state.state.vapid
-    const hostName = this.deps.state.state.hostName
     for (const device of this.deps.store.devices()) {
       if (!device.push || (owner && device.id !== owner)) continue
       try {
-        const { authorization } = await buildVapid({
-          endpoint: device.push.endpoint,
-          subject: `https://${hostName ?? 'alma.local'}`,
-          publicKey: vapid.public,
-          privateKey: vapid.private,
-          now: this.deps.now()
-        })
+        const { authorization } = await this.vapid(device.push.endpoint)
         await this.deps.post(device.push.endpoint, { authorization, TTL: '3600' }, new Uint8Array(0))
       } catch {
         // A dead push service must not lose the approval.
       }
     }
+  }
+
+  /**
+   * The morning greeting (spec 033 BR-30, D-1): with remote access and the History scope on, every subscribed
+   * device gets the fixed code encrypted to its own keys, never any text. Failures are silent and not retried (AC-7.6).
+   */
+  async notifyGreeting(): Promise<void> {
+    const remote = this.deps.settings().remote
+    if (!remote.enabled || !remote.scopes.history) return
+    for (const device of this.deps.store.devices()) {
+      if (!device.push) continue
+      try {
+        const { authorization } = await this.vapid(device.push.endpoint)
+        const sealed = await encryptPushPayload({ ...device.push.keys, plaintext: new TextEncoder().encode(GREETING_PUSH_CODE) })
+        await this.deps.post(device.push.endpoint, { authorization, TTL: '3600', ...sealed.headers }, sealed.body)
+      } catch {
+        // The greeting is in its conversation anyway.
+      }
+    }
+  }
+
+  private vapid(endpoint: string): Promise<{ authorization: string }> {
+    const { vapid, hostName } = this.deps.state.state
+    return buildVapid({ endpoint, subject: `https://${hostName ?? 'alma.local'}`, publicKey: vapid.public, privateKey: vapid.private, now: this.deps.now() })
   }
 }

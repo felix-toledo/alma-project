@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { en } from '../src/remote-client/i18n/en'
 import { es } from '../src/remote-client/i18n/es'
-import { approvalsFor, conversationMode, endsView, foldWindow, joinPage, listEvent, rowSub, windowEvent, type ListView } from '../src/remote-client/lib/conversations'
+import { approvalActions } from '../src/remote-client/lib/chat'
+import { approvalsFor, conversationMode, endsView, isApproval, foldWindow, joinPage, listEvent, rowSub, windowEvent, type ListView } from '../src/remote-client/lib/conversations'
 import { startScreen } from '../src/remote-client/lib/screen-state'
 import type { ThreadRow, ThreadWindow } from '../src/shared/remote/wire'
 
@@ -96,7 +97,21 @@ describe('PWA conversation composer (028 AC-3.6, AC-3.8, AC-3.9, AC-3.18, AC-3.1
 })
 
 describe('PWA conversation approvals (028 AC-3.15, AC-3.16)', () => {
-  const card = (id: string, thread?: string) => ({ id, tool: 'write', input: '{}', flagged: false, question: 'chan.allowQuestion', ...(thread ? { thread } : {}) })
+  const card = (id: string, thread?: string) => ({ id, tool: 'write', input: '{}', flagged: false, whole: true, question: 'chan.allowQuestion', ...(thread ? { thread } : {}) })
+
+  it('AC-2.12 (029) a card without the whole flag is junk, so the phone never offers Permitir by default', () => {
+    const { whole: _whole, ...unmarked } = card('a1')
+    expect(isApproval(unmarked)).toBe(false)
+    expect(isApproval({ ...unmarked, whole: 'yes' })).toBe(false)
+    expect(isApproval(card('a1'))).toBe(true)
+  })
+
+  it('AC-2.9 (029) Permitir shows only when the whole input is on screen; Denegar always shows; a cut one says to use the desktop', () => {
+    expect(approvalActions({ whole: true })).toEqual({ allow: true, notice: null })
+    expect(approvalActions({ whole: false })).toEqual({ allow: false, notice: 'remote.pwa.approve.seeOnPc' })
+    expect(en['remote.pwa.approve.seeOnPc']).toBeTruthy()
+    expect(es['remote.pwa.approve.seeOnPc']).toBeTruthy()
+  })
 
   it('AC-3.15 (028) a conversation shows the approvals marked with it, and the shared thread also those with no mark', () => {
     const all = [card('a1', 't1'), card('a2', 't2'), card('a3'), { id: 5 }, null]

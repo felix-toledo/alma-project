@@ -7,9 +7,11 @@ import { request } from '../lib/coordinator'
 interface Props {
   devices: DeviceView[]
   tested: { deviceId: string; ok: boolean } | null
+  /** A line under the list (phones paired on the other connection, spec 027). */
+  note?: string
 }
 
-export function DevicesCard({ devices, tested }: Props): React.JSX.Element {
+export function DevicesCard({ devices, tested, note }: Props): React.JSX.Element {
   const t = useT()
   const language = useLanguage()
 
@@ -52,6 +54,7 @@ export function DevicesCard({ devices, tested }: Props): React.JSX.Element {
       {devices.length > 0 && (
         <button type="button" onClick={revokeAll}>{t('remote.devices.revokeAll')}</button>
       )}
+      {note && <p className="muted small">{note}</p>}
     </div>
   )
 }

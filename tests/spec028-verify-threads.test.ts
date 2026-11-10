@@ -308,7 +308,7 @@ describe('AC-3.18 / AC-3.15 / AC-3.16 / AC-3.9 (028 verify) stop and approvals b
     expect((await t.call('/api/approvals/answer', { id: mine.approvalId, decision: 'allow' })).status).toBe(403)
     expect(t.approvals.broker.pending().map((p) => p.approvalId)).toEqual([mine.approvalId])
     // Once the PC answers it, the phone stops saying it waits.
-    t.approvals.broker.respond(mine.approvalId, 'deny')
+    t.approvals.broker.respond(mine.approvalId, 'deny', 'desktop')
     expect(await read(t.call)).toMatchObject({ waiting: false })
   })
 })
@@ -385,6 +385,6 @@ describe('AC-3.13 / AC-7.5 (028 verify) wiring: nothing outward for a phone run'
   })
 
   it('AC-7.5 (028 verify) the remote channel cancels through the same abort map the PC stop uses, and asks through startRun', () => {
-    expect(source).toMatch(/ask: \(threadId, text\) => startRun\(threadId, text\)\.done,\s*\n\s*cancel: \(threadId\) => runs\.get\(threadId\)\?\.abort\(\)/)
+    expect(source).toMatch(/ask: \(threadId, text(?:, attachmentIds)?\) => startRun\(threadId, text(?:, \{ attachments: attachmentIds \})?\)\.done,\s*\n\s*cancel: \(threadId\) => runs\.get\(threadId\)\?\.abort\(\)/)
   })
 })

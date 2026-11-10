@@ -435,7 +435,7 @@ describe('remote sessions (spec 026 T12)', () => {
     const { deviceId, privateKey } = await pairDevice(t)
     const token = await openSession(t, deviceId, privateKey)
     const response = await t.transport.request({ method: 'GET', path: '/api/status', headers: auth(token) })
-    expect(response.body).toEqual({ scopes: { chat: false, approve: false, home: false, cameras: false, vault: false, history: false }, sensitive: false, continue: false })
+    expect(response.body).toEqual({ scopes: { chat: false, approve: false, home: false, cameras: false, vault: false, history: false }, sensitive: false, continue: false, sendFiles: false })
     t.setRemote({ scopes: { chat: true, approve: false, home: false, cameras: false, vault: false, history: false } })
     const on = await t.transport.request({ method: 'GET', path: '/api/status', headers: auth(token) })
     expect((on.body as { scopes: Record<string, boolean> }).scopes.chat).toBe(true)
@@ -454,5 +454,36 @@ describe('remote sessions (spec 026 T12)', () => {
     // The request passed authorization and reached the T20 handler: the run starts.
     expect((await t.transport.request(send)).status).toBe(200)
     expect(t.chat.askCalls).toEqual([{ threadId: 'remote', text: 'hi' }])
+  })
+})
+
+describe('033 phone landing (AC-7.5, BR-29)', () => {
+  it('AC-7.5 (033) the phone lands once, only with History on', async () => {
+    // The dream service's pending landing: one entry per device, consumed when asked.
+    const pending = new Set<string>()
+    const landing = (deviceId: string): string | null => (pending.delete(deviceId) ? 'greeting-thread' : null)
+    const scopes = { chat: true, approve: false, home: false, cameras: false, vault: false, history: true }
+    // Two devices need two different session tokens.
+    let byte = 0
+    const random = (length: number): Uint8Array => new Uint8Array(length).fill((byte = (byte % 250) + 1))
+    const t = await testChannel({ remote: { enabled: true, scopes }, landing, random })
+    await t.channel.sync()
+    const phone = await pairDevice(t, 'phone')
+    const tablet = await pairDevice(t, 'tablet')
+    const phoneAuth = { ...HOST, authorization: `Bearer ${await openSession(t, phone.deviceId, phone.privateKey)}` }
+    const tabletAuth = { ...HOST, authorization: `Bearer ${await openSession(t, tablet.deviceId, tablet.privateKey)}` }
+    const status = async (headers: Record<string, string>): Promise<{ landing?: string }> =>
+      (await t.transport.request({ method: 'GET', path: '/api/status', headers })).body as { landing?: string }
+    pending.add(phone.deviceId)
+    pending.add(tablet.deviceId)
+    expect((await status(phoneAuth)).landing).toBe('greeting-thread')
+    expect(await status(phoneAuth)).not.toHaveProperty('landing')
+    // History off: absent, and consumed all the same; the other device keeps its own until it asks.
+    pending.add(phone.deviceId)
+    t.setRemote({ scopes: { ...scopes, history: false } })
+    expect(await status(phoneAuth)).not.toHaveProperty('landing')
+    t.setRemote({ scopes })
+    expect(await status(phoneAuth)).not.toHaveProperty('landing')
+    expect((await status(tabletAuth)).landing).toBe('greeting-thread')
   })
 })

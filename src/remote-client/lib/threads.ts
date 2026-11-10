@@ -1,5 +1,6 @@
 import { REMOTE_LIMITS } from '../../shared/remote/limits'
 import type { ThreadRow, ThreadWindow } from '../../shared/remote/wire'
+import { readAttachmentViews } from './attach'
 import { isRecord, postJson, type Failed } from './request'
 import type { FetchLike } from './session'
 
@@ -24,6 +25,12 @@ const isMessage = (value: unknown): value is WindowMessage =>
   (value.role === 'user' || value.role === 'assistant') &&
   typeof value.text === 'string' &&
   typeof value.at === 'number'
+
+/** Only the fields the screen renders; an attachment list is rebuilt from name, kind and size (031 AC-5.1). */
+function readMessage(message: WindowMessage): WindowMessage {
+  const attachments = readAttachmentViews(message.attachments)
+  return { index: message.index, role: message.role, text: message.text, at: message.at, ...(attachments ? { attachments } : {}) }
+}
 
 export type ThreadsOutcome = { ok: true; rows: ThreadRow[]; more: boolean } | Failed
 
@@ -54,7 +61,7 @@ export async function readThread(deps: Deps & { id: string; before?: number; sin
   if (!reply.ok) return reply
   const { rev, running, ownRun, waiting, earlier, messages } = reply.body
   if (typeof rev !== 'number' || typeof running !== 'boolean' || typeof ownRun !== 'boolean' || typeof waiting !== 'boolean' || typeof earlier !== 'boolean' || !Array.isArray(messages)) return network
-  return { ok: true, window: { rev, running, ownRun, waiting, earlier, messages: messages.filter(isMessage) } }
+  return { ok: true, window: { rev, running, ownRun, waiting, earlier, messages: messages.filter(isMessage).map(readMessage) } }
 }
 
 /** Most messages kept while following live; older ones go and `earlier` says there are more to load. */
@@ -90,8 +97,9 @@ export function earlierCursor(window: ThreadWindow, asked: number = window.rev):
 export type ThreadActionOutcome = { ok: true } | Failed
 
 /** A message into a conversation. Anything but a named refusal reads as not delivered, and the typed text stays in the input. */
-export async function sendThread(deps: Deps & { id: string; text: string }): Promise<ThreadActionOutcome> {
-  const reply = await postJson({ ...deps, path: '/api/threads/send', body: { id: deps.id, text: deps.text } })
+export async function sendThread(deps: Deps & { id: string; text: string; attachments?: string[] }): Promise<ThreadActionOutcome> {
+  const { id, text, attachments, ...rest } = deps
+  const reply = await postJson({ ...rest, path: '/api/threads/send', body: attachments?.length ? { id, text, attachments } : { id, text } })
   if (reply.ok) return { ok: true }
   return reply.reason === 'network' ? { ok: false, reason: 'not-delivered' } : reply
 }

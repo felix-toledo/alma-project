@@ -1,4 +1,4 @@
-// What the phones may do (T38): the six scope switches, the locks and continue sub-switches,
+// What the phones may do (T38): the six scope switches, the locks, continue and send-files sub-switches,
 // the allowed cameras, the excluded vault folders and the agent that answers. Every change goes through
 // settings:update, so the native dialogs of T5 fire as usual.
 import type { PublicSettings, RemoteScope } from '../../../shared/types'
@@ -38,6 +38,13 @@ export function ScopesCard({ settings, onChange }: Props): React.JSX.Element {
               />{' '}
               {t(`remote.scope.${scope}`)}
             </label>
+            {scope === 'chat' && config.scopes.chat && (
+              <label className="row remote-sub">
+                <input type="checkbox" checked={config.sendFiles} onChange={(e) => void patch({ sendFiles: e.target.checked })} />{' '}
+                {t('remote.scope.attachments')}
+              </label>
+            )}
+            {scope === 'chat' && config.scopes.chat && <p className="muted small remote-sub">{t('remote.scope.attachments.hint')}</p>}
             {scope === 'home' && config.scopes.home && (
               <label className="row remote-sub">
                 <input type="checkbox" checked={config.sensitive} onChange={(e) => void patch({ sensitive: e.target.checked })} />{' '}

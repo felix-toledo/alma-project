@@ -81,7 +81,8 @@ describe('Chat tab and run ties (spec 028 T31)', () => {
       cancel: () => {},
       approvals: () => [],
       waiting: () => false,
-      ties
+      ties,
+      uploads: { claimForSend: (_device, _thread, ids) => ({ ok: true, ids: ids?.length ? [...ids] : undefined }), bound: () => {} }
     })
     return { chat, asks, calls }
   }
@@ -499,7 +500,7 @@ describe('a run continued from the phone stays quiet in the other channels (spec
     })
     const respond = quiet.respondApproval((approvalId, decision) => {
       resolved.push(approvalId)
-      t.approvals.broker.respond(approvalId, decision)
+      t.approvals.broker.respond(approvalId, decision, 'phone')
     })
     onEvent((event) => {
       if (event.type === 'approval.request' && event.approval.threadId === threadId) sent.push(`prompt:${event.approval.toolName}`)
@@ -592,17 +593,19 @@ describe('a run the phone starts goes through the one run path (spec 028 T40)', 
     }
     const ask = vi.fn(() => Promise.resolve())
     const flow = new ThreadsFlow({
-      threads: { list: () => [], get: (id) => makeThread(id), isRunning: () => false },
+      threads: { list: () => [], get: (id) => makeThread(id), isRunning: () => false, markOpened: () => {} },
       settings: () => defaultSettings(),
       sharedId: () => 'remote',
       ties: new RunTies(),
       waiting: () => false,
+      now: () => 0,
       ask,
       cancel: vi.fn(),
-      sendShared: () => ({ ok: true })
+      sendShared: () => ({ ok: true }),
+      uploads: { claimForSend: (_device, _thread, ids) => ({ ok: true, ids: ids?.length ? [...ids] : undefined }), bound: () => {} }
     })
     expect(flow.send('d1', 'talk', 'hola')).toMatchObject({ status: 200 })
-    expect(ask.mock.calls).toEqual([['talk', 'hola']])
+    expect(ask.mock.calls).toEqual([['talk', 'hola', undefined]])
   })
 
   it('AC-7.5 (028) the harness ask and cancel are the only run entries', () => {

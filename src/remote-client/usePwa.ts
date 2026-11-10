@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { b64u } from '../shared/remote/crypto'
 import type { PwaKey } from './i18n/es'
-import { pwaFetch } from './http'
+import { checkAppShell, linkProblemKey, pwaFetch } from './http'
 import { idbStorage } from './idb'
-import { answerApproval, chatOutcomeKey, newChat, sendChat, stopChat, type AnswerOutcome, type ChatOutcome } from './lib/chat'
+import { putFile, removeUpload, type PutOutcome } from './lib/attach'
+import { answerApproval, chatNoteKey, newChat, sendChat, stopChat, type AnswerOutcome, type ChatOutcome } from './lib/chat'
 import { fetchCameras, fetchStill, type CamerasOutcome, type StillOutcome } from './lib/cameras'
 import { controlThing, fetchThings, type ControlOutcome, type ThingsOutcome } from './lib/home'
 import { signWithDeviceKey } from './lib/keys'
@@ -13,6 +14,7 @@ import { listThreads, readThread, sendThread, stopThread, type ThreadActionOutco
 import { fetchStatus, type StatusOutcome } from './lib/status'
 import { backoffMs, clearOwnNote, mergeState, nextSince, pollOnce, pong, type PwaState } from './lib/poll'
 import { needsRenewal, openSession, singleFlight } from './lib/session'
+import type { Failed } from './lib/request'
 import { requestStepUp, type StepUpChallengeOutcome } from './lib/stepup'
 import { subscribePush } from './lib/push'
 import { forgetPc, wipePwa, type PwaStorage } from './lib/storage'
@@ -26,7 +28,8 @@ export interface Pwa {
   note: PwaKey | null
   clearNote(): void
   paired(): void
-  send(text: string): Promise<boolean>
+  /** The outcome, so a screen can tell why a send was refused: it clears its chips on success and keeps them otherwise. */
+  send(text: string, attachments?: string[]): Promise<ChatOutcome>
   answer(id: string, decision: 'allow' | 'deny'): Promise<void>
   newConversation(): Promise<void>
   stop(): Promise<void>
@@ -45,9 +48,16 @@ export interface Pwa {
   threads: {
     list(offset: number): Promise<ThreadsOutcome>
     read(id: string, options?: { before?: number; since?: number; wait?: boolean; signal?: AbortSignal }): Promise<WindowOutcome>
-    send(id: string, text: string): Promise<ThreadActionOutcome>
+    send(id: string, text: string, attachments?: string[]): Promise<ThreadActionOutcome>
     stop(id: string): Promise<ThreadActionOutcome>
   }
+  /** Files for the composer (spec 031): each call is one request; nothing is kept here (BR-19). */
+  attach: {
+    put(target: { id?: string }, file: { name: string; size: number; base64: string }, signal?: AbortSignal): Promise<PutOutcome>
+    remove(id: string): Promise<{ ok: true } | Failed>
+  }
+  /** The root hash of the app that is running, when the origin serves one (spec 027 AC-3.13). */
+  shellHash: string | null
   /** Which switches are on (`status` above is the phone's own session state). */
   access(): Promise<StatusOutcome>
   forget(): Promise<void>
@@ -66,6 +76,7 @@ export function usePwa(): Pwa {
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const [state, setState] = useState<PwaState | null>(null)
   const [note, setNote] = useState<PwaKey | null>(null)
+  const [shellHash, setShellHash] = useState<string | null>(null)
   const [generation, setGeneration] = useState(0)
   const runId = useRef(0)
 
@@ -77,16 +88,12 @@ export function usePwa(): Pwa {
   }, [])
 
   const failOutcome = useCallback(
-    async (outcome: ChatOutcome | AnswerOutcome): Promise<boolean> => {
+    async (outcome: ChatOutcome | AnswerOutcome): Promise<void> => {
       // The token was ensured fresh before the call, so a 401 means the key itself
       // is refused (revoked, deleted or idle-expired): wipe (AC-5.3).
-      if (outcome.ok) {
-        setNote(null)
-        return true
-      }
-      if (outcome.reason === 'refused') await wipe()
-      else setNote(chatOutcomeKey(outcome.reason))
-      return false
+      if (outcome.ok) setNote(null)
+      else if (outcome.reason === 'refused') await wipe()
+      else setNote(chatNoteKey(outcome.reason))
     },
     [wipe]
   )
@@ -146,6 +153,14 @@ export function usePwa(): Pwa {
       }
       setDeviceId(device.deviceId)
       setStatus('ready')
+      // Which app is running, and over the relay whether the PC announced it. Never blocks anything.
+      void checkAppShell()
+        .then((shell) => {
+          if (!alive()) return
+          setShellHash(shell.hash)
+          if (shell.decision === 'refuse') setNote('remote.pwa.shell.refused')
+        })
+        .catch(() => undefined)
       // Push needs no tap when the permission is already granted (AC-11.6): without
       // it the subscription waits, and the poll loop covers approvals meanwhile.
       if ('serviceWorker' in navigator && 'PushManager' in window && Notification.permission === 'granted') {
@@ -197,7 +212,8 @@ export function usePwa(): Pwa {
             return
           }
           failures++
-          pollNote = polled.reason === 'rate-limited' ? 'remote.pwa.rateLimited' : 'remote.pwa.pcUnreachable'
+          // A link that needs the person (the app is out of date, this is not the PC) says so instead of "unreachable".
+          pollNote = polled.reason === 'rate-limited' ? 'remote.pwa.rateLimited' : (linkProblemKey() ?? 'remote.pwa.pcUnreachable')
           setNote(pollNote)
           await sleep(backoffMs(failures))
           continue
@@ -226,13 +242,15 @@ export function usePwa(): Pwa {
   }, [wipe, generation, ensureToken])
 
   const act = useCallback(
-    async (call: (token: string) => Promise<ChatOutcome | AnswerOutcome>): Promise<boolean> => {
+    async <T extends ChatOutcome | AnswerOutcome>(call: (token: string) => Promise<T>): Promise<T | { ok: false; reason: 'network' }> => {
       const token = await ensureToken()
       if (!token) {
         setNote('remote.pwa.pcUnreachable')
-        return false
+        return { ok: false, reason: 'network' }
       }
-      return failOutcome(await call(token))
+      const outcome = await call(token)
+      await failOutcome(outcome)
+      return outcome
     },
     [failOutcome, ensureToken]
   )
@@ -259,7 +277,7 @@ export function usePwa(): Pwa {
       setStatus('loading')
       setGeneration((g) => g + 1)
     },
-    send: async (text) => act((token) => sendChat({ fetch: pwaFetch, token, text })),
+    send: async (text, attachments) => act((token) => sendChat({ fetch: pwaFetch, token, text, attachments })),
     answer: async (id, decision) => {
       await act((token) => answerApproval({ fetch: pwaFetch, token, id, decision }))
     },
@@ -290,10 +308,17 @@ export function usePwa(): Pwa {
       list: async (offset) => guarded<ThreadsOutcome>((token) => listThreads({ fetch: pwaFetch, token, offset }), () => ({ ok: false, reason: 'network' })),
       read: async (id, options) =>
         guarded<WindowOutcome>((token) => readThread({ fetch: pwaFetch, token, id, ...options }), () => ({ ok: false, reason: 'network' })),
-      send: async (id, text) =>
-        guarded<ThreadActionOutcome>((token) => sendThread({ fetch: pwaFetch, token, id, text }), () => ({ ok: false, reason: 'not-delivered' })),
+      send: async (id, text, attachments) =>
+        guarded<ThreadActionOutcome>((token) => sendThread({ fetch: pwaFetch, token, id, text, attachments }), () => ({ ok: false, reason: 'not-delivered' })),
       stop: async (id) => guarded<ThreadActionOutcome>((token) => stopThread({ fetch: pwaFetch, token, id }), () => ({ ok: false, reason: 'network' }))
     },
+    attach: {
+      put: async (target, file, signal) =>
+        guarded<PutOutcome>((token) => putFile({ fetch: pwaFetch, token, target, file, signal }), () => ({ ok: false, reason: 'network' })),
+      remove: async (id) =>
+        guarded<{ ok: true } | Failed>((token) => removeUpload({ fetch: pwaFetch, token, id }), () => ({ ok: false, reason: 'network' }))
+    },
+    shellHash,
     access: async () => guarded<StatusOutcome>((token) => fetchStatus({ fetch: pwaFetch, token }), () => ({ ok: false, reason: 'network' })),
     forget: async () => {
       const storage = idbStorage()

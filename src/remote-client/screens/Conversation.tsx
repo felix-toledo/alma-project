@@ -3,13 +3,16 @@
 import { RefreshCw, Send, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { translatePwa, type PwaKey, type PwaLanguage } from '../i18n'
-import { validateChatInput, type ChatValidation } from '../lib/chat'
+import { validateChatInput } from '../lib/chat'
 import { approvalsFor, conversationMode } from '../lib/conversations'
 import type { NavAction } from '../lib/nav'
 import type { Pwa } from '../usePwa'
 import { ApprovalCard } from './Approvals'
+import { AttachButton, AttachChips, AttachNotes } from './AttachBar'
 import { BackHeader } from './BackHeader'
+import { FileLines } from './FileLines'
 import { StateView } from './StateView'
+import { useAttachments } from './useAttachments'
 import { useConversation } from './useConversation'
 
 type Props = { pwa: Pwa; language: PwaLanguage; go(action: NavAction): void; id: string; current: boolean; title?: string }
@@ -20,7 +23,9 @@ export function Conversation({ pwa, language, go, id, current, title }: Props): 
   const live = current || wrote
   const talk = useConversation(pwa, id, live)
   const [draft, setDraft] = useState('')
-  const [validation, setValidation] = useState<ChatValidation>({ ok: false, reason: 'empty' })
+  const attach = useAttachments(pwa, { id })
+  const ids = attach.readyIds()
+  const validation = validateChatInput(draft, ids.length)
   const content = talk.state.kind === 'content' ? talk.state.data : null
   const newest = content?.messages.at(-1)?.index
 
@@ -29,20 +34,13 @@ export function Conversation({ pwa, language, go, id, current, title }: Props): 
     if (newest !== undefined) window.scrollTo(0, document.body.scrollHeight)
   }, [newest, id])
 
-  const type = (text: string): void => {
-    setDraft(text)
-    setValidation(validateChatInput(text))
-  }
   const send = (): void => {
-    const checked = validateChatInput(draft)
-    setValidation(checked)
-    if (!checked.ok) return
-    // The typed text stays until the PC accepts it (AC-6.4).
-    void talk.send(draft).then((accepted) => {
-      if (!accepted) return
+    // The typed text and the chips stay until the PC accepts the message (AC-6.4, 031 AC-4.3).
+    void talk.send(draft, ids.length > 0 ? ids : undefined).then((outcome) => {
+      attach.sent(outcome)
+      if (!outcome.ok) return
       setWrote(true)
       setDraft('')
-      setValidation({ ok: false, reason: 'empty' })
     })
   }
 
@@ -75,6 +73,7 @@ export function Conversation({ pwa, language, go, id, current, title }: Props): 
                 {view.messages.map((message) => (
                   <li key={message.index} className={message.role === 'user' ? 'pwa-user' : 'pwa-agent'}>
                     {message.text}
+                    <FileLines attachments={message.attachments} language={language} />
                   </li>
                 ))}
               </ol>
@@ -85,13 +84,16 @@ export function Conversation({ pwa, language, go, id, current, title }: Props): 
                 {mode.notice && <p className="pwa-note">{t(mode.notice)}</p>}
                 {talk.note && <p className="pwa-error">{t(talk.note)}</p>}
                 {!validation.ok && validation.reason === 'too-long' && <p className="pwa-error">{t('remote.pwa.tooLong')}</p>}
+                {mode.compose && <AttachNotes attach={attach} language={language} />}
               </div>
+              {mode.compose && <AttachChips attach={attach} language={language} locked={talk.busy} />}
               {(mode.compose || mode.stop) && (
                 <div className="pwa-compose pwa-dock">
                   {mode.compose && (
                     <>
-                      <textarea value={draft} rows={2} aria-label={t('remote.pwa.thread.compose')} placeholder={t('remote.pwa.thread.compose')} onChange={(e) => type(e.target.value)} />
-                      <button type="button" className="primary" disabled={!validation.ok || talk.busy} onClick={send}>
+                      <AttachButton attach={attach} language={language} running={talk.busy} />
+                      <textarea value={draft} rows={2} aria-label={t('remote.pwa.thread.compose')} placeholder={t('remote.pwa.thread.compose')} onChange={(e) => setDraft(e.target.value)} />
+                      <button type="button" className="primary" disabled={!validation.ok || !attach.canSend(draft, talk.busy)} onClick={send}>
                         <Send size={20} strokeWidth={1.75} aria-hidden="true" />
                         {t('remote.pwa.send')}
                       </button>

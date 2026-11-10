@@ -7,10 +7,10 @@ export interface DeviceAuth {
 
 /**
  * One verdict for one request, whatever carries it: the function takes no transport input (AC-3.2).
- * Order is fixed: device, scope, locks-and-alarms, continue sub-switch, camera allow-list.
+ * Order is fixed: device, scope, locks-and-alarms, continue sub-switch, send-files sub-switch, camera allow-list.
  */
-export function authorizeRemote(input: { device: DeviceAuth | null; remote: RemoteSettings; route: RouteSpec; cameraId?: string }): { ok: true } | { ok: false; reason: Refusal } {
-  const { device, remote, route, cameraId } = input
+export function authorizeRemote(input: { device: DeviceAuth | null; remote: RemoteSettings; route: RouteSpec; cameraId?: string; carriesFiles?: boolean }): { ok: true } | { ok: false; reason: Refusal } {
+  const { device, remote, route, cameraId, carriesFiles } = input
   if (route.auth === 'session' && !device) return { ok: false, reason: 'unknown-device' }
   if (route.scope !== undefined) {
     const scopes = typeof route.scope === 'string' ? [route.scope] : route.scope
@@ -18,6 +18,8 @@ export function authorizeRemote(input: { device: DeviceAuth | null; remote: Remo
   }
   if (route.sensitive && !remote.sensitive) return { ok: false, reason: 'sensitive-off' }
   if (route.continue && !remote.continueHistory) return { ok: false, reason: 'write-off' }
+  // A send needs the Files switch only when it carries pending upload ids; a text-only send is not affected (spec 031 AC-1.6).
+  if ((route.files === 'always' || (route.files === 'with-ids' && carriesFiles)) && !remote.sendFiles) return { ok: false, reason: 'attach-off' }
   if (cameraId !== undefined && !remote.cameras.includes(cameraId)) return { ok: false, reason: 'camera-not-allowed' }
   return { ok: true }
 }

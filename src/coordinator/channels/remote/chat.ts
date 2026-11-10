@@ -1,7 +1,8 @@
-import { REMOTE_LIMITS } from '../../../shared/remote/api'
+import { REMOTE_LIMITS, type Refusal } from '../../../shared/remote/api'
 import type { ApprovalView, Thread } from '../../../shared/types'
 import type { RunTies } from './runs'
 import { threadPage, type ThreadViewMessage } from './thread-view'
+import type { UploadsFlow } from './uploads'
 
 /**
  * What the chat flow needs from the coordinator (wired for real in T35):
@@ -11,7 +12,7 @@ import { threadPage, type ThreadViewMessage } from './thread-view'
  */
 export interface ChatDeps {
   conversation(fresh?: boolean): Thread
-  ask(threadId: string, text: string): Promise<void>
+  ask(threadId: string, text: string, attachments?: string[]): Promise<void>
   cancel(threadId: string): void
   /** The approvals this device may see (shared thread plus its own by-id run), fresh on every build. */
   approvals(deviceId: string): ApprovalView[]
@@ -19,7 +20,12 @@ export interface ChatDeps {
   waiting(deviceId: string): boolean
   /** Which device started which run: the Chat tab and a by-id send share the one-run-per-device rule (AC-3.19). */
   ties: RunTies
+  /** The device's pending uploads a send may bind (spec 031): claimed before the run, released once the message is committed. */
+  uploads: Pick<UploadsFlow, 'claimForSend' | 'bound'>
 }
+
+/** How a send into the shared thread ends: a refusal name the wire knows, or `failed` for a run that could not start. */
+export type ChatSendResult = { ok: true } | { error: Extract<Refusal, 'busy' | 'run-active' | 'unavailable' | 'notice-needed' | 'invalid'> | 'failed' }
 
 export interface RemoteChatState {
   /** The shared thread this state belongs to: a replaced thread restarts the phone's merge. */
@@ -62,21 +68,27 @@ export class ChatFlow {
     this.closed = false
   }
 
-  send(deviceId: string, text: string): { ok: true } | { error: 'busy' | 'failed' | 'run-active' } {
+  send(deviceId: string, text: string, ids?: string[]): ChatSendResult {
     if (this.running) return { error: 'busy' }
     const thread = this.deps.conversation()
     if ('error' in this.deps.ties.start(deviceId, thread.id, true)) return { error: 'run-active' }
+    const claim = this.deps.uploads.claimForSend(deviceId, thread.id, ids, text)
+    if (!claim.ok) {
+      this.deps.ties.end(deviceId, thread.id)
+      return { error: claim.reason }
+    }
     this.running = true
     let run: Promise<void>
     try {
-      run = this.deps.ask(thread.id, text)
+      run = this.deps.ask(thread.id, text, claim.ids)
     } catch {
       this.running = false
       this.deps.ties.end(deviceId, thread.id)
       this.notify()
       return { error: 'failed' }
     }
-    // The user message is committed by now (ask commits synchronously first).
+    // The user message is committed by now (ask commits synchronously first): the uploads belong to it, not to the device.
+    this.deps.uploads.bound(deviceId, claim.ids)
     this.notify()
     const settle = (): void => {
       this.deps.ties.end(deviceId, thread.id)

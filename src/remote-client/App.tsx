@@ -79,6 +79,18 @@ export function App(): React.JSX.Element {
     document.documentElement.lang = language
   }, [language])
 
+  // The morning greeting lands once (spec 033 BR-29): the PC names it only on the first status call after delivery, with History on.
+  const landed = useRef(false)
+  useEffect(() => {
+    if (pwa.status !== 'ready' || landed.current) return
+    landed.current = true
+    void pwa.access().then((outcome) => {
+      if (!outcome.ok || !outcome.status.landing) return
+      go({ type: 'tab', tab: 'chat' })
+      go({ type: 'openConversation', id: outcome.status.landing })
+    })
+  }, [pwa, go])
+
   if (pairing) {
     return (
       <Pair

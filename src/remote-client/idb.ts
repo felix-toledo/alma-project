@@ -1,3 +1,4 @@
+import type { PublicJwk } from '../shared/remote/crypto'
 import type { PwaStorage, StoredDevice, StoredSession } from './lib/storage'
 
 const DB_NAME = 'alma-remote'
@@ -45,6 +46,10 @@ export function idbStorage(): PwaStorage {
     loadSession: async () => read<StoredSession>(await db, 'session'),
     saveSession: async (session) => {
       await write(await db, 'session', session)
+    },
+    loadPcKey: async () => read<PublicJwk>(await db, 'pcKey'),
+    savePcKey: async (key) => {
+      await write(await db, 'pcKey', key)
     },
     clear: async () => {
       const database = await db

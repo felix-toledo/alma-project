@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { b64u, verifyEs256 } from '../src/shared/remote/crypto'
+import { encryptPushPayload, GREETING_PUSH_CODE } from '../src/shared/remote/push'
 import { subscribePush } from '../src/remote-client/lib/push'
 import { HOST, openSession, pairDevice, testChannel } from './support/remote-harness'
 
@@ -161,5 +162,158 @@ describe('T46 push without content (AC-11.1 to 11.5, 9.1)', () => {
       { url: '/api/push/key', body: undefined },
       { url: '/api/push/subscribe', body: subscription }
     ])
+  })
+})
+
+const text = new TextEncoder()
+type Bytes = Parameters<typeof crypto.subtle.digest>[1]
+type KeyPair = { publicKey: CryptoKey; privateKey: CryptoKey }
+const bytes = (data: Uint8Array): Bytes => data as Bytes
+const concat = (...parts: Uint8Array[]): Uint8Array => {
+  const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
+  let at = 0
+  for (const part of parts) {
+    out.set(part, at)
+    at += part.length
+  }
+  return out
+}
+
+async function hkdf(salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, length: number): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey('raw', bytes(ikm), 'HKDF', false, ['deriveBits'])
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: bytes(salt), info: bytes(info) }, key, length * 8))
+}
+
+/** The phone's side of RFC 8291, written here independently of the sender so the two can disagree. */
+async function decryptPush(body: Uint8Array, receiver: CryptoKey, receiverPublic: Uint8Array, authSecret: Uint8Array): Promise<string> {
+  const salt = body.slice(0, 16)
+  const idlen = body[20]
+  const senderPublic = body.slice(21, 21 + idlen)
+  const sender = await crypto.subtle.importKey('raw', bytes(senderPublic), { name: 'ECDH', namedCurve: 'P-256' }, false, [])
+  const ecdh = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: sender }, receiver, 256))
+  const ikm = await hkdf(authSecret, ecdh, concat(text.encode('WebPush: info '), receiverPublic, senderPublic), 32)
+  const cek = await hkdf(salt, ikm, text.encode('Content-Encoding: aes128gcm '), 16)
+  const nonce = await hkdf(salt, ikm, text.encode('Content-Encoding: nonce '), 12)
+  const key = await crypto.subtle.importKey('raw', bytes(cek), 'AES-GCM', false, ['decrypt'])
+  const padded = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(nonce) }, key, bytes(body.slice(21 + idlen))))
+  let end = padded.length - 1
+  while (padded[end] === 0) end--
+  expect(padded[end]).toBe(2)
+  return new TextDecoder().decode(padded.slice(0, end))
+}
+
+// RFC 8291 section 5 and Appendix A.
+const RFC = {
+  plaintext: 'When I grow up, I want to be a watermelon',
+  asPublic: 'BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8',
+  asPrivate: 'yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw',
+  uaPublic: 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
+  uaPrivate: 'q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94',
+  salt: 'DGv6ra1nlYgDCS1FRnbzlw',
+  auth: 'BTBZMqHH6r4Tts7J_aSIgg',
+  body:
+    'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN'
+}
+
+async function ecdhPair(publicRaw: string, privateD: string): Promise<KeyPair> {
+  const point = b64u.decode(publicRaw)
+  const jwk = { kty: 'EC', crv: 'P-256', x: b64u.encode(point.slice(1, 33)), y: b64u.encode(point.slice(33, 65)) }
+  return {
+    publicKey: await crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, true, []),
+    privateKey: await crypto.subtle.importKey('jwk', { ...jwk, d: privateD }, { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])
+  }
+}
+
+describe('033 greeting push payload (AC-7.13, D-1)', () => {
+  it('AC-7.13 (033) the greeting payload is RFC 8291 aes128gcm', async () => {
+    // The RFC's own example reproduces byte for byte.
+    const sender = await ecdhPair(RFC.asPublic, RFC.asPrivate)
+    const vector = await encryptPushPayload({
+      p256dh: RFC.uaPublic,
+      auth: RFC.auth,
+      plaintext: text.encode(RFC.plaintext),
+      salt: b64u.decode(RFC.salt),
+      sender
+    })
+    expect(b64u.encode(vector.body)).toBe(RFC.body)
+    expect(vector.headers['Content-Encoding']).toBe('aes128gcm')
+    const receiver = await ecdhPair(RFC.uaPublic, RFC.uaPrivate)
+    await expect(decryptPush(vector.body, receiver.privateKey, b64u.decode(RFC.uaPublic), b64u.decode(RFC.auth))).resolves.toBe(RFC.plaintext)
+
+    // A real subscription: fresh keys, fresh salt, and the plaintext is exactly the fixed code.
+    expect(GREETING_PUSH_CODE).toBe('g')
+    const phone = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])) as KeyPair
+    const phonePublic = new Uint8Array(await crypto.subtle.exportKey('raw', phone.publicKey))
+    const authSecret = crypto.getRandomValues(new Uint8Array(16))
+    const sealed = await encryptPushPayload({ p256dh: b64u.encode(phonePublic), auth: b64u.encode(authSecret), plaintext: text.encode(GREETING_PUSH_CODE) })
+    expect(sealed.headers['Content-Encoding']).toBe('aes128gcm')
+    await expect(decryptPush(sealed.body, phone.privateKey, phonePublic, authSecret)).resolves.toBe(GREETING_PUSH_CODE)
+  })
+
+  it('AC-7.13 (033) a plaintext that does not fit one record is refused', async () => {
+    const phone = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])) as KeyPair
+    const p256dh = b64u.encode(new Uint8Array(await crypto.subtle.exportKey('raw', phone.publicKey)))
+    const auth = b64u.encode(crypto.getRandomValues(new Uint8Array(16)))
+    // 4096 bytes a record: the plaintext, its delimiter and the 16-byte tag.
+    await expect(encryptPushPayload({ p256dh, auth, plaintext: new Uint8Array(4079) })).resolves.toBeDefined()
+    await expect(encryptPushPayload({ p256dh, auth, plaintext: new Uint8Array(4080) })).rejects.toThrow()
+  })
+})
+
+/** A subscription with real keys, so the greeting payload can be decrypted as the phone would. */
+async function phoneSubscription(endpoint: string): Promise<{ body: { endpoint: string; keys: { p256dh: string; auth: string } }; decrypt(body: Uint8Array): Promise<string> }> {
+  const pair = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])) as KeyPair
+  const publicRaw = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey))
+  const authSecret = crypto.getRandomValues(new Uint8Array(16))
+  return {
+    body: { endpoint, keys: { p256dh: b64u.encode(publicRaw), auth: b64u.encode(authSecret) } },
+    decrypt: (body) => decryptPush(body, pair.privateKey, publicRaw, authSecret)
+  }
+}
+
+const SCOPES = { chat: true, approve: true, home: false, cameras: false, vault: false, history: false }
+
+describe('033 greeting push (AC-7.13, AC-7.6, AC-8.1)', () => {
+  it('AC-7.13 (033) the greeting push is content-free and needs History', async () => {
+    const { t, token } = await paired()
+    const phone = await phoneSubscription(SUBSCRIPTION.endpoint)
+    await t.transport.request({ method: 'POST', path: '/api/push/subscribe', headers: auth(token), body: phone.body })
+    // History off: nothing.
+    await t.channel.notifyGreeting()
+    expect(t.posts).toEqual([])
+    t.setRemote({ scopes: { ...SCOPES, history: true } })
+    await t.channel.notifyGreeting()
+    expect(t.posts).toHaveLength(1)
+    const [post] = t.posts
+    expect(post.url).toBe(SUBSCRIPTION.endpoint)
+    expect(post.headers.authorization?.startsWith('vapid t=')).toBe(true)
+    expect(post.headers['Content-Encoding']).toBe('aes128gcm')
+    await expect(phone.decrypt(post.body)).resolves.toBe(GREETING_PUSH_CODE)
+    // Each subscribed device gets one post of its own (AC-8.1: only to its push service).
+    const tablet = await pairDevice(t, 'tablet')
+    const tabletToken = await openSession(t, tablet.deviceId, tablet.privateKey)
+    const second = await phoneSubscription('https://updates.push.services.mozilla.com/wpush/v2/tablet')
+    await t.transport.request({ method: 'POST', path: '/api/push/subscribe', headers: auth(tabletToken), body: second.body })
+    await t.channel.notifyGreeting()
+    expect(t.posts.slice(1).map((sent) => sent.url).sort()).toEqual([SUBSCRIPTION.endpoint, second.body.endpoint].sort())
+    await expect(second.decrypt(t.posts.find((sent, i) => i > 0 && sent.url === second.body.endpoint)?.body ?? new Uint8Array())).resolves.toBe(GREETING_PUSH_CODE)
+    // Remote off: nothing.
+    t.setRemote({ enabled: false })
+    await t.channel.notifyGreeting()
+    expect(t.posts).toHaveLength(3)
+    // The approval push is still an empty body.
+    t.setRemote({ enabled: true })
+    await t.channel.notifyPush({ threadId: 'remote' })
+    expect(t.posts.slice(3).map((sent) => sent.body.length)).toEqual([0, 0])
+  })
+
+  it('AC-7.6 (033) a failed greeting push is silent and not retried', async () => {
+    const { t, token } = await paired()
+    const phone = await phoneSubscription(SUBSCRIPTION.endpoint)
+    await t.transport.request({ method: 'POST', path: '/api/push/subscribe', headers: auth(token), body: phone.body })
+    t.setRemote({ scopes: { ...SCOPES, history: true } })
+    t.failPost()
+    await expect(t.channel.notifyGreeting()).resolves.toBeUndefined()
+    expect(t.refused).toEqual([SUBSCRIPTION.endpoint])
   })
 })

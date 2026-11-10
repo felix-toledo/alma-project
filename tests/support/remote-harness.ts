@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach } from 'vitest'
 import { ApprovalBroker, authorize, type Decision } from '../../src/coordinator/approval'
 import { RemoteChannel, type RemoteDeps } from '../../src/coordinator/channels/remote/channel'
+import type { RemoteTransport } from '../../src/coordinator/channels/remote/transport'
 import { ToolError } from '../../src/coordinator/tools/types'
 import {
   DeviceStore,
@@ -13,11 +14,13 @@ import {
 } from '../../src/coordinator/channels/remote/store'
 import { defaultSettings } from '../../src/shared/defaults'
 import { b64u } from '../../src/shared/remote/crypto'
-import type { RemoteResponse } from '../../src/shared/remote/api'
+import type { MessageAttachment } from '../../src/shared/attach/compose'
+import type { Refusal, RemoteResponse } from '../../src/shared/remote/api'
 import { defaultRemote } from '../../src/shared/remote/settings'
 import type { AuditEvent } from '../../src/shared/audit'
 import type { HomeThing } from '../../src/shared/home'
-import type { ApprovalMode, ChatMessage, DeviceView, LiveEvent, PairingView, PendingApproval, RemoteSettings, RemoteStatus, Thread, ThreadSummary, VaultEntry } from '../../src/shared/types'
+import type { ApprovalMode, ChatMessage, DeviceView, LiveEvent, PairingView, PendingApproval, ProviderId, RemoteSettings, RemoteStatus, Thread, ThreadSummary, VaultEntry } from '../../src/shared/types'
+import { RelayPairTransport } from './relay-pair'
 import { LocalTestTransport } from './remote-local-transport'
 
 const dirs: string[] = []
@@ -34,7 +37,7 @@ export type ConfirmAnswer = boolean | ((kind: string, params: Record<string, str
 
 export interface FakeChat {
   threads: Thread[]
-  askCalls: { threadId: string; text: string }[]
+  askCalls: { threadId: string; text: string; attachments?: string[] }[]
   pending: { threadId: string; promise: Promise<void>; settled: boolean; resolve(): void; reject(error: unknown): void }[]
   cancelCalls: string[]
   approvals: { id: string; denied: boolean }[]
@@ -128,6 +131,30 @@ export function fakeVault(): FakeVault {
   return vault
 }
 
+/** The attachment store as the remote module reaches it (spec 031): records every call, hands out ids, and can be told to refuse. */
+export interface FakeFiles {
+  puts: { threadId: string; name: string; size: number; base64: string }[]
+  removes: string[]
+  /** Refuses every put with this reason until set back to null. */
+  refuse: Refusal | null
+  /** Providers a send still owes a notice to (what the real store derives from the conversation as it is at send). */
+  owed: ProviderId[]
+  /** What the fake store holds: a put adds an entry, a remove drops it. */
+  stored: Map<string, MessageAttachment>
+  put(input: { threadId: string; name: string; size: number; base64: string }): { ok: true; attachment: MessageAttachment } | { ok: false; reason: Refusal }
+  remove(id: string): void
+  readersOwed(threadId: string, ids: readonly string[]): ProviderId[]
+}
+
+/** Timers on the harness clock (`setNow`): nothing fires by itself, `fireDue` runs what is due. */
+export interface FakeTimers {
+  set(fn: () => void, ms: number): unknown
+  clear(handle: unknown): void
+  /** Timers waiting to fire. */
+  active(): number
+  fireDue(): void
+}
+
 /** Conversations as the coordinator's store exposes them to the remote channel, backed by `chat.threads`. */
 export interface FakeThreads {
   /** Ids a run is in progress on, as the PC would report them. */
@@ -135,6 +162,58 @@ export interface FakeThreads {
   list(): ThreadSummary[]
   get(id: string): Thread | undefined
   isRunning(id: string): boolean
+  /** The `markOpened` calls the phone's reads made, in order. */
+  opened: { id: string; at: number }[]
+  markOpened(id: string, at: number): void
+}
+
+/** A fake attachment store: records every call, hands out ids, and refuses with `refuse` while it is set. */
+export function fakeFiles(): FakeFiles {
+  let count = 0
+  const files: FakeFiles = {
+    puts: [],
+    removes: [],
+    refuse: null,
+    owed: [],
+    stored: new Map(),
+    put: (input) => {
+      files.puts.push(input)
+      if (files.refuse) return { ok: false, reason: files.refuse }
+      count++
+      const attachment: MessageAttachment = { id: `att-${count}`, name: input.name, kind: input.name.endsWith('.png') ? 'image' : 'text', size: input.size }
+      files.stored.set(attachment.id, attachment)
+      return { ok: true, attachment }
+    },
+    remove: (id) => {
+      files.removes.push(id)
+      files.stored.delete(id)
+    },
+    readersOwed: () => files.owed
+  }
+  return files
+}
+
+/** Fake timers that read the clock they are given (the harness's `setNow`); `fireDue` runs what is due. */
+export function fakeTimers(clock: () => number): FakeTimers {
+  const waiting: { fn: () => void; due: number }[] = []
+  return {
+    set: (fn, ms) => {
+      const timer = { fn, due: clock() + ms }
+      waiting.push(timer)
+      return timer
+    },
+    clear: (handle) => {
+      const at = waiting.indexOf(handle as (typeof waiting)[number])
+      if (at >= 0) waiting.splice(at, 1)
+    },
+    active: () => waiting.length,
+    fireDue: () => {
+      for (const timer of waiting.filter((known) => known.due <= clock())) {
+        waiting.splice(waiting.indexOf(timer), 1)
+        timer.fn()
+      }
+    }
+  }
 }
 
 /** The agent of a company: its conversations are never listed or reachable from the phone. */
@@ -151,11 +230,15 @@ export interface Harness {
   posts: { url: string; headers: Record<string, string>; body: Uint8Array }[]
   /** Makes the next push posts throw (AC-11.5). */
   failPost(): void
+  /** The endpoints of the posts that threw: one each means nothing was retried (033 AC-7.6). */
+  refused: string[]
   chat: FakeChat
   approvals: HarnessApprovals
   home: FakeHome
   vault: FakeVault
   threads: FakeThreads
+  files: FakeFiles
+  timers: FakeTimers
   /** A coordinator event as the channel hears it (the broker's own approval events already arrive this way). */
   emit(event: LiveEvent): void
   /** A device paired and in session on first use; the later calls reuse it. Remote must be enabled and synced by the test. */
@@ -184,9 +267,13 @@ export async function testChannel(overrides?: {
   remote?: Partial<RemoteSettings>
   failStart?: unknown
   failTransport?: unknown
+  /** Run the channel over another transport (the relay pair) instead of the in-process one. */
+  transport?: RemoteTransport
   confirm?: ConfirmAnswer
   random?: (length: number) => Uint8Array
   record?: (entry: AuditEvent) => void
+  /** The dream service's one-time phone landing (spec 033 BR-29). */
+  landing?: (deviceId: string) => string | null
 }): Promise<Harness> {
   const dir = mkdtempSync(join(tmpdir(), 'alma-remote-channel-'))
   dirs.push(dir)
@@ -218,13 +305,15 @@ export async function testChannel(overrides?: {
   const testResults: Harness['testResults'] = []
   const posts: Harness['posts'] = []
   let postBroken = false
+  const refused: string[] = []
   let now = 0
   let answer = overrides?.confirm ?? true
   const statuses: RemoteStatus[] = []
   const pairings: (PairingView | null)[] = []
   const deviceLists: DeviceView[][] = []
   const confirmCalls: Harness['confirmCalls'] = []
-  const transport = new LocalTestTransport()
+  // The 026 suites rerun over the relay pair when this is set (spec 027 T17); nothing else about them changes.
+  const transport = process.env['ALMA_TEST_TRANSPORT'] === 'relay' ? new RelayPairTransport() : new LocalTestTransport()
   if (overrides?.failStart !== undefined) transport.startError = overrides.failStart
   let calls = 0
   const store = await DeviceStore.load({ dir, now: () => now, sealBox })
@@ -326,11 +415,19 @@ export async function testChannel(overrides?: {
     running: new Set(),
     list: () => threads.map(({ id, title, agentId, model, workspace, updatedAt, channel }) => ({ id, title, agentId, model, workspace, updatedAt, channel })),
     get: (id) => threads.find((thread) => thread.id === id),
-    isRunning: (id) => fakeThreads.running.has(id) || pending.some((ask) => ask.threadId === id && !ask.settled)
+    isRunning: (id) => fakeThreads.running.has(id) || pending.some((ask) => ask.threadId === id && !ask.settled),
+    opened: [],
+    markOpened: (id, at) => {
+      fakeThreads.opened.push({ id, at })
+    }
   }
+  const files = fakeFiles()
+  const timers = fakeTimers(() => now)
   const deps: RemoteDeps = {
     vault: () => vault,
     threads: fakeThreads,
+    files,
+    timers,
     settings: () => {
       const base = defaultSettings()
       return {
@@ -349,7 +446,7 @@ export async function testChannel(overrides?: {
     transport: () => {
       calls++
       if (overrides?.failTransport !== undefined) throw overrides.failTransport
-      return transport
+      return overrides?.transport ?? transport
     },
     onStatus: (status: RemoteStatus) => statuses.push(status),
     onPairing: (view: PairingView | null) => pairings.push(view),
@@ -367,8 +464,8 @@ export async function testChannel(overrides?: {
       }
       return threads[current] ?? threads[0] ?? makeThread('remote')
     },
-    ask: (threadId: string, text: string) => {
-      askCalls.push({ threadId, text })
+    ask: (threadId: string, text: string, attachments?: string[]) => {
+      askCalls.push({ threadId, text, ...(attachments ? { attachments } : {}) })
       if (chat.throwSync) throw new Error('ask failed')
       threads.find((thread) => thread.id === threadId)?.messages.push({ role: 'user', content: [{ type: 'text', text }], ts: now })
       const entry: FakeChat['pending'][number] = {
@@ -395,7 +492,7 @@ export async function testChannel(overrides?: {
     pendingApprovals: () => approvals.broker.pending(),
     respondApproval: (approvalId: string, decision: 'allow' | 'deny') => {
       approvals.answered.push({ approvalId, decision })
-      approvals.broker.respond(approvalId, decision)
+      approvals.broker.respond(approvalId, decision, 'phone')
     },
     onEvent: (listener: (event: LiveEvent) => void) => {
       channelListener = listener
@@ -415,6 +512,7 @@ export async function testChannel(overrides?: {
       }),
       authorize: (request) => authorize({ ...request, broker, rememberAlwaysAllow: (name: string) => home.remembered.push(name) })
     },
+    landing: overrides?.landing,
     record: overrides?.record ?? ((entry: AuditEvent) => {
       records.push(entry)
     }),
@@ -422,7 +520,10 @@ export async function testChannel(overrides?: {
       testResults.push({ deviceId, ok })
     },
     post: async (url: string, headers: Record<string, string>, body: Uint8Array) => {
-      if (postBroken) throw new Error('push service is down')
+      if (postBroken) {
+        refused.push(url)
+        throw new Error('push service is down')
+      }
       posts.push({ url, headers, body })
       return { ok: true }
     }
@@ -438,6 +539,8 @@ export async function testChannel(overrides?: {
     home,
     vault,
     threads: fakeThreads,
+    files,
+    timers,
     emit: (event) => channelListener?.(event),
     phone: () => {
       session ??= (async () => {
@@ -475,6 +578,7 @@ export async function testChannel(overrides?: {
     },
     dir,
     posts,
+    refused,
     failPost: () => {
       postBroken = true
     }

@@ -15,8 +15,21 @@ export interface RemoteState {
 
 const EMPTY: RemoteState = { status: { state: 'off' }, pairing: null, devices: [], tested: null, activity: [], tailscale: null }
 
-export function useRemote(enabled: boolean): RemoteState & { reload(): void; detect(): void } {
+export function useRemote(enabled: boolean, transport: 'tailscale' | 'relay'): RemoteState & { reload(): void; detect(): void } {
   const [state, setState] = useState<RemoteState>(EMPTY)
+  // Whether this build offers the relay is known even while remote access is off (spec 027 AC-6.7).
+  const [relayHidden, setRelayHidden] = useState(false)
+  const viaRelay = !relayHidden && transport === 'relay'
+
+  useEffect(() => {
+    const read = (): void => {
+      void request<RemoteStatus>({ method: 'remote.status' })
+        .then((current) => setRelayHidden(current.relayHidden === true))
+        .catch(() => undefined)
+    }
+    read()
+    return onConnected(read)
+  }, [])
 
   const reload = useCallback(() => {
     if (!enabled) return
@@ -30,7 +43,8 @@ export function useRemote(enabled: boolean): RemoteState & { reload(): void; det
   }, [enabled])
 
   const detect = useCallback(() => {
-    if (!enabled) return
+    // Tailscale is not asked about while the relay is the connection.
+    if (!enabled || viaRelay) return
     // `remote.detect` is T30's; until it lands the answer is undefined and the
     // Tailscale wizard steps stay hidden (the off switch, pairing and devices work meanwhile).
     void request<RemoteDetect | undefined>({ method: 'remote.detect' })
@@ -38,10 +52,11 @@ export function useRemote(enabled: boolean): RemoteState & { reload(): void; det
         if (found) setState((s) => ({ ...s, tailscale: found.tailscale, status: found.status }))
       })
       .catch(() => undefined)
-  }, [enabled])
+  }, [enabled, viaRelay])
 
   useEffect(() => {
     if (!enabled) return setState(EMPTY)
+    if (viaRelay) setState((s) => ({ ...s, tailscale: null }))
     reload()
     detect()
     const offConnected = onConnected(() => {
@@ -60,5 +75,5 @@ export function useRemote(enabled: boolean): RemoteState & { reload(): void; det
     }
   }, [enabled, reload, detect])
 
-  return { ...state, reload, detect }
+  return { ...state, status: relayHidden ? { ...state.status, relayHidden: true } : state.status, reload, detect }
 }

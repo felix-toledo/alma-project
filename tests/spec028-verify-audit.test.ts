@@ -143,7 +143,7 @@ describe('AC-6.11 / AC-4.1 / AC-4.3 (028 verify) what the phone is told and keep
     const t = await served()
     const res = await t.transport.request({ method: 'GET', path: '/api/status', headers: (await t.phone()).headers })
     expect(res.status).toBe(200)
-    expect(Object.keys(res.body as object).sort()).toEqual(['continue', 'scopes', 'sensitive'])
+    expect(Object.keys(res.body as object).sort()).toEqual(['continue', 'scopes', 'sendFiles', 'sensitive'])
     expect(Object.keys((res.body as { scopes: object }).scopes).sort()).toEqual(['approve', 'cameras', 'chat', 'history', 'home', 'vault'])
     expect(JSON.stringify(res.body)).not.toMatch(/CANARY|camera\.|patio/)
     // `continue` is only true while History is on.

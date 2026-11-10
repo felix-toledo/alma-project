@@ -9,6 +9,7 @@ export function defaultRemote(): RemoteSettings {
     scopes: { chat: false, approve: false, home: false, cameras: false, vault: false, history: false },
     sensitive: false,
     continueHistory: false,
+    sendFiles: false,
     cameras: [],
     vaultExcluded: [],
     agentId: 'general'
@@ -26,10 +27,11 @@ const scopesSchema = z.object({
 
 const remoteSettingsSchema = z.object({
   enabled: z.boolean().catch(false),
-  transport: z.literal('tailscale').catch('tailscale'),
+  transport: z.enum(['tailscale', 'relay']).catch('tailscale'),
   scopes: scopesSchema.catch(defaultRemote().scopes),
   sensitive: z.boolean().catch(false),
   continueHistory: z.boolean().catch(false),
+  sendFiles: z.boolean().catch(false),
   // An allow-list fails closed: one bad id drops the whole list.
   cameras: z.array(z.string()).catch([]),
   // Read as unknown: items are dropped one by one, and a non-array is told apart in sanitizeRemote.
@@ -41,7 +43,9 @@ const remoteSettingsSchema = z.object({
 export function sanitizeRemote(value: unknown): RemoteSettings {
   const parsed = remoteSettingsSchema.safeParse(value)
   if (!parsed.success) return defaultRemote()
-  const { vaultExcluded, ...rest } = parsed.data
+  const { vaultExcluded, ...parsedRest } = parsed.data
+  // Sending files is part of Chat, so it cannot outlive it (spec 031 AC-1.3).
+  const rest = { ...parsedRest, sendFiles: parsedRest.sendFiles && parsedRest.scopes.chat }
   // A lost exclusion list must not widen access: Notes goes off with it (spec 028 AC-1.3).
   if (!Array.isArray(vaultExcluded)) {
     const raw = (value as Record<string, unknown>).vaultExcluded

@@ -74,6 +74,7 @@ function testTransportImpls(files: Record<string, string>): string[] {
 
 /** The settings of spec 028 only `main` writes: the new scopes, the continue sub-switch and the exclusion list. */
 const NEW_KEYS = /vaultExcluded|continueHistory|scopes\.(vault|history)/
+const RELAY_KEYS = /relay|routing[-_ ]?id|remote\.transport|\btransport\s*[:=]\s*['"](?:tailscale|relay)/i
 
 describe('remote guards (spec 026 T13)', () => {
   it('AC-1.6 no tool reads or changes remote access', () => {
@@ -125,5 +126,24 @@ describe('remote guards (spec 026 T13)', () => {
     ).toEqual([])
     expect(NEW_KEYS.test('settings.remote.vaultExcluded.push(folder)')).toBe(true)
     expect(NEW_KEYS.test('remote.scopes.history = true')).toBe(true)
+  })
+
+  it('AC-1.6 (027) no tool reads or changes the relay', () => {
+    expect(allTools.length).toBeGreaterThan(30)
+    for (const tool of allTools) {
+      expect(`${tool.name} ${tool.description} ${JSON.stringify(jsonSchemaOf(tool.schema))}`, tool.name).not.toMatch(RELAY_KEYS)
+    }
+    const sources = { ...readSources(root, 'src/coordinator/tools'), ...readSources(root, 'src/coordinator/knowledge') }
+    expect(Object.keys(sources).length).toBeGreaterThan(10)
+    expect(
+      Object.entries(sources)
+        .filter(([, text]) => RELAY_KEYS.test(text))
+        .map(([file]) => file)
+    ).toEqual([])
+    // No tool module imports the relay's pieces either.
+    expect(violations({ 'src/coordinator/tools/z.ts': "import { RelayTransport } from '../channels/remote/relay-transport'" }, [NO_REMOTE_IMPORTS])).toHaveLength(1)
+    expect(violations(sources, [NO_REMOTE_IMPORTS])).toEqual([])
+    expect(RELAY_KEYS.test('settings.remote.transport = "relay"')).toBe(true)
+    expect(RELAY_KEYS.test('const routingId = pc.routingId')).toBe(true)
   })
 })

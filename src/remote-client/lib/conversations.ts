@@ -88,6 +88,7 @@ export function isApproval(value: unknown): value is ApprovalView {
     typeof row.tool === 'string' &&
     typeof row.input === 'string' &&
     typeof row.flagged === 'boolean' &&
+    typeof row.whole === 'boolean' &&
     (row.thread === undefined || typeof row.thread === 'string') &&
     (row.question === 'chan.allowQuestion' || row.question === 'chan.flagged')
   )

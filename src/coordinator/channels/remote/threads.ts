@@ -2,9 +2,11 @@ import { REMOTE_LIMITS, type RemoteResponse } from '../../../shared/remote/api'
 import type { ThreadPage, ThreadRow, ThreadWindow } from '../../../shared/remote/wire'
 import { isCompanyThread } from '../../../shared/threads'
 import type { Settings, Thread, ThreadSummary } from '../../../shared/types'
+import type { ChatSendResult } from './chat'
 import type { RunTies } from './runs'
 import { threadPage } from './thread-view'
 import { okResponse as ok, refusalResponse } from './transport'
+import { failedResponse, type UploadsFlow } from './uploads'
 
 /** The thread store as the phone reads it; the lookup never throws (a missing id is `undefined`). */
 export interface RemoteThreads {
@@ -12,22 +14,27 @@ export interface RemoteThreads {
   get(id: string): Thread | undefined
   /** A run is going on this thread, whoever started it. */
   isRunning(id: string): boolean
+  /** Sets the conversation's last-opened time (spec 030); nothing else about it changes. */
+  markOpened(id: string, at: number): void
 }
 
 export interface ThreadsDeps {
   threads: RemoteThreads
   settings(): Settings
+  now(): number
   /** The id of the shared remote thread the Chat tab writes into. */
   sharedId(): string
   ties: RunTies
   /** The device's run waits on an approval it may not answer here (approve scope off, AC-3.9). */
   waiting(deviceId: string, threadId: string): boolean
   /** The one run entry (the PC and the Chat tab use it too): resolves after the answer is committed or the run failed. */
-  ask(threadId: string, text: string): Promise<void>
+  ask(threadId: string, text: string, attachments?: string[]): Promise<void>
   /** The abort the PC's stop uses; it also resolves the run's pending approvals as denied. */
   cancel(threadId: string): void
   /** The Chat tab's own send, for a by-id send into the shared thread (one run, the same busy rule). */
-  sendShared(deviceId: string, text: string): { ok: true } | { error: 'busy' | 'failed' | 'run-active' }
+  sendShared(deviceId: string, text: string, ids?: string[]): ChatSendResult
+  /** The device's pending uploads a send may bind (spec 031): claimed before the run, released once the message is committed. */
+  uploads: Pick<UploadsFlow, 'claimForSend' | 'bound'>
 }
 
 interface Waiter {
@@ -45,7 +52,6 @@ function signature(response: RemoteResponse): string {
 
 /** The conversation list is 30 a page (spec 028 BR-31). */
 const PAGE = 30
-const failed = (): RemoteResponse => ({ status: 500, headers: { 'cache-control': 'no-store' }, body: { error: 'failed' } })
 
 /**
  * Conversations the phone reads and continues (spec 028). Scope and sub-switch checks already ran in the pipeline.
@@ -79,7 +85,7 @@ export class ThreadsFlow {
   }
 
   /** The thread behind an id, or undefined for a missing one and for a company's. */
-  private reachable(id: string): Thread | undefined {
+  reachable(id: string): Thread | undefined {
     const thread = this.deps.threads.get(id)
     return thread && !isCompanyThread(thread.agentId, this.deps.settings().agents) ? thread : undefined
   }
@@ -109,6 +115,8 @@ export class ThreadsFlow {
    */
   read(deviceId: string, id: string, options: { before?: number; since?: number; wait?: boolean } = {}, signal?: AbortSignal): Promise<RemoteResponse> {
     const { wait, ...page } = options
+    // Opening a conversation is its first read, not the held repeats or the earlier pages that follow (spec 031 BR-15).
+    if (page.before === undefined && page.since === undefined && this.reachable(id)) this.deps.threads.markOpened(id, this.deps.now())
     const current = this.view(deviceId, id, page)
     if (!wait || page.since === undefined || this.closed || signal?.aborted || current.status !== 200 || (current.body as ThreadWindow).rev !== page.since) return Promise.resolve(current)
     return new Promise((resolve) => {
@@ -143,24 +151,28 @@ export class ThreadsFlow {
    * Continues a conversation by its id. The shared thread goes through the Chat tab's own send; any other thread
    * runs through the same `ask` the PC uses, and its run is tied to this device until it settles.
    */
-  send(deviceId: string, id: string, text: string): RemoteResponse {
+  send(deviceId: string, id: string, text: string, ids?: string[]): RemoteResponse {
     if (!this.reachable(id)) return refusalResponse('gone')
     const { ties, threads } = this.deps
     if (ties.activeFor(deviceId)) return refusalResponse('run-active')
     if (threads.isRunning(id)) return refusalResponse('busy')
     if (id === this.deps.sharedId()) {
-      const result = this.deps.sendShared(deviceId, text)
+      const result = this.deps.sendShared(deviceId, text, ids)
       if ('ok' in result) return ok({ ok: true })
-      return result.error === 'failed' ? failed() : refusalResponse(result.error)
+      return result.error === 'failed' ? failedResponse() : refusalResponse(result.error)
     }
+    const claim = this.deps.uploads.claimForSend(deviceId, id, ids, text)
+    if (!claim.ok) return refusalResponse(claim.reason)
     ties.start(deviceId, id)
     let run: Promise<void>
     try {
-      run = this.deps.ask(id, text)
+      run = this.deps.ask(id, text, claim.ids)
     } catch {
       ties.end(deviceId, id)
-      return failed()
+      return failedResponse()
     }
+    // The message is committed by now (ask commits synchronously first): the uploads belong to it, not to the device.
+    this.deps.uploads.bound(deviceId, claim.ids)
     const end = (): void => {
       ties.end(deviceId, id)
       this.poke()

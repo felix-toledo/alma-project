@@ -1,3 +1,4 @@
+import type { AttachmentKind } from '../../../shared/attach/rules'
 import type { AuditEvent } from '../../../shared/audit'
 import type { DeviceAuth } from '../../../shared/remote/authorize'
 import type { RemoteRequest, RouteSpec } from '../../../shared/remote/api'
@@ -34,32 +35,50 @@ export const ROUTE_OPS: Readonly<Record<string, string>> = {
   '/api/threads/list': 'remote.threads.list',
   '/api/threads/read': 'remote.threads.read',
   '/api/threads/send': 'remote.threads.send',
-  '/api/threads/stop': 'remote.threads.stop'
+  '/api/threads/stop': 'remote.threads.stop',
+  '/api/chat/attach': 'remote.attachments.put',
+  '/api/threads/attach': 'remote.attachments.put',
+  '/api/attachments/remove': 'remote.attachments.remove'
 }
+
+/** The only strings a detail may carry: what kind of file it was, never what it was called (spec 031 AC-7.2). */
+// A Record, so a new kind without an entry here is a type error rather than a silently dropped detail.
+const KIND_LIST: Record<AttachmentKind, true> = { image: true, text: true, pdf: true, office: true }
+const KINDS: ReadonlySet<string> = new Set(Object.keys(KIND_LIST))
 
 /** Window-side pairing operations (AC-7.3): the person's approve and reject. */
 export const PAIR_APPROVE_OP = 'remote.pair.approve'
 export const PAIR_REJECT_OP = 'remote.pair.reject'
 
+function safeDetail(detail: Record<string, unknown> | undefined): Record<string, number | string> {
+  const kept: Record<string, number | string> = {}
+  for (const [key, value] of Object.entries(detail ?? {})) {
+    if ((typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && KINDS.has(value))) kept[key] = value
+  }
+  return kept
+}
+
 /**
  * The one audit mapping (T26): identifiers and outcomes only, never content (AC-7.2).
  * Failures carry `throttle: true` (AC-7.5); a sink that throws never breaks the
- * operation (AC-7.4).
+ * operation (AC-7.4). A detail holds numbers (sizes, counts) and kinds of file and nothing else: any other value is dropped
+ * here, so a name, an id or a text cannot reach the trail by a caller's mistake (spec 031 AC-7.2).
  */
 export function auditRemote(
   record: (entry: AuditEvent) => void,
   op: string,
   outcome: 'ok' | 'denied' | 'error',
   deviceId?: string,
-  options?: { actor?: AuditEvent['actor']; target?: string }
+  options?: { actor?: AuditEvent['actor']; target?: string; detail?: Record<string, number | AttachmentKind> }
 ): void {
+  const detail = { ...safeDetail(options?.detail), ...(deviceId ? { deviceId } : {}) }
   try {
     record({
       action: op,
       actor: options?.actor ?? 'remote',
       ...(options?.target ? { target: options.target } : {}),
       outcome,
-      ...(deviceId ? { detail: { deviceId } } : {}),
+      ...(Object.keys(detail).length > 0 ? { detail } : {}),
       ...(outcome === 'denied' ? { throttle: true } : {})
     })
   } catch {

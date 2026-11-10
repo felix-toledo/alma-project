@@ -4,37 +4,39 @@ import { useState } from 'react'
 import type { ApprovalView } from '../../shared/remote/api'
 import { isApproval } from '../lib/conversations'
 import { translatePwa, type PwaKey, type PwaLanguage } from '../i18n'
-import { validateChatInput, type ChatValidation } from '../lib/chat'
+import { validateChatInput } from '../lib/chat'
 import type { NavAction } from '../lib/nav'
 import type { PwaMessage, PwaState } from '../lib/poll'
 import type { Pwa } from '../usePwa'
 import { ApprovalCard } from './Approvals'
+import { AttachButton, AttachChips, AttachNotes } from './AttachBar'
+import { FileLines } from './FileLines'
 import { PwaHeader } from './Header'
+import { useAttachments } from './useAttachments'
 
 export function Chat({ pwa, language, go }: { pwa: Pwa; language: PwaLanguage; go(action: NavAction): void }): React.JSX.Element {
   const t = (key: PwaKey): string => translatePwa(language, key)
   const [draft, setDraft] = useState('')
-  const [validation, setValidation] = useState<ChatValidation>({ ok: false, reason: 'empty' })
+  const [sending, setSending] = useState(false)
+  const attach = useAttachments(pwa, {})
   const state: PwaState | null = pwa.state
   const messages: PwaMessage[] = state?.messages ?? []
   const approvals: ApprovalView[] = (state?.approvals ?? []).filter(isApproval)
 
-  const type = (text: string): void => {
-    setDraft(text)
-    setValidation(validateChatInput(text))
-  }
+  const ids = attach.readyIds()
+  const validation = validateChatInput(draft, ids.length)
+  const running = Boolean(state?.running) || sending
 
-  const send = (): void => {
-    const checked = validateChatInput(draft)
-    setValidation(checked)
-    if (!checked.ok) return
-    // The typed text stays until the PC accepts it (AC-8.1, AC-8.4).
-    void pwa.send(draft).then((accepted) => {
-      if (accepted) {
-        setDraft('')
-        setValidation({ ok: false, reason: 'empty' })
-      }
-    })
+  const send = async (): Promise<void> => {
+    setSending(true)
+    try {
+      // The typed text and the chips stay until the PC accepts the message (AC-8.1, AC-8.4, 031 AC-4.3).
+      const outcome = await pwa.send(draft, ids.length > 0 ? ids : undefined)
+      attach.sent(outcome)
+      if (outcome.ok) setDraft('')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -65,6 +67,7 @@ export function Chat({ pwa, language, go }: { pwa: Pwa; language: PwaLanguage; g
         {messages.map((message) => (
           <li key={message.index} className={message.role === 'user' ? 'pwa-user' : 'pwa-agent'}>
             {message.text}
+            <FileLines attachments={message.attachments} language={language} />
           </li>
         ))}
       </ol>
@@ -74,10 +77,13 @@ export function Chat({ pwa, language, go }: { pwa: Pwa; language: PwaLanguage; g
       <div className="pwa-status" role="status">
         {pwa.note && <p className="pwa-note">{t(pwa.note)}</p>}
         {!validation.ok && validation.reason === 'too-long' && <p className="pwa-error">{t('remote.pwa.tooLong')}</p>}
+        <AttachNotes attach={attach} language={language} />
       </div>
+      <AttachChips attach={attach} language={language} locked={sending} />
       <div className="pwa-compose">
-        <textarea value={draft} rows={2} aria-label={t('remote.pwa.thread.compose')} placeholder={t('remote.pwa.thread.compose')} onChange={(e) => type(e.target.value)} />
-        <button type="button" className="primary" disabled={!validation.ok || state?.running} onClick={send}>
+        <AttachButton attach={attach} language={language} running={running} />
+        <textarea value={draft} rows={2} aria-label={t('remote.pwa.thread.compose')} placeholder={t('remote.pwa.thread.compose')} onChange={(e) => setDraft(e.target.value)} />
+        <button type="button" className="primary" disabled={!validation.ok || !attach.canSend(draft, running)} onClick={() => void send()}>
           <Send size={20} strokeWidth={1.75} aria-hidden="true" />
           {t('remote.pwa.send')}
         </button>

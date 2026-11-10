@@ -22,12 +22,16 @@ export interface PwaStorage {
   saveDevice(device: StoredDevice): Promise<void>
   loadSession(): Promise<StoredSession | null>
   saveSession(session: StoredSession): Promise<void>
+  /** The PC's key, learned and checked when pairing through a channel that does not carry it in the address; null when the PC was reached directly. */
+  loadPcKey(): Promise<PublicJwk | null>
+  savePcKey(key: PublicJwk): Promise<void>
   clear(): Promise<void>
 }
 
 export function memoryStorage(): PwaStorage {
   let device: StoredDevice | null = null
   let session: StoredSession | null = null
+  let pcKey: PublicJwk | null = null
   return {
     loadDevice: async () => device,
     saveDevice: async (next) => {
@@ -37,9 +41,14 @@ export function memoryStorage(): PwaStorage {
     saveSession: async (next) => {
       session = next
     },
+    loadPcKey: async () => pcKey,
+    savePcKey: async (next) => {
+      pcKey = next
+    },
     clear: async () => {
       device = null
       session = null
+      pcKey = null
     }
   }
 }

@@ -6,7 +6,7 @@ import type { RemoteFailure } from '../../../shared/types'
  * requests to the handler, stops it, and cuts one device's connections on revocation.
  */
 export interface RemoteTransport {
-  readonly id: 'tailscale' | 'test'
+  readonly id: 'tailscale' | 'test' | 'relay'
   /** The public address the phone reaches (a `*.ts.net` URL, or the fixed test host). */
   start(handler: RemoteHandler): Promise<{ address: string }>
   /** Stops the listener and cuts every open connection. Safe to call after a failed start. */
@@ -36,7 +36,16 @@ const REFUSAL_STATUS: Record<Refusal, number> = {
   unavailable: 404,
   gone: 404,
   unsupported: 415,
-  'run-active': 409
+  'run-active': 409,
+  'attach-off': 403,
+  'notice-needed': 403,
+  'too-many': 409,
+  'secret-name': 422,
+  'file-type': 415,
+  'file-content': 422,
+  'file-empty': 422,
+  'file-malformed': 422,
+  storage: 500
 }
 
 /**

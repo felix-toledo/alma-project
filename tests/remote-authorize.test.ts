@@ -44,7 +44,10 @@ describe('remote API contracts (spec 026 T6)', () => {
       ['POST', '/api/threads/list', 'session', 'history', 'none', false],
       ['POST', '/api/threads/read', 'session', 'history', 'open', false],
       ['POST', '/api/threads/send', 'session', 'history', 'open', false],
-      ['POST', '/api/threads/stop', 'session', 'history', 'open', false]
+      ['POST', '/api/threads/stop', 'session', 'history', 'open', false],
+      ['POST', '/api/chat/attach', 'session', 'chat', 'upload', false],
+      ['POST', '/api/threads/attach', 'session', 'history', 'upload', false],
+      ['POST', '/api/attachments/remove', 'session', ['chat', 'history'], 'change', false]
     ])
   })
 

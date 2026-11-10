@@ -299,6 +299,13 @@ body {
   margin-bottom: 12px;
 }
 
+/* A list of chips: the browser's list look is reset here, the layout stays `.pwa-actions`. */
+.pwa-list {
+  margin-top: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .pwa-messages {
   list-style: none;
   margin: 0 0 12px;
@@ -388,6 +395,57 @@ body {
   border-color: var(--pwa-focus);
   box-shadow: var(--pwa-glow-focus);
   outline: 2px solid transparent;
+}
+
+/* ---------- Attachment chips (spec 031): the one extension of the touch components, built only from the --pwa-* tokens ---------- */
+.pwa-compose .pwa-icon,
+.pwa-chip .pwa-icon {
+  flex: none;
+  width: 44px;
+  padding: 0;
+}
+
+.pwa-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 0 0 14px;
+  color: var(--pwa-text);
+  background: var(--pwa-glass);
+  border: 1px solid var(--pwa-border);
+  border-radius: var(--pwa-r-pill);
+}
+
+/* One line: a long file name is cut with an ellipsis, never wrapped or allowed to push the buttons out. */
+.pwa-chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pwa-chip[data-state='failed'] {
+  border-color: var(--pwa-danger);
+}
+
+.pwa-chip[data-state] svg {
+  flex-shrink: 0;
+}
+
+/* The line under a message (name, kind icon, size): not tappable, so lower than a chip, and the name gives way before the size does. */
+.pwa-chip[data-state='sent'] {
+  min-height: 32px;
+  padding: 0 12px 0 10px;
+}
+
+.pwa-chip[data-state='sent'] > span:last-of-type {
+  flex-shrink: 0;
+}
+
+.pwa-messages .pwa-actions {
+  margin: 6px 0 0;
 }
 
 /* ---------- Tabs: fixed glass bar, icon over label ---------- */
@@ -775,6 +833,12 @@ body {
   margin: 24px 0 12px;
   font-size: 14px;
   text-align: center;
+}
+
+/* A 64-character hash has no spaces to break at. */
+.pwa-hash {
+  margin-top: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Name filter ---------- */

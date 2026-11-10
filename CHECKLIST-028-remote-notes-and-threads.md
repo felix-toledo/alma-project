@@ -44,46 +44,46 @@ Barra de abajo con cinco destinos: Chat, Notas, Casa, Cámaras, Ajustes; el actu
 
 ## 4. En el teléfono: Conversaciones (AC-3.x)
 
-- [ ] En el Chat, la entrada "Conversaciones": lista de 30 en 30 con "Ver más"; no aparecen conversaciones de empresas; la del chat de este celular está marcada.
-- [ ] Abrir una: se leen los últimos mensajes, solo texto (sin herramientas), "Ver mensajes anteriores" pagina. Una abierta que no es la del celular tiene botón de refrescar.
-- [ ] Con **Continuar** apagado: no hay caja para escribir y el texto dice que está apagado en la PC.
-- [ ] Con **Continuar** prendido: escribir en una conversación de la PC. La respuesta vuelve al teléfono y también se ve en la PC, con el agente, el modelo y la carpeta de esa conversación.
-- [ ] Mientras la PC corre esa conversación (mandá algo desde la PC): el teléfono dice "en uso en la PC" y no manda.
-- [ ] Una segunda respuesta desde el mismo teléfono mientras la primera sigue: "Ya hay una respuesta en curso desde este celular".
-- [ ] Parar una respuesta que arrancó el celular: se corta como en la PC.
-- [ ] Continuar una conversación de Telegram desde el celular: no sale ningún mensaje a Telegram.
-- [ ] Aprobación: con **Aprobar** prendido, pedir algo que pregunte (una herramienta que escribe, en un modo que pregunte). La tarjeta aparece en el teléfono marcada con la conversación, se contesta una vez, y no ofrece "Siempre permitir". Llega el push de "Alma te necesita" sin contenido.
-- [ ] Con **Aprobar** apagado: el teléfono dice "Esperando una aprobación en la PC" y la aprobación sigue pendiente en la PC.
-- [ ] Una aprobación de una corrida que arrancó la PC en otra conversación: el teléfono NO la ve.
-- [ ] Borrar la conversación en la PC mientras está abierta en el teléfono: "Esta conversación ya no existe".
-- [ ] Apagar el sub-interruptor o Conversaciones en la PC con una respuesta del celular en curso: se corta, y lo ya escrito queda.
+- [x] En el Chat, la entrada "Conversaciones": lista de 30 en 30 con "Ver más"; no aparecen conversaciones de empresas; la del chat de este celular está marcada.
+- [x] Abrir una: se leen los últimos mensajes, solo texto (sin herramientas), "Ver mensajes anteriores" pagina. Una abierta que no es la del celular tiene botón de refrescar.
+- [x] Con **Continuar** apagado: no hay caja para escribir y el texto dice que está apagado en la PC.
+- [x] Con **Continuar** prendido: escribir en una conversación de la PC. La respuesta vuelve al teléfono y también se ve en la PC, con el agente, el modelo y la carpeta de esa conversación.
+- [x] Mientras la PC corre esa conversación (mandá algo desde la PC): el teléfono dice "en uso en la PC" y no manda.
+- [x] Una segunda respuesta desde el mismo teléfono mientras la primera sigue: "Ya hay una respuesta en curso desde este celular".
+- [x] Parar una respuesta que arrancó el celular: se corta como en la PC.
+- [x] Continuar una conversación de Telegram desde el celular: no sale ningún mensaje a Telegram.
+- [x] Aprobación: con **Aprobar** prendido, pedir algo que pregunte (una herramienta que escribe, en un modo que pregunte). La tarjeta aparece en el teléfono marcada con la conversación, se contesta una vez, y no ofrece "Siempre permitir". Llega el push de "Alma te necesita" sin contenido.
+- [x] Con **Aprobar** apagado: el teléfono dice "Esperando una aprobación en la PC" y la aprobación sigue pendiente en la PC.
+- [x] Una aprobación de una corrida que arrancó la PC en otra conversación: el teléfono NO la ve.
+- [x] Borrar la conversación en la PC mientras está abierta en el teléfono: "Esta conversación ya no existe".
+- [x] Apagar el sub-interruptor o Conversaciones en la PC con una respuesta del celular en curso: se corta, y lo ya escrito queda.
 
 ## 5. Corte y revocación (AC-3.20, 1.6)
 
-- [ ] Kill switch de la bandeja ("Apagar el acceso remoto") con una respuesta del celular en curso: se corta, y el teléfono muestra que la PC no responde.
-- [ ] Volver a prender el remoto: Notas, Conversaciones y Continuar vuelven apagados.
-- [ ] Revocar el teléfono en la PC (con y sin una respuesta en curso): al reabrir la PWA muestra "revocado" y se limpia; no queda ninguna nota ni conversación a la vista.
+- [x] Kill switch de la bandeja ("Apagar el acceso remoto") con una respuesta del celular en curso: se corta, y el teléfono muestra que la PC no responde.
+- [x] Volver a prender el remoto: Notas, Conversaciones y Continuar vuelven apagados.
+- [x] Revocar el teléfono en la PC (con y sin una respuesta en curso): al reabrir la PWA muestra "revocado" y se limpia; no queda ninguna nota ni conversación a la vista.
 
 ## 6. Actividad en la PC (AC-5.5)
 
-- [ ] Después de leer una nota, abrir una conversación, mandar y parar: la lista de actividad remota muestra las entradas con nombre del teléfono, hora y qué (la ruta de la nota o el id de la conversación; nunca texto).
-- [ ] Un extraño (otro dispositivo o token inválido) pidiendo algo: entrada de denegado, sin nombres ni contenido.
+- [x] Después de leer una nota, abrir una conversación, mandar y parar: la lista de actividad remota muestra las entradas con nombre del teléfono, hora y qué (la ruta de la nota o el id de la conversación; nunca texto).
+- [x] Un extraño (otro dispositivo o token inválido) pidiendo algo: entrada de denegado, sin nombres ni contenido.
 
 ## 7. Cosas que los tests sin teléfono no ven (AC-6.4, 6.7, 6.9, 6.10, 6.12)
 
-- [ ] Áreas seguras: en iPhone con notch y en Android con gestos, la barra de abajo y el encabezado no quedan tapados.
-- [ ] Teclado sobre el compositor: al escribir en una conversación y en el Chat, la caja y el botón siguen visibles y la barra no tapa nada. Probar vertical y horizontal.
-- [ ] Vidrio: el desenfoque de la barra y las tarjetas se ve bien (sin recuadros negros ni parpadeos) en Android y iPhone.
-- [ ] Movimiento: con "reducir movimiento" prendido en el teléfono, el fondo y las transiciones se calman.
-- [ ] Sin sonidos ni música en ninguna pantalla.
-- [ ] Lector de pantalla (TalkBack / VoiceOver): la barra anuncia el destino actual; los botones tienen nombre; las listas se leen; los estados (cargando, vacío, error) se anuncian.
-- [ ] Texto al 200 %: nada se corta ni queda tapado, los botones siguen tocables.
-- [ ] Blancos táctiles cómodos (44 px), foco visible con teclado externo, contraste legible al sol.
-- [ ] Texto largo: una nota con CRLF, emojis o una línea larguísima no rompe el layout; un título de conversación con emojis tampoco.
-- [ ] La foto de una cámara (Cámaras → pedir una foto) ahora se ve (antes el CSP la bloqueaba; ya permite `data:` solo para imágenes).
-- [ ] PC dormida / Alma cerrada / Tailscale caído: cada pantalla dice "La PC no responde", reintenta sola y el botón "Reintentar" prueba al toque; lo que estabas escribiendo queda en la caja.
-- [ ] Ajustes: muestra la conexión, "Lo que este celular puede hacer ahora" (chat, aprobar, casa, cámaras, cerraduras y alarmas, notas, conversaciones, continuar), la versión y "Olvidar esta PC" con confirmación; no hay selector de idioma ni ningún interruptor de alcance.
-- [ ] Idioma: con el teléfono en español y después en inglés, todo sale en ese idioma, sin textos mezclados ni claves crudas.
+- [x] Áreas seguras: en iPhone con notch y en Android con gestos, la barra de abajo y el encabezado no quedan tapados.
+- [x] Teclado sobre el compositor: al escribir en una conversación y en el Chat, la caja y el botón siguen visibles y la barra no tapa nada. Probar vertical y horizontal.
+- [x] Vidrio: el desenfoque de la barra y las tarjetas se ve bien (sin recuadros negros ni parpadeos) en Android y iPhone.
+- [x] Movimiento: con "reducir movimiento" prendido en el teléfono, el fondo y las transiciones se calman.
+- [x] Sin sonidos ni música en ninguna pantalla.
+- [x] Lector de pantalla (TalkBack / VoiceOver): la barra anuncia el destino actual; los botones tienen nombre; las listas se leen; los estados (cargando, vacío, error) se anuncian.
+- [x] Texto al 200 %: nada se corta ni queda tapado, los botones siguen tocables.
+- [x] Blancos táctiles cómodos (44 px), foco visible con teclado externo, contraste legible al sol.
+- [x] Texto largo: una nota con CRLF, emojis o una línea larguísima no rompe el layout; un título de conversación con emojis tampoco.
+- [x] La foto de una cámara (Cámaras → pedir una foto) ahora se ve (antes el CSP la bloqueaba; ya permite `data:` solo para imágenes).
+- [x] PC dormida / Alma cerrada / Tailscale caído: cada pantalla dice "La PC no responde", reintenta sola y el botón "Reintentar" prueba al toque; lo que estabas escribiendo queda en la caja.
+- [x] Ajustes: muestra la conexión, "Lo que este celular puede hacer ahora" (chat, aprobar, casa, cámaras, cerraduras y alarmas, notas, conversaciones, continuar), la versión y "Olvidar esta PC" con confirmación; no hay selector de idioma ni ningún interruptor de alcance.
+- [x ] Idioma: con el teléfono en español y después en inglés, todo sale en ese idioma, sin textos mezclados ni claves crudas.
 
 ## 8. Docs (AC-7.3)
 

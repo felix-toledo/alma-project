@@ -1,4 +1,6 @@
 import * as z from 'zod/v4'
+import { PENDING_ID_MAX } from '../attach/phone'
+import { decodedLength } from '../attach/request'
 import type { RemoteScope } from '../types'
 import { REMOTE_LIMITS } from './limits'
 
@@ -10,11 +12,13 @@ export interface RouteSpec {
   auth: 'none' | 'pairing' | 'session'
   scope?: RemoteScope | readonly RemoteScope[]
   /** 'open' writes an entry with a target for a read of content (spec 028 BR-30); 'none' reads are not audited. */
-  audit: 'none' | 'change' | 'picture' | 'open'
+  audit: 'none' | 'change' | 'picture' | 'open' | 'upload'
   body?: z.ZodType
   sensitive?: true
   /** Needs the continue-conversations sub-switch (spec 028 BR-18). */
   continue?: true
+  /** Needs the send-files sub-switch (spec 031): always, or only when the body carries attachment ids. */
+  files?: 'always' | 'with-ids'
 }
 
 export interface RemoteRequest {
@@ -47,6 +51,8 @@ export interface ApprovalView {
   thread?: string
   /** The question the card asks, as the same key Telegram uses. */
   question: 'chan.allowQuestion' | 'chan.flagged'
+  /** False when the input does not fit in the cut above and the tool is a company one: the phone shows no Permitir (spec 029 BR-23). */
+  whole: boolean
 }
 
 export type Refusal =
@@ -69,14 +75,27 @@ export type Refusal =
   | 'gone'
   | 'unsupported'
   | 'run-active'
+  | 'attach-off'
+  | 'notice-needed'
+  | 'too-many'
+  | 'secret-name'
+  | 'file-type'
+  | 'file-content'
+  | 'file-empty'
+  | 'file-malformed'
+  | 'storage'
 
 /** Request bodies. Top level is strict (unknown keys are rejected); only specified limits are enforced. */
 /** Counted in UTF-16 units like the phone's own check; a text that is blank after trim starts no run. */
-const sendText = z
-  .string()
-  .max(REMOTE_LIMITS.chatChars)
-  .refine((text) => text.trim().length > 0)
-export const chatSendBody = z.object({ text: sendText }).strict()
+const sendText = z.string().max(REMOTE_LIMITS.chatChars)
+/**
+ * Pending upload ids a send binds (spec 031 AC-4.1). Only each id is bounded here; the length of the list is bounded by the
+ * request cap. More than 5 ids, a duplicate or an empty id are the claim's to refuse as `unavailable`, one answer for every cause (AC-4.2).
+ */
+export const attachmentIds = z.array(z.string().max(PENDING_ID_MAX))
+/** A blank text is still refused, unless at least one pending upload goes with it (spec 031 AC-4.1). */
+const hasMessage = (body: { text: string; attachments?: string[] }) => body.text.trim().length > 0 || (body.attachments?.length ?? 0) > 0
+export const chatSendBody = z.object({ text: sendText, attachments: attachmentIds.optional() }).strict().refine(hasMessage)
 export const approvalsAnswerBody = z.object({ id: z.string(), decision: z.enum(['allow', 'deny']) }).strict()
 export const homeControlBody = z.object({ thing: z.string(), action: z.string(), assertion: z.unknown().optional() }).strict()
 export const stepupChallengeBody = z.object({ thing: z.string(), action: z.string() }).strict()
@@ -104,8 +123,19 @@ export const threadsListBody = z.object({ offset: z.number().int().min(0) }).str
 export const threadsReadBody = z
   .object({ id: threadId, before: z.number().int().min(0).optional(), since: z.number().int().min(0).optional(), wait: z.boolean().optional() })
   .strict()
-export const threadsSendBody = z.object({ id: threadId, text: sendText }).strict()
+export const threadsSendBody = z.object({ id: threadId, text: sendText, attachments: attachmentIds.optional() }).strict().refine(hasMessage)
 export const threadsStopBody = z.object({ id: threadId }).strict()
+const putShape = {
+  name: z.string().min(1).max(512),
+  // The decoded byte count decides, so a claimed size that differs is refused here; an empty file passes and the PC names its reason.
+  size: z.number().int().min(0),
+  // Bounded by the request cap only: a file over the phone's limit must reach the handler to be refused as too-large (AC-2.3).
+  base64: z.string().max(REMOTE_LIMITS.requestBytes)
+}
+const sizeMatchesBytes = (body: { size: number; base64: string }) => decodedLength(body.base64) === body.size
+export const putBody = z.object(putShape).strict().refine(sizeMatchesBytes)
+export const putThreadBody = z.object({ id: threadId, ...putShape }).strict().refine(sizeMatchesBytes)
+export const removeBody = z.object({ id: z.string().max(PENDING_ID_MAX) }).strict()
 /** Bare POSTs take no keys at all (a `thread` key is refused, never ignored: AC-5.17). */
 export const emptyBody = z.object({}).strict().optional()
 
@@ -122,7 +152,7 @@ export const ROUTES: readonly RouteSpec[] = [
   { method: 'POST', path: '/api/session/challenge', auth: 'none', audit: 'none', body: sessionChallengeBody },
   { method: 'POST', path: '/api/session', auth: 'none', audit: 'none', body: sessionBody },
   { method: 'GET', path: '/api/state', auth: 'session', scope: ['chat', 'approve'], audit: 'none' },
-  { method: 'POST', path: '/api/chat/send', auth: 'session', scope: 'chat', audit: 'change', body: chatSendBody },
+  { method: 'POST', path: '/api/chat/send', auth: 'session', scope: 'chat', audit: 'change', files: 'with-ids', body: chatSendBody },
   { method: 'POST', path: '/api/chat/new', auth: 'session', scope: 'chat', audit: 'change', body: emptyBody },
   { method: 'POST', path: '/api/chat/stop', auth: 'session', scope: 'chat', audit: 'change', body: emptyBody },
   { method: 'GET', path: '/api/approvals', auth: 'session', scope: 'approve', audit: 'none' },
@@ -144,6 +174,10 @@ export const ROUTES: readonly RouteSpec[] = [
   { method: 'POST', path: '/api/notes/image', auth: 'session', scope: 'vault', audit: 'open', body: notesImageBody },
   { method: 'POST', path: '/api/threads/list', auth: 'session', scope: 'history', audit: 'none', body: threadsListBody },
   { method: 'POST', path: '/api/threads/read', auth: 'session', scope: 'history', audit: 'open', body: threadsReadBody },
-  { method: 'POST', path: '/api/threads/send', auth: 'session', scope: 'history', audit: 'open', continue: true, body: threadsSendBody },
-  { method: 'POST', path: '/api/threads/stop', auth: 'session', scope: 'history', audit: 'open', body: threadsStopBody }
+  { method: 'POST', path: '/api/threads/send', auth: 'session', scope: 'history', audit: 'open', continue: true, files: 'with-ids', body: threadsSendBody },
+  { method: 'POST', path: '/api/threads/stop', auth: 'session', scope: 'history', audit: 'open', body: threadsStopBody },
+  { method: 'POST', path: '/api/chat/attach', auth: 'session', scope: 'chat', audit: 'upload', files: 'always', body: putBody },
+  { method: 'POST', path: '/api/threads/attach', auth: 'session', scope: 'history', audit: 'upload', continue: true, files: 'always', body: putThreadBody },
+  // Removing needs the Send files sub-switch like a put does; History or Chat in scope is enough to reach it.
+  { method: 'POST', path: '/api/attachments/remove', auth: 'session', scope: ['chat', 'history'], audit: 'change', files: 'always', body: removeBody }
 ]

@@ -187,9 +187,9 @@ describe('AC-6.3 / AC-6.6 (028 verify) state machine and refusal mapping', () =>
     expect(JSON.stringify(out)).not.toMatch(/Privado|patio|extra/)
   })
 
-  it('AC-6.7 (028 verify) the "what this phone can do" list has the eight entries in order, all with texts, and survives a hostile status', () => {
+  it('AC-6.7 (028 verify) the "what this phone can do" list has the entries in order (Send files after Continue, 031), all with texts, and survives a hostile status', () => {
     const keys = canList({ scopes: { chat: true, approve: true, home: true, cameras: true, vault: true, history: true }, sensitive: true, continue: true }).map((row) => row.key)
-    expect(keys).toEqual(['remote.pwa.can.chat', 'remote.pwa.can.approve', 'remote.pwa.can.home', 'remote.pwa.can.cameras', 'remote.pwa.can.sensitive', 'remote.pwa.can.notes', 'remote.pwa.can.threads', 'remote.pwa.can.continue'])
+    expect(keys).toEqual(['remote.pwa.can.chat', 'remote.pwa.can.approve', 'remote.pwa.can.home', 'remote.pwa.can.cameras', 'remote.pwa.can.sensitive', 'remote.pwa.can.notes', 'remote.pwa.can.threads', 'remote.pwa.can.continue', 'remote.pwa.can.attach'])
     for (const key of keys) {
       expect(es[key as PwaKey]).toBeTruthy()
       expect(en[key as PwaKey]).toBeTruthy()
@@ -286,7 +286,7 @@ describe('AC-3.9 / AC-3.15 / AC-3.16 / AC-1.1 (028 verify) what the foot of a co
   })
 
   it('AC-3.16 (028 verify) a card of another conversation is never drawn; an unmarked card belongs to the shared thread only; junk is dropped', () => {
-    const card = (extra: object = {}): object => ({ id: 'a', tool: 'run_command', input: '{}', flagged: false, question: 'chan.allowQuestion', ...extra })
+    const card = (extra: object = {}): object => ({ id: 'a', tool: 'run_command', input: '{}', flagged: false, whole: true, question: 'chan.allowQuestion', ...extra })
     const all = [card({ id: '1', thread: 'talk' }), card({ id: '2', thread: 'pc' }), card({ id: '3' }), null, 'x', { id: 4 }, card({ id: '5', question: 'chan.always' }), card({ id: '6', thread: 7 })]
     expect(approvalsFor(all, 'talk', false).map((view) => view.id)).toEqual(['1'])
     expect(approvalsFor(all, 'remote', true).map((view) => view.id)).toEqual(['3'])

@@ -203,7 +203,8 @@ describe('authorization of the Notes and History routes (spec 028 T6)', () => {
 })
 
 describe('the Notes and History routes (spec 028 T7)', () => {
-  const NEW = ROUTES.filter((route) => route.path.startsWith('/api/notes/') || route.path.startsWith('/api/threads/'))
+  // Spec 031 adds `/api/threads/attach` and `/api/attachments/remove`; tests/remote-attach-routes.test.ts pins them.
+  const NEW = ROUTES.filter((route) => route.path !== '/api/threads/attach' && (route.path.startsWith('/api/notes/') || route.path.startsWith('/api/threads/')))
   const valid: Record<string, Record<string, unknown>> = {
     '/api/notes/list': { folder: 'Work' },
     '/api/notes/find': { query: 'plan' },
@@ -234,7 +235,8 @@ describe('the Notes and History routes (spec 028 T7)', () => {
 
   it('AC-2.7 (028) no write, rename, delete or search route exists', () => {
     expect(NEW.filter((r) => r.path.startsWith('/api/notes/')).map((r) => r.path)).toEqual(['/api/notes/list', '/api/notes/find', '/api/notes/read', '/api/notes/image'])
-    expect(ROUTES.filter((r) => /write|save|create|rename|move|delete|trash|search|upload|edit/i.test(r.path))).toEqual([])
+    // `/api/attachments/remove` is spec 031's: it removes the caller's own pending upload and nothing else (AC-3.2 (031)).
+    expect(ROUTES.filter((r) => r.path !== '/api/attachments/remove' && /write|save|create|rename|move|delete|trash|search|upload|edit/i.test(r.path))).toEqual([])
     expect(NEW.filter((r) => r.method !== 'POST')).toEqual([])
   })
 
@@ -288,9 +290,10 @@ describe('the status the phone reads (spec 028 T8)', () => {
       agentId: 'secret-agent'
     }
     const view = statusView(remote)
-    expect(Object.keys(view).sort()).toEqual(['continue', 'scopes', 'sensitive'])
+    // spec 031 adds sendFiles (AC-1.9 (031) in tests/remote-attach-routes.test.ts)
+    expect(Object.keys(view).sort()).toEqual(['continue', 'scopes', 'sendFiles', 'sensitive'])
     expect(Object.keys(view.scopes).sort()).toEqual(['approve', 'cameras', 'chat', 'history', 'home', 'vault'])
-    expect(view).toEqual({ scopes: allOn, sensitive: true, continue: true })
+    expect(view).toEqual({ scopes: allOn, sensitive: true, continue: true, sendFiles: false })
     const text = JSON.stringify(view)
     for (const secret of ['camera.secret-garage', 'Private', 'secret-agent', 'tailscale']) expect(text).not.toContain(secret)
   })

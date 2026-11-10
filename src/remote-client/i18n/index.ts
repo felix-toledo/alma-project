@@ -10,8 +10,12 @@ export function phoneLanguage(navigatorLanguage: string | undefined): PwaLanguag
   return navigatorLanguage?.toLowerCase().startsWith('es') ? 'es' : 'en'
 }
 
-/** `{name}` placeholders are filled in one pass, so a value is never expanded again; an unknown name stays as written. */
+/** What a text that names a file says when it is shown with no file to name: never a literal `{name}`. */
+const NO_FILE: Record<PwaLanguage, string> = { es: 'el archivo', en: 'the file' }
+
+/** `{name}` placeholders are filled in one pass, so a value is never expanded again; an unknown name stays as written, except `{name}`. */
 export function translatePwa(language: PwaLanguage, key: PwaKey, params?: Record<string, string>): string {
   const text: string = dictionaries[language][key]
-  return params ? text.replace(/\{(\w+)\}/g, (whole, name: string) => Object.hasOwn(params, name) ? params[name] : whole) : text
+  const values = params ?? {}
+  return text.replace(/\{(\w+)\}/g, (whole, name: string) => (Object.hasOwn(values, name) ? values[name] : name === 'name' ? NO_FILE[language] : whole))
 }

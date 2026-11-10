@@ -27,9 +27,10 @@ describe('what this phone can do (028 AC-6.7)', () => {
       { key: 'remote.pwa.can.sensitive', on: false },
       { key: 'remote.pwa.can.notes', on: false },
       { key: 'remote.pwa.can.threads', on: false },
-      { key: 'remote.pwa.can.continue', on: false }
+      { key: 'remote.pwa.can.continue', on: false },
+      { key: 'remote.pwa.can.attach', on: false }
     ])
-    const all = canList(status({ chat: true, approve: true, home: true, cameras: true, vault: true, history: true }, { sensitive: true, continue: true }))
+    const all = canList(status({ chat: true, approve: true, home: true, cameras: true, vault: true, history: true }, { sensitive: true, continue: true, sendFiles: true }))
     expect(all.every((row) => row.on)).toBe(true)
     // Each switch drives its own row and no other.
     const onKeys = (view: StatusView) => canList(view).filter((row) => row.on).map((row) => row.key)

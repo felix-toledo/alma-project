@@ -56,6 +56,30 @@ describe('remote main dialogs (spec 026 T5)', () => {
     expect(resume.defaultId).toBe(1)
   })
 
+  it('AC-1.2 (027) the relay dialog has the title, the text and Cancel as the default', () => {
+    for (const language of ['es', 'en'] as const) {
+      const text = remoteDialog(language, { kind: 'relay' })
+      expect(text.title).toBe(translate(language, 'main.security.title'))
+      expect(text.message).toBe(translate(language, 'main.remote.relay'))
+      expect(text.detail).toBe('')
+      expect(text.buttons).toEqual([translate(language, 'main.security.allow'), translate(language, 'main.security.cancel')])
+      expect(text.defaultId).toBe(1)
+    }
+    expect(remoteDialog('en', { kind: 'relay' }).message).toMatch(/relay/i)
+  })
+
+  it('AC-1.13 (027) the enable dialog names the relay while it is selected, and is the 026 one otherwise', () => {
+    const relayOn = translate('es', 'main.remote.relayOn')
+    const withRelay = remoteDialog('es', { kind: 'enable', dormant: [], relay: true })
+    expect(withRelay.detail).toBe(`${translate('es', 'main.remote.enableDetail')}\n${relayOn}`)
+    expect(withRelay.message).toBe(translate('es', 'main.remote.enable'))
+    expect(withRelay.defaultId).toBe(1)
+    const both = remoteDialog('es', { kind: 'enable', dormant: ['Pixel'], relay: true })
+    expect(both.detail).toBe(`${translate('es', 'main.remote.enableDetail')}\n${translate('es', 'main.remote.dormant', { names: 'Pixel' })}\n${relayOn}`)
+    expect(remoteDialog('es', { kind: 'enable', dormant: [] }).detail).toBe(translate('es', 'main.remote.enableDetail'))
+    expect(remoteDialog('en', { kind: 'enable', dormant: [], relay: true }).detail).toContain(translate('en', 'main.remote.relayOn'))
+  })
+
   it('AC-1.10 (028) the unexclude dialog names the folder and Cancel is the default', () => {
     const text = remoteDialog('en', { kind: 'unexclude', folder: 'Private/Taxes' })
     expect(text.message).toBe(translate('en', 'main.remote.unexclude', { folder: 'Private/Taxes' }))
